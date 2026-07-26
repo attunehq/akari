@@ -242,13 +242,6 @@ button {
   font-family: "Geist Mono", monospace;
   font-size: 12px;
 }
-.head-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
 .section-head {
   display: flex;
   justify-content: space-between;
@@ -698,13 +691,6 @@ code {
 .data-table tr:last-child td {
   border-bottom: 0;
 }
-.data-table .remainder-row td {
-  color: var(--muted);
-  background: var(--surface-2);
-  border-top: 1px solid var(--border);
-  border-bottom: 0;
-  font-size: 12px;
-}
 .data-table tbody tr:hover td {
   background: color-mix(in srgb, var(--surface-2) 55%, transparent);
 }
@@ -826,19 +812,6 @@ select:focus {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.feed-project,
-.feed-meta {
-  display: block;
-  color: var(--muted);
-  font-size: 11px;
-}
-.feed-project {
-  margin-bottom: 3px;
-  font-family: "Geist Mono", monospace;
-}
-.feed-meta {
-  margin-top: 4px;
-}
 .feed-signals {
   display: flex;
   gap: 6px;
@@ -856,139 +829,22 @@ select:focus {
   color: var(--text);
   font-size: 13px;
 }
-.load-more {
-  margin: 14px;
-}
 
 .transcript {
   margin-top: 24px;
-}
-.earlier {
-  width: 100%;
-  padding: 9px;
-  color: var(--muted);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-}
-.earlier:hover {
-  color: var(--text);
-  background: var(--surface-2);
-}
-.message-list {
-  min-width: 0;
-  display: grid;
-  gap: 12px;
-  margin-top: 12px;
-}
-.message {
-  min-width: 0;
-  width: min(1100px, 100%);
-  padding: 13px 15px;
-  background: #1b1b1f;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-.message.role-user {
-  background: #201e26;
-}
-.message.role-context,
-.message.role-system {
-  background: transparent;
-  border-style: dashed;
-}
-.message > header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-  color: var(--muted);
-  font-family: "Geist Mono", monospace;
-  font-size: 11px;
-}
-.message-role {
-  color: var(--subtext);
-  font-family: Geist, sans-serif;
-  font-weight: 600;
-  text-transform: capitalize;
-}
-.message > header time {
-  margin-left: auto;
-}
-.message-usage {
-  color: var(--subtext);
-}
-.message-content {
-  max-width: 75ch;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 .thinking {
   margin: 8px 0;
   color: var(--muted);
 }
-.thinking summary,
-.tool-call summary {
+.thinking summary {
   display: flex;
   align-items: center;
   gap: 7px;
   list-style: none;
 }
-.thinking summary::-webkit-details-marker,
-.tool-call summary::-webkit-details-marker {
+.thinking summary::-webkit-details-marker {
   display: none;
-}
-.thinking pre {
-  max-height: 380px;
-  padding: 10px;
-  overflow: auto;
-  color: var(--subtext);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  white-space: pre-wrap;
-}
-.tool-list {
-  min-width: 0;
-  display: grid;
-  gap: 6px;
-  margin-top: 10px;
-}
-.tool-call {
-  min-width: 0;
-  max-width: 100%;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-}
-.tool-call.error {
-  border-color: color-mix(in srgb, var(--err) 55%, var(--border));
-}
-.tool-call summary {
-  min-width: 0;
-  min-height: 34px;
-  padding: 6px 9px;
-}
-.tool-name {
-  color: var(--lilac);
-  font-family: "Geist Mono", monospace;
-  font-size: 12px;
-}
-.tool-detail {
-  flex: 1;
-  overflow: hidden;
-  color: var(--subtext);
-  font-family: "Geist Mono", monospace;
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tool-body-links {
-  display: flex;
-  gap: 14px;
-  padding: 9px;
-  border-top: 1px solid var(--border);
-  font-size: 12px;
 }
 
 .public-frame {
@@ -1568,9 +1424,6 @@ select:focus {
   .page-head {
     flex-direction: column;
   }
-  .head-actions {
-    justify-content: flex-start;
-  }
   .split-panels {
     grid-template-columns: 1fr;
   }
@@ -1606,26 +1459,6 @@ select:focus {
   }
   .stat {
     border-bottom: 1px solid var(--border);
-  }
-}
-@media (max-width: 520px) {
-  .message > header {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: start;
-  }
-  .message-model {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .message > header time {
-    grid-column: 1 / -1;
-    margin-left: 0;
-  }
-  .message-usage {
-    grid-column: 1 / -1;
   }
 }
 @media (prefers-reduced-motion: reduce) {

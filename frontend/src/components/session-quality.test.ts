@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-
+import type { ModelFallback, SessionSignals, TurnUsage } from "../types";
 import {
   baseName,
   contextLabel,
@@ -23,7 +23,6 @@ import {
   outlineTitle,
   qualityGrade,
   qualityScoreLabel,
-  rowOutcomeNote,
   scoreBreakdownItems,
   shedLabel,
   stripPromptPreamble,
@@ -37,11 +36,6 @@ import {
   turnLatency,
   turnTokenTotal,
 } from "./session-quality";
-import type {
-  ModelFallback,
-  SessionSignals,
-  TurnUsageFull,
-} from "./session-types";
 
 function signals(overrides: Partial<SessionSignals> = {}): SessionSignals {
   return {
@@ -103,20 +97,13 @@ describe("quality grade / score label", () => {
   });
 });
 
-describe("outcomeLabel / rowOutcomeNote", () => {
+describe("outcomeLabel", () => {
   it("labels every known outcome", () => {
     expect(outcomeLabel("completed")).toBe("Completed");
     expect(outcomeLabel("abandoned")).toBe("Abandoned");
     expect(outcomeLabel("errored")).toBe("Errored");
     expect(outcomeLabel("unknown")).toBe("Unknown");
     expect(outcomeLabel("something-else")).toBe("Unknown");
-  });
-
-  it("only flags abandoned and errored on the feed row", () => {
-    expect(rowOutcomeNote("abandoned")).toBe("abandoned");
-    expect(rowOutcomeNote("errored")).toBe("errored");
-    expect(rowOutcomeNote("completed")).toBe("");
-    expect(rowOutcomeNote("unknown")).toBe("");
   });
 });
 
@@ -233,7 +220,7 @@ describe("isContextReset", () => {
 });
 
 describe("turn usage / cost / context helpers", () => {
-  function usage(overrides: Partial<TurnUsageFull> = {}): TurnUsageFull {
+  function usage(overrides: Partial<TurnUsage> = {}): TurnUsage {
     return {
       Input: 100,
       Output: 50,

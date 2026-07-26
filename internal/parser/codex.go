@@ -86,8 +86,12 @@ func (r *reducer) reduceCodex(region []byte, base int64) error {
 			r.addEvent(EventCompaction, nil, ts)
 
 		case "response_item":
+			// A tool item is keyed by payload.type, a conversational turn by payload.role
+			// (a Codex message carries no payload.type). Each Get rescans the payload's
+			// raw JSON from the start, so the discriminator is read once, not per arm.
+			itemType := p.Get("type").String()
 			switch {
-			case p.Get("type").String() == "function_call":
+			case itemType == "function_call":
 				ord := r.ensureAssistant(ts)
 				r.open.HasToolUse = true
 				name := p.Get("name").String()
@@ -113,7 +117,7 @@ func (r *reducer) reduceCodex(region []byte, base int64) error {
 				}
 				r.recordCall(tc)
 
-			case p.Get("type").String() == "custom_tool_call":
+			case itemType == "custom_tool_call":
 				// A custom tool call (for example apply_patch) carries its input as a
 				// plain string, which can be a large patch; record it like any tool call
 				// so its body lands in the CAS rather than inline in the transcript.
@@ -134,11 +138,11 @@ func (r *reducer) reduceCodex(region []byte, base int64) error {
 				}
 				r.recordCall(tc)
 
-			case p.Get("type").String() == "function_call_output",
-				p.Get("type").String() == "custom_tool_call_output":
+			case itemType == "function_call_output",
+				itemType == "custom_tool_call_output":
 				r.applyResult(p.Get("call_id").String(), p.Get("output"), false)
 
-			case p.Get("type").String() == "image_generation_call":
+			case itemType == "image_generation_call":
 				// The generated image rides inline as a base64 result; record it as an
 				// attachment on the assistant turn (and the client lifts its bytes to the
 				// CAS), so the transcript stays small and the image is stored decoded.
@@ -146,11 +150,11 @@ func (r *reducer) reduceCodex(region []byte, base int64) error {
 				r.open.HasToolUse = true
 				r.addAttachment(ord, p.Get("result"), lastPathSegment(p.Get("saved_path").String()))
 
-			case p.Get("type").String() == "reasoning":
+			case itemType == "reasoning":
 				r.ensureAssistant(ts)
 				r.addCodexReasoning(p)
 
-			case p.Get("type").String() == "agent_message":
+			case itemType == "agent_message":
 				// Inter-agent mail (a subagent's report to its parent, or vice versa).
 				// It is input the harness injected, not a human prompt, so it takes the
 				// context role; the payload text already names its sender and type. It

@@ -2,15 +2,6 @@ import type { components } from "./api.generated";
 
 type Schema = components["schemas"];
 
-type ArrayMember<T> = Extract<NonNullable<T>, readonly unknown[]>;
-type NormalizeArrays<T> = [ArrayMember<T>] extends [never]
-  ? T extends object
-    ? { [Key in keyof T]: NormalizeArrays<T[Key]> }
-    : T
-  : ArrayMember<T> extends readonly (infer Item)[]
-    ? NormalizeArrays<NonNullable<Item>>[]
-    : never;
-
 export type Viewer = Schema["Viewer"];
 export type DateRange = Schema["DateRange"];
 export type DayPoint = Schema["DayPoint"];
@@ -24,43 +15,43 @@ export type SessionDetail = Schema["SessionDetail"];
 export type SessionEvent = Schema["SessionEvent"];
 export type TurnUsage = Schema["TurnUsage"];
 export type Message = Schema["Message"];
+export type SessionSignals = Schema["SessionSignals"];
+export type ModelFallback = Schema["ModelFallback"];
 export type ToolCall = Schema["ToolCallView"];
 export type Attachment = Schema["AttachmentView"];
 export type TranscriptPage = Schema["TranscriptPage"];
 export type LabeledCount = Schema["LabeledCount"];
-export type Insights = NormalizeArrays<Schema["Insights"]>;
+export type Insights = Schema["Insights"];
 export type SessionSnapshot = Schema["SessionSnapshot"];
 export type PublicSessionSnapshot = Schema["PublicSessionSnapshot"];
 export type APIError = Schema["Error"];
 
-export type QualityDistribution = NormalizeArrays<
-  Schema["QualityDistribution"]
->;
-export type ConcurrencyStats = NormalizeArrays<Schema["ConcurrencyStats"]>;
-export type VelocityStats = NormalizeArrays<Schema["VelocityStats"]>;
-export type ToolStat = NormalizeArrays<Schema["ToolStat"]>;
-export type ToolStats = NormalizeArrays<Schema["ToolStats"]>;
-export type PromptHygiene = NormalizeArrays<Schema["PromptHygiene"]>;
-export type ChurnFile = NormalizeArrays<Schema["ChurnFile"]>;
-export type FileChurn = NormalizeArrays<Schema["FileChurn"]>;
-export type ContextHealthStats = NormalizeArrays<Schema["ContextHealthStats"]>;
-export type ModelSeries = NormalizeArrays<Schema["ModelSeries"]>;
-export type FleetMix = NormalizeArrays<Schema["FleetMix"]>;
-export type ContextBucket = NormalizeArrays<Schema["ContextBucket"]>;
-export type ContextMarker = NormalizeArrays<Schema["ContextMarker"]>;
-export type SignalTrends = NormalizeArrays<Schema["SignalTrends"]>;
-export type Economics = NormalizeArrays<Schema["Economics"]>;
-export type VelocityTrends = NormalizeArrays<Schema["VelocityTrends"]>;
-export type ToolPoint = NormalizeArrays<Schema["ToolPoint"]>;
-export type ToolFailSeries = NormalizeArrays<Schema["ToolFailSeries"]>;
-export type ToolTrends = NormalizeArrays<Schema["ToolTrends"]>;
-export type ChurnNode = NormalizeArrays<Schema["ChurnNode"]>;
-export type ChurnTrend = NormalizeArrays<Schema["ChurnTrend"]>;
-export type GallerySession = NormalizeArrays<Schema["GallerySession"]>;
-export type Gallery = NormalizeArrays<Schema["Gallery"]>;
-export type RhythmGrid = NormalizeArrays<Schema["RhythmGrid"]>;
-export type SubagentStats = NormalizeArrays<Schema["SubagentStats"]>;
-export type Trends = NormalizeArrays<Schema["Trends"]>;
+export type QualityDistribution = Schema["QualityDistribution"];
+export type ConcurrencyStats = Schema["ConcurrencyStats"];
+export type VelocityStats = Schema["VelocityStats"];
+export type ToolStat = Schema["ToolStat"];
+export type ToolStats = Schema["ToolStats"];
+export type PromptHygiene = Schema["PromptHygiene"];
+export type ChurnFile = Schema["ChurnFile"];
+export type FileChurn = Schema["FileChurn"];
+export type ContextHealthStats = Schema["ContextHealthStats"];
+export type ModelSeries = Schema["ModelSeries"];
+export type FleetMix = Schema["FleetMix"];
+export type ContextBucket = Schema["ContextBucket"];
+export type ContextMarker = Schema["ContextMarker"];
+export type SignalTrends = Schema["SignalTrends"];
+export type Economics = Schema["Economics"];
+export type VelocityTrends = Schema["VelocityTrends"];
+export type ToolPoint = Schema["ToolPoint"];
+export type ToolFailSeries = Schema["ToolFailSeries"];
+export type ToolTrends = Schema["ToolTrends"];
+export type ChurnNode = Schema["ChurnNode"];
+export type ChurnTrend = Schema["ChurnTrend"];
+export type GallerySession = Schema["GallerySession"];
+export type Gallery = Schema["Gallery"];
+export type RhythmGrid = Schema["RhythmGrid"];
+export type SubagentStats = Schema["SubagentStats"];
+export type Trends = Schema["Trends"];
 
 export type Token = Schema["AccountToken"];
 export type Connection = Schema["OAuthGrant"];

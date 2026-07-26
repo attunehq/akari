@@ -129,10 +129,10 @@ export function AnalyticsPanel({
         mobileActivity={mobileActivity}
       />
       <div className="usage-breakdowns">
-        <BreakdownTable title="Models" rows={analytics.Models ?? []} />
-        <BreakdownTable title="Agents" rows={analytics.Agents ?? []} />
+        <BreakdownTable title="Models" rows={analytics.Models} />
+        <BreakdownTable title="Agents" rows={analytics.Agents} />
         {showUsers && (analytics.Users?.length ?? 0) > 1 ? (
-          <BreakdownTable title="Users" rows={analytics.Users ?? []} />
+          <BreakdownTable title="Users" rows={analytics.Users} />
         ) : null}
       </div>
     </>
@@ -294,10 +294,10 @@ export function OverviewPage() {
             mobileActivity="range-only"
             activityControls={
               <>
-                {(data.users ?? []).length > 1 ? (
-                  <AccountFilter users={data.users ?? []} />
+                {data.users.length > 1 ? (
+                  <AccountFilter users={data.users} />
                 ) : null}
-                <RangeTabs ranges={data.ranges ?? []} active={data.range} />
+                <RangeTabs ranges={data.ranges} active={data.range} />
               </>
             }
           />

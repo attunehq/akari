@@ -557,10 +557,6 @@ func TestListAllSessionsCostSort(t *testing.T) {
 	seedCost("c2", 5.00)
 	seedCost("c3", 1.25)
 
-	if !store.IsSortKey("cost") {
-		t.Fatal("cost should be a recognized sort key")
-	}
-
 	desc, _, err := st.ListAllSessions(ctx, store.SessionFilter{Sort: "cost", Desc: true})
 	if err != nil {
 		t.Fatalf("cost sort desc: %v", err)

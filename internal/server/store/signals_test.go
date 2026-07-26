@@ -492,9 +492,6 @@ func TestSignalsPromptHygiene(t *testing.T) {
 		t.Errorf("hygiene = {short %d, dup %d, nocode %d, unstructured %v}, want {1, 1, 2, true}",
 			sig.ShortPromptCount, sig.DuplicatePromptCount, sig.NoCodeContextCount, sig.UnstructuredStart)
 	}
-	if !sig.HasHygieneSignal() {
-		t.Error("HasHygieneSignal should be true when any hygiene count fired")
-	}
 }
 
 // TestSessionSignalsByIDFlagFilter pins the per-session read to the signals_stale flag: a

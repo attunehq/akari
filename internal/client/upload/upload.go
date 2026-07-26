@@ -11,7 +11,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"hash"
 	"io"
 	"net/http"
 	"net/url"
@@ -133,11 +132,10 @@ var fileStateCacheCap = 1024
 // Under the client-CAS protocol the bytes the server stores are the TRANSFORMED
 // transcript (tool bodies lifted to the CAS, replaced by sentinels), so the
 // verified-prefix cache is kept over the transformed stream: base is the count of
-// transformed bytes the server holds, prefixHasher is the sha256 of those
-// transformed bytes, and origBase is the count of original on-disk bytes that
-// transform to them. The client still resumes by the original file (it is what it
-// can recompute statelessly), so origBase is where the next transform pass reads
-// from.
+// transformed bytes the server holds, and origBase is the count of original on-disk
+// bytes that transform to them. The client still resumes by the original file (it is
+// what it can recompute statelessly), so origBase is where the next transform pass
+// reads from.
 type fileSync struct {
 	// lock serializes the whole sync of one path. The fields below and the hasher
 	// are not safe for concurrent use, so SyncFile holds it for its entire run; two
@@ -162,15 +160,12 @@ type fileSync struct {
 	fileInfo os.FileInfo
 
 	// Verified prefix, over the transformed stream. The server holds transformed
-	// bytes [0, base); prefixHasher has consumed exactly those bytes, so the next
-	// verification re-derives the prefix from disk and replaces the hasher before an
-	// append. origBase is the original-file offset that produced base transformed
-	// bytes, so the next transform pass reads original [origBase, size). prefixSize
-	// is the original file size observed at the last verification.
-	base         int64
-	origBase     int64
-	prefixHasher hash.Hash
-	prefixSize   int64
+	// bytes [0, base), and origBase is the original-file offset that produced them,
+	// so the next transform pass reads original [origBase, size). No digest is cached
+	// alongside: every verification re-derives the prefix from disk (see verifyPrefix),
+	// because a cached digest proves only what an earlier read saw.
+	base     int64
+	origBase int64
 
 	// pending caches an open Codex trailing turn (its withheld rewritten lines and
 	// the scan offset just past them) so a repeated sync of a session whose final
@@ -303,11 +298,13 @@ func (fs *fileSync) bind(t Target, info os.FileInfo) {
 	fs.fileInfo = info
 }
 
+// clearDerived sets the verified prefix back to empty: the server holds nothing we
+// can resume against, so the whole file re-transforms and re-uploads from zero. Both
+// the transformed cursor and the original cursor reset, since with nothing accepted
+// there is no verified original prefix to resume from.
 func (fs *fileSync) clearDerived() {
 	fs.base = 0
 	fs.origBase = 0
-	fs.prefixHasher = nil
-	fs.prefixSize = 0
 	fs.dropTailCache()
 }
 
@@ -318,16 +315,6 @@ func (fs *fileSync) dropTailCache() {
 	fs.tailProofEnd = 0
 	fs.tailProofSHA = [sha256.Size]byte{}
 	fs.haveTailProof = false
-}
-
-// rewind sets the verified prefix back to empty: the server holds nothing, so the
-// whole file will re-transform and re-upload from zero. Both the transformed
-// cursor and the original cursor reset, since with nothing accepted there is no
-// verified original prefix to resume from.
-func (fs *fileSync) rewind(size int64) {
-	fs.clearDerived()
-	fs.prefixHasher = sha256.New()
-	fs.prefixSize = size
 }
 
 // maxConflictRetries bounds how many times a single SyncFile re-announces after
@@ -440,10 +427,8 @@ func (c *Client) syncOnce(ctx context.Context, t Target, fs *fileSync, f *os.Fil
 		if tailOK {
 			fs.base = 0
 			fs.origBase = 0
-			fs.prefixHasher = sha256.New()
-			fs.prefixSize = size
 		} else {
-			fs.rewind(size)
+			fs.clearDerived()
 		}
 	} else {
 		ok, err := c.verifyPrefix(ctx, f, fs, t.Agent, ann.StoredBytes, size, ann.PrefixSHA256)
@@ -456,7 +441,7 @@ func (c *Client) syncOnce(ctx context.Context, t Target, fs *fileSync, f *os.Fil
 			if err := c.reset(ctx, ann.SessionID); err != nil {
 				return Outcome{}, false, err
 			}
-			fs.rewind(size)
+			fs.clearDerived()
 			action = ActionReset
 		} else {
 			tailOK, err := fs.tailCacheMatches(ctx, f, fs.origBase, size)
@@ -710,10 +695,8 @@ func (s *syncSink) emitChunk(ctx context.Context, data []byte, origLen int64) (b
 	}
 	// The server accepted these transformed bytes, so extend the verified
 	// transformed-prefix digest over them and advance the original cursor.
-	s.fs.prefixHasher.Write(data)
 	s.fs.base = r.storedBytes
 	s.fs.origBase += origLen
-	s.fs.prefixSize = s.size
 	s.out.UploadedBytes += int64(len(data))
 	s.out.StoredBytes = r.storedBytes
 	return false, nil
@@ -814,10 +797,8 @@ func (c *Client) verifyPrefix(ctx context.Context, f *os.File, fs *fileSync, age
 	if !ok || hex.EncodeToString(h.Sum(nil)) != want {
 		return false, nil
 	}
-	fs.prefixHasher = h
 	fs.base = serverBytes
 	fs.origBase = origBase
-	fs.prefixSize = size
 	return true, nil
 }
 

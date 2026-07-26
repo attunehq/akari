@@ -59,7 +59,7 @@ func (s *Store) contextHealthFrom(ctx context.Context, q querier, f AnalyticsFil
 		        coalesce(sum(CASE WHEN sig.context_reset_count > 0 THEN 1 ELSE 0 END), 0)
 		   FROM sessions s
 		   JOIN session_signals sig
-		     ON sig.session_id = s.id AND `+signalsCurrent()+`
+		     ON sig.session_id = s.id AND `+signalsCurrent+`
 		    AND sig.peak_context_tokens IS NOT NULL
 		  WHERE TRUE`+filter,
 		args...).Scan(&h.Sessions, &h.PeakTokensP50, &h.PeakTokensP90, &h.PeakTokensMax,

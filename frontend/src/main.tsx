@@ -66,7 +66,7 @@ const PublicSessionPage = lazy(() =>
   })),
 );
 const SessionPage = lazy(() =>
-  import("./pages/sessions").then((module) => ({
+  import("./pages/session-detail").then((module) => ({
     default: module.SessionPage,
   })),
 );

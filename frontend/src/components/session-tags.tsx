@@ -1,16 +1,10 @@
-// Small state chips shared by the sessions feed and the session detail header, so
-// a project kind, a public link, a grade, a fallback count, and a subagent fan-out
-// read identically everywhere they appear. Ported from web.kindTag,
-// web.sessionPublicTag, and the feed row's inline chips (sessions.templ).
+// Small state chips shared by the sessions feed and the session detail header, so a
+// project kind, a public link, and a fallback count read identically everywhere they
+// appear.
 import { ArrowSquareOutIcon } from "@phosphor-icons/react";
 
 import { withBase } from "../base";
-import { formatCost } from "../format";
-import {
-  fallbackBadgeLabel,
-  fallbackBadgeTitle,
-  rowOutcomeNote,
-} from "./session-quality";
+import { fallbackBadgeLabel, fallbackBadgeTitle } from "./session-quality";
 
 // web.kindTag: a chip for a non-remote project kind; a remote project gets none,
 // since it is the default and needs no label.
@@ -68,58 +62,12 @@ export function SessionPublicTag({
   );
 }
 
-// web.RowGradeClass + the feed/session grade chip: a letter reading in the
-// report-card palette already defined in styles.css (.tag.grade-a .. .grade-f).
-export function GradeTag({ grade }: { grade: string | null }) {
-  if (!grade) return null;
-  return (
-    <span
-      className={`tag grade grade-${grade.toLowerCase()}`}
-      title="quality grade"
-    >
-      {grade}
-    </span>
-  );
-}
-
-// web.RowOutcomeNote: a short outcome word worth a glance (abandoned, errored);
-// completed and unknown stay quiet.
-export function OutcomeTag({ outcome }: { outcome: string }) {
-  const note = rowOutcomeNote(outcome);
-  if (!note) return null;
-  return (
-    <span className={`status ${outcome}`} title="session outcome">
-      {note}
-    </span>
-  );
-}
-
 // web.FallbackBadgeLabel / FallbackBadgeTitle: the feed row's model-fallback count.
 export function FallbackTag({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
     <span className="tag warn" title={fallbackBadgeTitle(count)}>
       {fallbackBadgeLabel(count)}
-    </span>
-  );
-}
-
-// web.FanoutLabel / FanoutTitle: the subtree's subagent count and its whole-work-item cost.
-export function FanoutTag({
-  subagentCount,
-  costUSD,
-}: {
-  subagentCount: number;
-  costUSD: number;
-}) {
-  if (subagentCount <= 0) return null;
-  const unit = subagentCount === 1 ? "subagent" : "subagents";
-  return (
-    <span
-      className="tag fanout"
-      title={`Whole work item: ${formatCost(costUSD)} across ${subagentCount} ${unit} fanned out (the row's own cost is the root turn's alone)`}
-    >
-      {subagentCount} {unit} · {formatCost(costUSD)}
     </span>
   );
 }

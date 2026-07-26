@@ -25,7 +25,6 @@ import {
 } from "../format";
 import "../projects.css";
 import { withBase } from "../base";
-import { normalizeInsights } from "../normalize-insights";
 import type {
   Project,
   ProjectResponse,
@@ -46,10 +45,7 @@ function normalizeSparklines(
   sparklines: ProjectsResponse["sparklines"],
 ): Record<string, number[]> {
   return Object.fromEntries(
-    Object.entries(sparklines ?? {}).map(([key, values]) => [
-      key,
-      values ?? [],
-    ]),
+    Object.entries(sparklines).map(([key, values]) => [key, values]),
   );
 }
 
@@ -413,7 +409,7 @@ export function ProjectsPage() {
       </div>
       <AsyncView state={state}>
         {(data) => {
-          const allProjects = data.projects ?? [];
+          const allProjects = data.projects;
           if (allProjects.length === 0)
             return (
               <section className="empty-state">
@@ -502,7 +498,7 @@ function ProjectToolbar({ facets }: { facets: ProjectResponse["facets"] }) {
         onChange={(event) => update("agent", event.target.value)}
       >
         <option value="">All agents</option>
-        {(facets.Agents ?? []).map((agent) => (
+        {facets.Agents.map((agent) => (
           <option key={agent} value={agent}>
             {agent}
           </option>
@@ -514,7 +510,7 @@ function ProjectToolbar({ facets }: { facets: ProjectResponse["facets"] }) {
         onChange={(event) => update("user", event.target.value)}
       >
         <option value="">All users</option>
-        {(facets.Users ?? []).map((user) => (
+        {facets.Users.map((user) => (
           <option key={user} value={user}>
             {user}
           </option>
@@ -526,7 +522,7 @@ function ProjectToolbar({ facets }: { facets: ProjectResponse["facets"] }) {
         onChange={(event) => update("machine", event.target.value)}
       >
         <option value="">All machines</option>
-        {(facets.Machines ?? []).map((machine) => (
+        {facets.Machines.map((machine) => (
           <option key={machine} value={machine}>
             {machine}
           </option>
@@ -566,7 +562,7 @@ export function ProjectPage() {
     <div className="page project-page">
       <AsyncView state={state}>
         {(data) => {
-          const insights = normalizeInsights(data.insights);
+          const insights = data.insights;
           const remainderTokens =
             data.remainder.Input +
             data.remainder.Output +
@@ -587,7 +583,7 @@ export function ProjectPage() {
                 activityControls={
                   <>
                     <ProjectToolbar facets={data.facets} />
-                    <RangeTabs ranges={data.ranges ?? []} active={data.range} />
+                    <RangeTabs ranges={data.ranges} active={data.range} />
                   </>
                 }
               />
@@ -595,7 +591,7 @@ export function ProjectPage() {
                 <div className="section-head">
                   <h2>Sessions</h2>
                 </div>
-                {(data.sessions ?? []).length === 0 ? (
+                {data.sessions.length === 0 ? (
                   <p className="empty-inline">
                     No sessions match these filters.
                   </p>
@@ -619,7 +615,7 @@ export function ProjectPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {(data.sessions ?? []).map((session) => (
+                        {data.sessions.map((session) => (
                           <tr key={session.ID}>
                             <td className="project-session-title-cell">
                               <Link

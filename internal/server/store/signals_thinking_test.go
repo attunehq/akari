@@ -80,8 +80,8 @@ func TestSignalsObservedThinking(t *testing.T) {
 	if got := sig.ThinkingBucket(); got != quality.ThinkingMedium {
 		t.Errorf("band = %s, want medium (300 tokens)", got)
 	}
-	if got, want := sig.ThinkingCoverage(), 2.0/3.0; got != want {
-		t.Errorf("coverage = %v, want %v", got, want)
+	if *sig.ThinkingTurns != 2 || *sig.AssistantTurns != 3 {
+		t.Errorf("coverage inputs = %d/%d turns, want 2/3", *sig.ThinkingTurns, *sig.AssistantTurns)
 	}
 }
 

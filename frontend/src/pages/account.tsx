@@ -42,18 +42,18 @@ export function AccountPage() {
       <AsyncView state={state}>
         {(data) => (
           <div className="account-sections">
-            <TokenSection tokens={data.tokens ?? []} refresh={refresh} />
+            <TokenSection tokens={data.tokens} refresh={refresh} />
             <PublicationSection user={data.user} refresh={refresh} />
             <ProjectPublicationSection
-              projects={data.projects ?? []}
+              projects={data.projects}
               refresh={refresh}
             />
             <ConnectionSection
-              connections={data.connections ?? []}
+              connections={data.connections}
               refresh={refresh}
             />
             {data.user.is_admin ? (
-              <InviteSection invites={data.invites ?? []} refresh={refresh} />
+              <InviteSection invites={data.invites} refresh={refresh} />
             ) : null}
             {data.user.is_admin ? (
               <ReparseSection status={data.reparse} refresh={refresh} />

@@ -110,24 +110,3 @@ func (s *Store) wholeSessionShape(ctx context.Context, tx pgx.Tx, sessionID int6
 	}
 	return outline, tools, nil
 }
-
-// SessionEarlierByID loads the "Show earlier" fragment's inputs from one snapshot: the
-// session row and the window strictly before `before`. The window's rows carry their
-// own tools, attachments, and fallback notices, and the fragment refreshes nothing
-// out-of-band, so nothing else is read.
-func (s *Store) SessionEarlierByID(ctx context.Context, sessionID int64, before int) (SessionDetail, TranscriptPage, error) {
-	var d SessionDetail
-	var page TranscriptPage
-	err := s.snapshotTx(ctx, func(tx pgx.Tx) error {
-		var err error
-		if d, err = s.scanDetail(ctx, tx, "s.id = $1", sessionID); err != nil {
-			return err
-		}
-		page, err = s.transcriptTail(ctx, tx, sessionID, &before)
-		return err
-	})
-	if err != nil {
-		return SessionDetail{}, TranscriptPage{}, err
-	}
-	return d, page, nil
-}

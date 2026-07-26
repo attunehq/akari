@@ -1,11 +1,8 @@
 package httpapi
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
-
-	"github.com/jssblck/akari/internal/server/store"
 )
 
 // handleAPISessionAppend backs the session page's live refresh: after an SSE
@@ -27,12 +24,7 @@ func (s *Server) handleAPISessionAppend(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	snapshot, err := s.Store.SessionAppendByID(r.Context(), id, after)
-	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "session not found")
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "load session update")
+	if writeStoreErr(w, err, "session not found", "load session update") {
 		return
 	}
 	p, _ := principalFrom(r.Context())

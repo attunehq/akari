@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jssblck/akari/internal/casenc"
 	"github.com/jssblck/akari/internal/parser"
 	"github.com/jssblck/akari/internal/server/store"
 )
@@ -53,7 +54,7 @@ func (s *Server) handlePublicBlob(w http.ResponseWriter, r *http.Request) {
 // keeps a browser from reinterpreting a stored body as a richer type than it is.
 func (s *Server) serveBlobForSession(w http.ResponseWriter, r *http.Request, sessionID int64, sha, cacheControl string) {
 	sha = strings.ToLower(sha)
-	if !isHexSHA256(sha) {
+	if !casenc.ValidKey(sha) {
 		http.NotFound(w, r)
 		return
 	}
@@ -154,18 +155,4 @@ func safeBlobContentType(mediaType string) string {
 	default:
 		return "application/octet-stream"
 	}
-}
-
-// isHexSHA256 reports whether s is a 64-character lowercase hex string.
-func isHexSHA256(s string) bool {
-	if len(s) != 64 {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
-			return false
-		}
-	}
-	return true
 }

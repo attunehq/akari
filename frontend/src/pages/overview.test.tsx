@@ -35,7 +35,7 @@ function analytics(overrides: Partial<Analytics> = {}): Analytics {
     ],
     Models: [breakdown("fable-5")],
     Agents: [breakdown("claude")],
-    Users: null,
+    Users: [],
     TotalCost: 12.5,
     TotalIn: 5000,
     TotalOut: 2000,

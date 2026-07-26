@@ -1,7 +1,10 @@
 package httpapi
 
 import (
+	"bytes"
 	"encoding/json"
+	"flag"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -69,9 +72,21 @@ type contractOperation struct {
 	} `json:"responses"`
 }
 
+// updateOpenAPI rewrites the checked-in openapi.json component schemas from the Go
+// DTOs instead of asserting against them. The schemas are already derived by
+// reflection here; without this the derivation could only report drift, leaving a
+// human to transcribe the diff back into the document by hand.
+//
+//	go test ./internal/server/httpapi -run TestBrowserContractsMatchOpenAPI -update-openapi
+var updateOpenAPI = flag.Bool("update-openapi", false, "rewrite openapi.json component schemas from the Go DTOs")
+
 func TestBrowserContractsMatchOpenAPI(t *testing.T) {
 	document := readContractDocument(t)
 	expected := browserContractSchemas(t)
+	if *updateOpenAPI {
+		writeContractSchemas(t, expected)
+		return
+	}
 	for _, contract := range browserContracts {
 		operation, ok := document.Paths[contract.path][contract.method]
 		if !ok {
@@ -147,6 +162,42 @@ func readContractDocument(t *testing.T) contractDocument {
 		t.Fatalf("decode embedded OpenAPI document: %v", err)
 	}
 	return document
+}
+
+// writeContractSchemas replaces each derived component schema in openapi.json,
+// leaving the hand-written parts of the document (paths, responses, descriptions)
+// exactly as they are. It decodes into a plain map so nothing outside
+// components.schemas is reserialized through a lossy struct.
+func writeContractSchemas(t *testing.T, expected map[string]any) {
+	t.Helper()
+	const path = "openapi.json"
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatalf("decode %s: %v", path, err)
+	}
+	components, _ := document["components"].(map[string]any)
+	schemas, _ := components["schemas"].(map[string]any)
+	if schemas == nil {
+		t.Fatalf("%s has no components.schemas object", path)
+	}
+	for name, schema := range expected {
+		schemas[name] = normalizeContractSchema(t, schema)
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetIndent("", "  ")
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(document); err != nil {
+		t.Fatalf("encode %s: %v", path, err)
+	}
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+	t.Logf("rewrote %d component schemas in %s", len(expected), path)
 }
 
 func browserContractSchemas(t *testing.T) map[string]any {
@@ -289,15 +340,21 @@ func (b *schemaBuilder) fieldSchema(typ reflect.Type) any {
 		b.component(typ)
 		return map[string]any{"$ref": "#/components/schemas/" + b.schemaName(typ)}
 	case reflect.Slice, reflect.Array:
-		array := map[string]any{"items": b.fieldSchema(typ.Elem()), "type": []any{"array", "null"}}
+		// Arrays are never null on the wire. Every read that backs a browser payload
+		// returns an empty slice rather than a nil one (pinned by the store's
+		// TestEmptyScopeReadsCarryNoNilContainers), so declaring these nullable would only
+		// force every consumer to re-prove a fact the producer already guarantees.
+		array := map[string]any{"items": b.fieldSchema(typ.Elem()), "type": "array"}
 		if typ.Kind() == reflect.Array {
 			array["maxItems"] = float64(typ.Len())
 			array["minItems"] = float64(typ.Len())
-			array["type"] = "array"
 		}
 		return array
 	case reflect.Map:
-		return map[string]any{"additionalProperties": b.fieldSchema(typ.Elem()), "type": []any{"object", "null"}}
+		// Like arrays, maps on the wire are always objects: every read that backs a
+		// browser payload allocates its maps up front (pinned by the store's
+		// TestEmptyScopeReadsCarryNoNilContainers).
+		return map[string]any{"additionalProperties": b.fieldSchema(typ.Elem()), "type": "object"}
 	case reflect.Interface:
 		return map[string]any{}
 	case reflect.Bool:

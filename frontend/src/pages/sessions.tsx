@@ -24,9 +24,6 @@ import {
 import "../sessions.css";
 import type { ProjectFacet, SessionRow, SessionsResponse } from "../types";
 
-export { Transcript } from "../components/transcript";
-export { SessionPage } from "./session-detail";
-
 const SORT_OPTIONS = [
   { key: "updated", label: "Recent" },
   { key: "tokens", label: "Most tokens" },
@@ -203,7 +200,7 @@ export function SessionsPage() {
 
   const rows = useMemo(
     () => [
-      ...(state.kind === "ready" ? (state.data.sessions ?? []) : []),
+      ...(state.kind === "ready" ? state.data.sessions : []),
       ...morePages,
     ],
     [state, morePages],
@@ -223,7 +220,7 @@ export function SessionsPage() {
       const result = await request<SessionsResponse>(
         `/api/v1/app/sessions?${next.toString()}`,
       );
-      setMorePages((cur) => [...cur, ...(result.sessions ?? [])]);
+      setMorePages((cur) => [...cur, ...result.sessions]);
       setHasMore(result.has_more);
     } finally {
       setLoadingMore(false);
@@ -334,7 +331,7 @@ export function SessionsPage() {
                   }
                 >
                   <option value="">All projects</option>
-                  {(data.facets.Projects ?? []).map((item) => (
+                  {data.facets.Projects.map((item) => (
                     <option key={item.ID} value={String(item.ID)}>
                       {projectFacetLabel(item)} ({formatCount(item.Count)})
                     </option>
@@ -354,13 +351,13 @@ export function SessionsPage() {
                   }
                 >
                   <option value="">All agents</option>
-                  {(data.facets.Agents ?? []).map((item) => (
+                  {data.facets.Agents.map((item) => (
                     <option key={item.Value} value={item.Value}>
                       {item.Value} ({formatCount(item.Count)})
                     </option>
                   ))}
                 </select>
-                {(data.facets.Machines ?? []).length > 1 ? (
+                {data.facets.Machines.length > 1 ? (
                   <select
                     aria-label="Machine"
                     value={params.get("machine") ?? ""}
@@ -375,14 +372,14 @@ export function SessionsPage() {
                     }
                   >
                     <option value="">All machines</option>
-                    {(data.facets.Machines ?? []).map((item) => (
+                    {data.facets.Machines.map((item) => (
                       <option key={item.Value} value={item.Value}>
                         {item.Value} ({formatCount(item.Count)})
                       </option>
                     ))}
                   </select>
                 ) : null}
-                {(data.facets.Users ?? []).length > 1 ? (
+                {data.facets.Users.length > 1 ? (
                   <select
                     aria-label="Account"
                     value={params.get("user") ?? ""}
@@ -397,7 +394,7 @@ export function SessionsPage() {
                     }
                   >
                     <option value="">All accounts</option>
-                    {(data.facets.Users ?? []).map((item) => (
+                    {data.facets.Users.map((item) => (
                       <option key={item.Value} value={item.Value}>
                         {item.Value} ({formatCount(item.Count)})
                       </option>
@@ -427,11 +424,11 @@ export function SessionsPage() {
             </header>
             <ActiveFilterChips
               params={params}
-              projects={data.facets.Projects ?? []}
+              projects={data.facets.Projects}
               setParams={setParams}
             />
             <div className="sessions-feed">
-              {(rows ?? []).length === 0 ? (
+              {rows.length === 0 ? (
                 <div className="empty-state">
                   <h2>No matching sessions</h2>
                   <p>Clear a filter or search for a different phrase.</p>

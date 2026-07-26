@@ -20,9 +20,11 @@ import { formatCost, formatCount, formatTime, formatTokens } from "../format";
 import type {
   Attachment,
   Message,
+  ModelFallback,
   SessionEvent,
   ToolCall,
   TranscriptPage,
+  TurnUsage,
 } from "../types";
 import { SessionEventNotice } from "./session-event-notice";
 import {
@@ -40,20 +42,14 @@ import {
   turnLatency,
   turnTokenTotal,
 } from "./session-quality";
-import {
-  asFallbacks,
-  asFullMessage,
-  type ModelFallback,
-  type TurnUsageFull,
-} from "./session-types";
 import { HoverTip } from "./token-card";
 import { openToolInspector, ToolInspectorModal } from "./tool-inspector";
 
 type ShedMark = {
   fromTokens: number;
   toTokens: number;
-  fromUsage: TurnUsageFull;
-  toUsage: TurnUsageFull;
+  fromUsage: TurnUsage;
+  toUsage: TurnUsage;
 };
 type MsgMetrics = { latency: number; shed: ShedMark | null };
 
@@ -67,7 +63,7 @@ function walkMetrics(
 ): Map<number, MsgMetrics> {
   let anchor: Date | null = null;
   let prevContext = 0;
-  let prevUsage: TurnUsageFull | null = null;
+  let prevUsage: TurnUsage | null = null;
   let havePrev = false;
   const out = new Map<number, MsgMetrics>();
 
@@ -81,7 +77,7 @@ function walkMetrics(
       if (d >= 0) latency = d;
     }
     let shed: ShedMark | null = null;
-    const usage = asFullMessage(m).Usage;
+    const usage = m.Usage;
     if (usage) {
       if (
         havePrev &&
@@ -230,23 +226,20 @@ export const Transcript = forwardRef<
     ref,
     () => ({
       lastOrdinal: () => {
-        const msgs = page.Msgs ?? [];
+        const msgs = page.Msgs;
         return msgs.length > 0
           ? (msgs[msgs.length - 1]?.Ordinal ?? null)
           : null;
       },
       appendPage: (fragment) => {
-        if ((fragment.Msgs ?? []).length === 0) return;
+        if (fragment.Msgs.length === 0) return;
         setPage((cur) => ({
           ...cur,
-          Msgs: [...(cur.Msgs ?? []), ...(fragment.Msgs ?? [])],
-          Tools: [...(cur.Tools ?? []), ...(fragment.Tools ?? [])],
-          Attachments: [
-            ...(cur.Attachments ?? []),
-            ...(fragment.Attachments ?? []),
-          ],
+          Msgs: [...cur.Msgs, ...fragment.Msgs],
+          Tools: [...cur.Tools, ...fragment.Tools],
+          Attachments: [...cur.Attachments, ...fragment.Attachments],
           Events: fragment.Events ?? cur.Events,
-          Fallbacks: [...(cur.Fallbacks ?? []), ...(fragment.Fallbacks ?? [])],
+          Fallbacks: [...cur.Fallbacks, ...fragment.Fallbacks],
         }));
       },
     }),
@@ -254,23 +247,20 @@ export const Transcript = forwardRef<
   );
 
   const toolsByOrdinal = useMemo(
-    () => groupByOrdinal(page.Tools ?? []),
+    () => groupByOrdinal(page.Tools),
     [page.Tools],
   );
   const attachmentsByOrdinal = useMemo(
-    () => groupByOrdinal(page.Attachments ?? []),
+    () => groupByOrdinal(page.Attachments),
     [page.Attachments],
   );
   const fallbacks = useMemo(
-    () => fallbacksByOrdinal(asFallbacks(page.Fallbacks)),
+    () => fallbacksByOrdinal(page.Fallbacks),
     [page.Fallbacks],
   );
-  const events = useMemo(
-    () => eventsByOrdinal(page.Events ?? []),
-    [page.Events],
-  );
+  const events = useMemo(() => eventsByOrdinal(page.Events), [page.Events]);
   const metrics = useMemo(
-    () => walkMetrics(page.Seed ?? [], page.Msgs ?? []),
+    () => walkMetrics(page.Seed, page.Msgs),
     [page.Seed, page.Msgs],
   );
 
@@ -298,18 +288,12 @@ export const Transcript = forwardRef<
               const earlier = await loadEarlier(page.Msgs?.[0]?.Ordinal ?? 0);
               setPage((cur) => ({
                 ...cur,
-                Msgs: [...(earlier.Msgs ?? []), ...(cur.Msgs ?? [])],
-                Seed: earlier.Seed ?? [],
-                Tools: [...(earlier.Tools ?? []), ...(cur.Tools ?? [])],
-                Attachments: [
-                  ...(earlier.Attachments ?? []),
-                  ...(cur.Attachments ?? []),
-                ],
+                Msgs: [...earlier.Msgs, ...cur.Msgs],
+                Seed: earlier.Seed,
+                Tools: [...earlier.Tools, ...cur.Tools],
+                Attachments: [...earlier.Attachments, ...cur.Attachments],
                 Events: earlier.Events ?? cur.Events,
-                Fallbacks: [
-                  ...(earlier.Fallbacks ?? []),
-                  ...(cur.Fallbacks ?? []),
-                ],
+                Fallbacks: [...earlier.Fallbacks, ...cur.Fallbacks],
                 HasEarlier: earlier.HasEarlier,
                 EarlierCount: earlier.EarlierCount,
               }));
@@ -337,10 +321,10 @@ export const Transcript = forwardRef<
           {loadError}
         </p>
       ) : null}
-      {(page.Msgs ?? []).length === 0 ? (
+      {page.Msgs.length === 0 ? (
         <div className="empty">No messages parsed yet.</div>
       ) : (
-        (page.Msgs ?? []).map((message) => (
+        page.Msgs.map((message) => (
           <MessageRow
             key={message.Ordinal}
             message={message}
@@ -377,7 +361,6 @@ function MessageRow({
   agent: string;
   blobBase: string;
 }) {
-  const full = asFullMessage(message);
   return (
     <>
       {metrics.shed ? <ShedDivider shed={metrics.shed} /> : null}
@@ -392,7 +375,7 @@ function MessageRow({
         <ContextTurn message={message} />
       ) : (
         <MessageTurn
-          message={full}
+          message={message}
           metrics={metrics}
           tools={tools}
           attachments={attachments}
@@ -434,7 +417,7 @@ function MessageTurn({
   agent,
   blobBase,
 }: {
-  message: ReturnType<typeof asFullMessage>;
+  message: Message;
   metrics: MsgMetrics;
   tools: ToolCall[];
   attachments: Attachment[];
@@ -578,7 +561,7 @@ function MessageTurn({
   );
 }
 
-function TurnCard({ usage }: { usage: TurnUsageFull }) {
+function TurnCard({ usage }: { usage: TurnUsage }) {
   return (
     <>
       <span className="tt-total">
@@ -633,7 +616,7 @@ function UsageGrid({
   label,
   className,
 }: {
-  usage: TurnUsageFull;
+  usage: TurnUsage;
   label: string;
   className?: string;
 }) {

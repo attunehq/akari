@@ -71,7 +71,7 @@ func (s *Store) FileChurn(ctx context.Context, f AnalyticsFilter) (FileChurn, er
 // a scalar (SELECT count(*) FROM agg) instead. agg is referenced twice (the top-N select and the
 // count), which makes Postgres materialize it once, so the grouping runs a single time.
 func (s *Store) fileChurnFrom(ctx context.Context, q querier, f AnalyticsFilter) (FileChurn, error) {
-	var fc FileChurn
+	fc := FileChurn{Files: []ChurnFile{}}
 
 	filter, args := f.clauseFor("s.started_at")
 	limitArg := fmt.Sprintf("$%d", len(args)+1)

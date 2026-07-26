@@ -104,7 +104,7 @@ func (s *Store) subagents(ctx context.Context, q querier, parentID int64) ([]Sub
 		       coalesce(title.content, '')
 		  FROM sessions s
 		  JOIN users u ON u.id = s.user_id
-		  LEFT JOIN session_signals sig ON sig.session_id = s.id AND `+signalsCurrent()+`
+		  LEFT JOIN session_signals sig ON sig.session_id = s.id AND `+signalsCurrent+`
 		  `+titleLateralSQL+`
 		 WHERE s.parent_session_id = $1
 		 ORDER BY s.id`, parentID)
