@@ -63,9 +63,10 @@ func TestBrowserResponsesCarryNoNullContainers(t *testing.T) {
 		}
 	})
 
-	// An ordinary session: two turns, no subagents, no tool calls, no attachments, no
-	// model fallbacks, no events. Every collection hanging off it is legitimately
-	// empty, which is where a read that only appends from rows leaves nil.
+	// Two fixtures beyond the empty account. An ordinary session: two turns, no
+	// subagents, no tool calls, no attachments, no model fallbacks, no events, so every
+	// collection hanging off it is legitimately empty. And a session whose projection
+	// parsed to nothing at all, which takes the readers' empty-window early returns.
 	user, err := st.UserByUsername(ctx, "grace")
 	if err != nil {
 		t.Fatalf("load registered user: %v", err)
@@ -96,18 +97,44 @@ func TestBrowserResponsesCarryNoNullContainers(t *testing.T) {
 		t.Fatalf("publish overview: %v", err)
 	}
 
+	// A session that parsed to no messages at all. Its transcript readers return
+	// early before any fill runs, which is the path that leaves a page's collections
+	// untouched.
+	empty, err := st.Announce(ctx, store.AnnounceParams{
+		UserID: user.ID, Agent: "codex", SourceSessionID: "unparsed-session",
+		ProjectID: projectID, Cwd: "/home/grace/subroutines", Machine: "hopper",
+	})
+	if err != nil {
+		t.Fatalf("announce empty session: %v", err)
+	}
+	rebuildWith(t, st, empty.SessionID, store.ProjectionDelta{})
+	emptyPublicID, err := st.PublishSession(ctx, empty.SessionID, user.ID, "nothing-parsed")
+	if err != nil {
+		t.Fatalf("publish empty session: %v", err)
+	}
+
 	sessionID := fmt.Sprint(announced.SessionID)
+	emptyID := fmt.Sprint(empty.SessionID)
 	project := fmt.Sprint(projectID)
 	t.Run("bare session", func(t *testing.T) {
 		for _, e := range []struct{ path, schema string }{
 			{"/api/v1/app/sessions/" + sessionID, "SessionResponse"},
 			{"/api/v1/app/sessions/" + sessionID + "/append?after=0", "SessionResponse"},
+			// A quiet tick: nothing follows the cursor, so the read returns an empty
+			// window and skips the extras fill entirely.
+			{"/api/v1/app/sessions/" + sessionID + "/append?after=1", "SessionResponse"},
 			{"/api/v1/app/sessions/" + sessionID + "/transcript?before=1", "TranscriptResponse"},
 			{"/api/v1/app/projects/" + project, "ProjectResponse"},
 			{"/api/v1/app/public/projects/" + project, "PublicProjectResponse"},
 			{"/api/v1/app/public/sessions/" + publicID, "PublicSessionResponse"},
 			{"/api/v1/app/public/sessions/" + publicID + "/transcript?before=1", "PublicSessionResponse"},
 			{"/api/v1/app/public/users/grace", "PublicOverviewResponse"},
+			// The session that parsed to nothing, on every surface that renders one.
+			{"/api/v1/app/sessions/" + emptyID, "SessionResponse"},
+			{"/api/v1/app/sessions/" + emptyID + "/append?after=0", "SessionResponse"},
+			{"/api/v1/app/sessions/" + emptyID + "/transcript?before=0", "TranscriptResponse"},
+			{"/api/v1/app/public/sessions/" + emptyPublicID, "PublicSessionResponse"},
+			{"/api/v1/app/public/sessions/" + emptyPublicID + "/transcript?before=0", "PublicSessionResponse"},
 		} {
 			t.Run(e.path, func(t *testing.T) { check(t, e.path, e.schema) })
 		}
