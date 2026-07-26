@@ -89,7 +89,7 @@ func (s *Store) scanSessionEvents(ctx context.Context, q querier, sessionID int6
 		return nil, fmt.Errorf("query events for session %d: %w", sessionID, err)
 	}
 	defer rows.Close()
-	var out []SessionEvent
+	out := []SessionEvent{}
 	for rows.Next() {
 		var event SessionEvent
 		var attrs []byte

@@ -245,10 +245,14 @@ func (s *Store) analyticsFrom(ctx context.Context, q querier, f AnalyticsFilter)
 	}
 	a.Agents = agents
 
-	// The by-user split is skipped when the caller will not render it (OmitUsers), so a
+	// The by-user split is skipped when the caller will not render it (OmitUsers), so
 	// callers that need no user rows do not build an aggregate proportional to the
 	// scope's user count only to discard it. It sits outside the headline arithmetic
-	// below (that sums the by-agent split), so leaving Users nil changes no total.
+	// below (that sums the by-agent split), so an empty Users changes no total. The
+	// public project response shares this DTO with the signed-in one and blanks the
+	// split for privacy, so it stays an empty list rather than a null: a reader sees
+	// "no rows to show you" either way, and the published contract stays true.
+	a.Users = []Breakdown{}
 	if !f.OmitUsers {
 		users, err := s.analyticsByUser(ctx, q, f)
 		if err != nil {

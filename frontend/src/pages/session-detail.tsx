@@ -84,9 +84,10 @@ export function SessionPage() {
             ? {
                 ...cur,
                 Audit: result.snapshot.Audit,
-                Outline: result.snapshot.Outline,
-                Tools: result.snapshot.Tools,
-                DupIDs: result.snapshot.DupIDs,
+                // A quiet tick changed no turns and so carries no shape. Keeping the
+                // one we already have is the point of the null: overwriting would
+                // blank a good outline every time the session went briefly idle.
+                Shape: result.snapshot.Shape ?? cur.Shape,
               }
             : result.snapshot,
         );
@@ -102,7 +103,11 @@ export function SessionPage() {
     <div className="page session-page">
       <AsyncView state={state}>
         {() => {
-          if (!snapshot) return null;
+          // The full session read always carries a shape; only a quiet live tick
+          // omits one, and that path merges into an existing snapshot rather than
+          // replacing it, so a rendered snapshot without a shape cannot happen.
+          if (!snapshot?.Shape) return null;
+          const shape = snapshot.Shape;
           const detail = snapshot.Audit.Detail;
           const signals = snapshot.Audit.Signals;
           const fallbacks = snapshot.Audit.Fallbacks;
@@ -154,14 +159,14 @@ export function SessionPage() {
                         {detail.ReasoningEffort} reasoning
                       </span>
                     ) : null}
-                    {snapshot.DupIDs > 0 ? (
+                    {shape && shape.DupIDs > 0 ? (
                       <span
                         className="tag warn"
                         title="Repeated tool-call ids: a resumed or compacted transcript replaying earlier turns."
                       >
-                        {snapshot.DupIDs === 1
+                        {shape.DupIDs === 1
                           ? "1 duplicate id"
-                          : `${snapshot.DupIDs} duplicate ids`}
+                          : `${shape.DupIDs} duplicate ids`}
                       </span>
                     ) : null}
                     {detail.GitBranch ? (
@@ -203,14 +208,14 @@ export function SessionPage() {
               <SubagentsSection subagents={snapshot.Audit.Subagents} />
               <div className="session-grid">
                 <OutlineRail
-                  outline={snapshot.Outline}
-                  toolsByOrdinal={groupByOrdinal(snapshot.Tools)}
+                  outline={shape.Outline}
+                  toolsByOrdinal={groupByOrdinal(shape.Tools)}
                   blobBase={withBase(`/api/v1/session/${detail.ID}/blob`)}
                 />
                 <div className="session-maincol">
                   <FlowRibbon
-                    outline={snapshot.Outline}
-                    toolsByOrdinal={groupByOrdinal(snapshot.Tools)}
+                    outline={shape.Outline}
+                    toolsByOrdinal={groupByOrdinal(shape.Tools)}
                   />
                   <Transcript
                     ref={transcriptRef}

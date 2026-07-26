@@ -208,7 +208,7 @@ func (c Chapter) Render() (Rendered, error) {
 // table-of-contents rail lists (H1 is the page title; H4+ is noise), pairing
 // each with the id WithAutoHeadingID assigned.
 func collectHeadings(doc ast.Node, src []byte) []Heading {
-	var out []Heading
+	out := []Heading{}
 	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil

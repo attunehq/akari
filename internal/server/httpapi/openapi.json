@@ -2191,32 +2191,18 @@
           "Audit": {
             "$ref": "#/components/schemas/SessionAudit"
           },
-          "Outline": {
-            "items": {
-              "$ref": "#/components/schemas/Message"
-            },
-            "type": "array"
-          },
           "Page": {
             "$ref": "#/components/schemas/TranscriptPage"
           },
           "ProjectionRevision": {
             "format": "int64",
             "type": "integer"
-          },
-          "Tools": {
-            "items": {
-              "$ref": "#/components/schemas/ToolCallView"
-            },
-            "type": "array"
           }
         },
         "required": [
           "Audit",
-          "Outline",
           "Page",
-          "ProjectionRevision",
-          "Tools"
+          "ProjectionRevision"
         ],
         "type": "object"
       },
@@ -2979,6 +2965,33 @@
         ],
         "type": "object"
       },
+      "SessionShape": {
+        "additionalProperties": false,
+        "properties": {
+          "DupIDs": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Outline": {
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            },
+            "type": "array"
+          },
+          "Tools": {
+            "items": {
+              "$ref": "#/components/schemas/ToolCallView"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "DupIDs",
+          "Outline",
+          "Tools"
+        ],
+        "type": "object"
+      },
       "SessionSignals": {
         "additionalProperties": false,
         "properties": {
@@ -3150,32 +3163,24 @@
           "Audit": {
             "$ref": "#/components/schemas/SessionAudit"
           },
-          "DupIDs": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "Outline": {
-            "items": {
-              "$ref": "#/components/schemas/Message"
-            },
-            "type": "array"
-          },
           "Page": {
             "$ref": "#/components/schemas/TranscriptPage"
           },
-          "Tools": {
-            "items": {
-              "$ref": "#/components/schemas/ToolCallView"
-            },
-            "type": "array"
+          "Shape": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionShape"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "Audit",
-          "DupIDs",
-          "Outline",
           "Page",
-          "Tools"
+          "Shape"
         ],
         "type": "object"
       },

@@ -130,7 +130,7 @@ func (s *Store) scanMessages(ctx context.Context, q querier, sessionID int64, qu
 		return nil, fmt.Errorf("query messages for session %d: %w", sessionID, err)
 	}
 	defer rows.Close()
-	var out []Message
+	out := []Message{}
 	for rows.Next() {
 		var m Message
 		var hasUsage bool
@@ -196,7 +196,7 @@ func (s *Store) scanToolCalls(ctx context.Context, q querier, query string, args
 		return nil, err
 	}
 	defer rows.Close()
-	var out []ToolCallView
+	out := []ToolCallView{}
 	for rows.Next() {
 		var t ToolCallView
 		if err := rows.Scan(&t.MessageOrdinal, &t.CallIndex, &t.ToolName, &t.Category, &t.FilePath, &t.FileRelPath, &t.Detail,
@@ -298,7 +298,7 @@ func (s *Store) scanAttachments(ctx context.Context, q querier, query string, ar
 		return nil, fmt.Errorf("query attachments: %w", err)
 	}
 	defer rows.Close()
-	var out []AttachmentView
+	out := []AttachmentView{}
 	for rows.Next() {
 		var a AttachmentView
 		if err := rows.Scan(&a.MessageOrdinal, &a.SHA256, &a.MediaType, &a.ByteLen, &a.Filename); err != nil {
@@ -367,7 +367,7 @@ func (s *Store) scanModelFallbacks(ctx context.Context, q querier, sessionID int
 		return nil, fmt.Errorf("query model fallbacks for session %d: %w", sessionID, err)
 	}
 	defer rows.Close()
-	var out []ModelFallback
+	out := []ModelFallback{}
 	for rows.Next() {
 		var f ModelFallback
 		if err := rows.Scan(&f.MessageOrdinal, &f.FromModel, &f.ToModel, &f.Trigger,

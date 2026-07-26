@@ -391,9 +391,18 @@ func TestInsightsPanelsShareCohort(t *testing.T) {
 		t.Errorf("band signal series buckets = %d, want %d (core trends must not depend on the panel set)",
 			len(band.Trends.Signals.GradeShare), len(ins.Trends.Signals.GradeShare))
 	}
-	if len(band.Trends.Gallery.Rows) != 0 || len(band.Trends.Economics.CostCompleted) != 0 {
-		t.Errorf("band panels computed skipped trend groups: gallery %d rows, economics %d buckets",
-			len(band.Trends.Gallery.Rows), len(band.Trends.Economics.CostCompleted))
+	// A skipped group keeps the empty series newTrends laid down (every array reaches
+	// the browser non-nullable), so "not computed" shows as all-zero rather than as a
+	// short slice: the fixture spends real money, so any nonzero cost means the
+	// economics read ran when the band did not ask for it.
+	if len(band.Trends.Gallery.Rows) != 0 {
+		t.Errorf("band panels computed the skipped gallery group: %d rows", len(band.Trends.Gallery.Rows))
+	}
+	for i, cost := range band.Trends.Economics.CostCompleted {
+		if cost != 0 {
+			t.Errorf("band panels computed the skipped economics group: bucket %d cost %v", i, cost)
+			break
+		}
 	}
 }
 

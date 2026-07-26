@@ -858,3 +858,72 @@ func (s *Store) cacheSavingsTrend(ctx context.Context, q querier, f AnalyticsFil
 	}
 	return nil
 }
+
+// newTrends returns the grid-shaped Trends every bucketed Insights call starts from,
+// with every panel already carrying empty series rather than nil ones.
+//
+// A panel the caller did not ask for (InsightsPanels gates them, so the project quality
+// band computes only Tools and Churn) is never written, and a zero-valued panel struct
+// would ship its slices as JSON null. Filling them here means "not requested" and
+// "requested, no rows" look the same on the wire, which is what the browser needs: it
+// draws an empty chart either way, and every array in the contract stays non-nullable.
+func newTrends(grid trendGrid) *Trends {
+	n := grid.n()
+	f := func() []float64 { return make([]float64, n) }
+	return &Trends{
+		Unit:         grid.Unit,
+		BucketStarts: grid.Starts,
+		Labels:       grid.labels(),
+		FleetMix:     FleetMix{Models: []ModelSeries{}, NewestFirst: -1},
+		Gallery:      Gallery{Rows: []GallerySession{}},
+		Velocity: VelocityTrends{
+			ActiveHours: f(), WallHours: f(),
+			ResponseP50: f(), ResponseP90: f(), ResponseP99: f(),
+			MsgsPerMin: f(), ToolsPerMin: f(),
+		},
+		Tools: ToolTrends{
+			Reliability: []ToolPoint{}, MixOrder: []string{},
+			Mix: emptyMaps[float64](n), FailFleet: f(), FailWorst: []ToolFailSeries{},
+		},
+		Churn: ChurnTrend{
+			ReEdits: make([]int, n), Files: make([]int, n), Tree: []ChurnNode{},
+		},
+		Signals: SignalTrends{
+			GradeShare: emptyMaps[float64](n), GPA: f(),
+			ArchetypeShare: emptyMaps[float64](n),
+			CompletedRate:  f(), AbandonedRate: f(),
+			OutcomeTotal: make([]int, n), CompletedCount: make([]int, n), AbandonedCount: make([]int, n),
+			HygieneTerse: f(), HygieneRepeated: f(), HygieneNoCode: f(), HygieneUnstructured: f(),
+			ContextResets: make([]int, n), ContextHistogram: []ContextBucket{}, ContextMarkers: []ContextMarker{},
+		},
+		Economics: Economics{
+			CostCompleted: f(), CostAbandoned: f(), CostOther: f(),
+			CacheSavings: f(), CacheHitRate: f(), CacheMeasured: make([]bool, n),
+		},
+		Subagents: SubagentStats{
+			DelegateShare: f(), CostShare: f(),
+			FanoutOrder: []string{}, FanoutRows: emptyMaps[int](n),
+		},
+		Rhythm: RhythmGrid{Cells: emptyRows(rhythmDays, rhythmHours)},
+	}
+}
+
+// emptyMaps returns n allocated maps, for the per-bucket "category to value" series. A
+// nil map encodes as null just as a nil slice does, so the rows are allocated rather
+// than left zero.
+func emptyMaps[V any](n int) []map[string]V {
+	out := make([]map[string]V, n)
+	for i := range out {
+		out[i] = map[string]V{}
+	}
+	return out
+}
+
+// emptyRows returns a rows-by-cols grid of zeroed counts, for the rhythm heatmap.
+func emptyRows(rows, cols int) [][]int {
+	out := make([][]int, rows)
+	for i := range out {
+		out[i] = make([]int, cols)
+	}
+	return out
+}

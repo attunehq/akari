@@ -15,7 +15,7 @@ import (
 // the stable order keeps the collapsed chips from reshuffling between requests.
 func SelectedUserIDs(raw []string, users []store.User) []int64 {
 	if len(raw) == 0 {
-		return nil
+		return []int64{}
 	}
 	want := map[int64]bool{}
 	for _, v := range raw {
@@ -24,9 +24,9 @@ func SelectedUserIDs(raw []string, users []store.User) []int64 {
 		}
 	}
 	if len(want) == 0 {
-		return nil
+		return []int64{}
 	}
-	var out []int64
+	out := []int64{}
 	for _, u := range users {
 		if want[u.ID] {
 			out = append(out, u.ID)

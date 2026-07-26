@@ -110,6 +110,12 @@ type Gallery struct {
 	LongestCostUSD         float64
 }
 
+// rhythmDays and rhythmHours are the fixed dimensions of the hour-of-week heatmap.
+const (
+	rhythmDays  = 7
+	rhythmHours = 24
+)
+
 // RhythmGrid is the hour-of-week activity heatmap: Cells[dow][hour] is the message-plus-tool
 // volume, dow 0 = Monday through 6 = Sunday, hour 0..23 in UTC.
 type RhythmGrid struct {
@@ -663,10 +669,7 @@ func (s *Store) galleryFrom(ctx context.Context, q querier, f AnalyticsFilter) (
 // week, hour), in UTC, over the scoped sessions. Rows are Monday-first to match the concept's
 // punchcard.
 func (s *Store) rhythmFrom(ctx context.Context, q querier, f AnalyticsFilter) (RhythmGrid, error) {
-	cells := make([][]int, 7)
-	for i := range cells {
-		cells[i] = make([]int, 24)
-	}
+	cells := emptyRows(rhythmDays, rhythmHours)
 	add := func(dow, hour, n int) {
 		if dow >= 1 && dow <= 7 && hour >= 0 && hour <= 23 {
 			cells[dow-1][hour] += n // isodow: 1=Mon..7=Sun -> index 0..6

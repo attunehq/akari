@@ -53,7 +53,7 @@ func (s *Store) ListSessions(ctx context.Context, f SessionFilter) ([]SessionSum
 		return nil, err
 	}
 	defer rows.Close()
-	var out []SessionSummary
+	out := []SessionSummary{}
 	for rows.Next() {
 		sm, err := scanSession(rows)
 		if err != nil {
@@ -464,6 +464,9 @@ func (s *Store) ListAllSessions(ctx context.Context, f SessionFilter) (rows []Se
 				return terr
 			}
 			rows = page
+			if rows == nil {
+				rows = []SessionRow{}
+			}
 			return nil
 		})
 	if err != nil {
@@ -613,7 +616,7 @@ func (s *Store) SessionFeed(ctx context.Context, f SessionFilter, limit int, cur
 		return nil, nil, fmt.Errorf("query session feed: %w", err)
 	}
 	defer rows.Close()
-	var out []SessionRow
+	out := []SessionRow{}
 	for rows.Next() {
 		r, _, _, err := scanSessionRow(rows, false)
 		if err != nil {

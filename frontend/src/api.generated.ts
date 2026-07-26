@@ -2167,11 +2167,9 @@ export interface components {
         };
         PublicSessionSnapshot: {
             Audit: components["schemas"]["SessionAudit"];
-            Outline: components["schemas"]["Message"][];
             Page: components["schemas"]["TranscriptPage"];
             /** Format: int64 */
             ProjectionRevision: number;
-            Tools: components["schemas"]["ToolCallView"][];
         };
         Publication: {
             published: boolean;
@@ -2370,6 +2368,12 @@ export interface components {
             Username: string;
             Visibility: string;
         };
+        SessionShape: {
+            /** Format: int64 */
+            DupIDs: number;
+            Outline: components["schemas"]["Message"][];
+            Tools: components["schemas"]["ToolCallView"][];
+        };
         SessionSignals: {
             AssistantTurns: number | null;
             ContextResetCount: number | null;
@@ -2405,11 +2409,8 @@ export interface components {
         };
         SessionSnapshot: {
             Audit: components["schemas"]["SessionAudit"];
-            /** Format: int64 */
-            DupIDs: number;
-            Outline: components["schemas"]["Message"][];
             Page: components["schemas"]["TranscriptPage"];
-            Tools: components["schemas"]["ToolCallView"][];
+            Shape: components["schemas"]["SessionShape"] | null;
         };
         SessionSummary: {
             Agent: string;
