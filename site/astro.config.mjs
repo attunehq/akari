@@ -15,11 +15,9 @@ export default defineConfig({
     // Rewrite the guide's relative `.md` links to site routes / GitHub URLs.
     // Astro 6 takes remark/rehype plugins through a `unified()` processor.
     processor: unified({ rehypePlugins: [rehypeDocLinks] }),
-    // A light syntax theme that sits in the drafting-paper surface rather than
-    // dropping a dark slab into the page. Code-block chrome is styled in the
-    // docs prose CSS.
+    // Match highlighted code to Akari's dark graphite surfaces.
     shikiConfig: {
-      theme: "github-light",
+      theme: "github-dark",
       wrap: false,
     },
   },
