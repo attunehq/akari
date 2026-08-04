@@ -49,11 +49,13 @@ func TestSelectedUserIDs(t *testing.T) {
 	if got := SelectedUserIDs([]string{"5", "999", "abc"}, users); len(got) != 1 || got[0] != 5 {
 		t.Errorf("SelectedUserIDs should drop unknown/non-numeric ids, got %v", got)
 	}
-	// No selection is nil (the unscoped "all users" view).
-	if got := SelectedUserIDs(nil, users); got != nil {
-		t.Errorf("empty selection should be nil, got %v", got)
+	// No selection is an empty list (the unscoped "all users" view). It is empty
+	// rather than nil because it reaches the browser, where the contract declares
+	// every array non-nullable.
+	if got := SelectedUserIDs(nil, users); got == nil || len(got) != 0 {
+		t.Errorf("empty selection should be an empty list, got %v", got)
 	}
-	if got := SelectedUserIDs([]string{"oops"}, users); got != nil {
-		t.Errorf("all-invalid selection should be nil, got %v", got)
+	if got := SelectedUserIDs([]string{"oops"}, users); got == nil || len(got) != 0 {
+		t.Errorf("all-invalid selection should be an empty list, got %v", got)
 	}
 }

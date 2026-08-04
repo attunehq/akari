@@ -17,19 +17,27 @@ import (
 // renders into a single repeatable-read snapshot, so a response is always one
 // projection or the other, never a mix.
 
-// SessionSnapshot is everything the live session body renders from one MVCC snapshot.
-// Outline and Tools are nil when the read skipped the shape (a quiet append tick, see
-// SessionAppendByID); the fragment then carries no shape swap, which is right because
-// no turns changed.
-type SessionSnapshot struct {
-	Audit   SessionAudit
-	Page    TranscriptPage
+// SessionShape is the whole-session picture the outline rail and the flow ribbon both
+// derive from. Its three parts are read together so a tick is never colored by another
+// projection's tools, and they travel together for the same reason.
+type SessionShape struct {
 	Outline []Message
 	Tools   []ToolCallView
 	// DupIDs counts tool-call ids appearing on more than one row (a replayed
-	// transcript), read with the shape: it summarizes the same tool_calls rows the
-	// page renders, so it must not straddle a rebuild against them.
+	// transcript). It summarizes the same tool_calls rows the page renders, so it must
+	// not straddle a rebuild against them.
 	DupIDs int
+}
+
+// SessionSnapshot is everything the live session body renders from one MVCC snapshot.
+type SessionSnapshot struct {
+	Audit SessionAudit
+	Page  TranscriptPage
+	// Shape is nil when the read skipped it: a quiet append tick changed no turns, so
+	// the fragment carries no shape swap. One nullable pointer rather than three fields
+	// that happen to be empty together is what stops a consumer from merging "nothing
+	// changed" over a good outline: to use the shape you have to unwrap it first.
+	Shape *SessionShape
 }
 
 // SessionSnapshotByID loads the full session view: the audit bundle, the transcript's
@@ -88,10 +96,12 @@ func (s *Store) fillShape(ctx context.Context, tx pgx.Tx, sessionID int64, snap 
 	if err != nil {
 		return err
 	}
-	snap.Outline = outline
-	snap.Tools = tools
-	snap.DupIDs, err = s.duplicateCallUIDCount(ctx, tx, sessionID)
-	return err
+	dupIDs, err := s.duplicateCallUIDCount(ctx, tx, sessionID)
+	if err != nil {
+		return err
+	}
+	snap.Shape = &SessionShape{Outline: outline, Tools: tools, DupIDs: dupIDs}
+	return nil
 }
 
 // wholeSessionShape reads the outline rail's bounded-column rows and the full tool
@@ -109,25 +119,4 @@ func (s *Store) wholeSessionShape(ctx context.Context, tx pgx.Tx, sessionID int6
 		return nil, nil, err
 	}
 	return outline, tools, nil
-}
-
-// SessionEarlierByID loads the "Show earlier" fragment's inputs from one snapshot: the
-// session row and the window strictly before `before`. The window's rows carry their
-// own tools, attachments, and fallback notices, and the fragment refreshes nothing
-// out-of-band, so nothing else is read.
-func (s *Store) SessionEarlierByID(ctx context.Context, sessionID int64, before int) (SessionDetail, TranscriptPage, error) {
-	var d SessionDetail
-	var page TranscriptPage
-	err := s.snapshotTx(ctx, func(tx pgx.Tx) error {
-		var err error
-		if d, err = s.scanDetail(ctx, tx, "s.id = $1", sessionID); err != nil {
-			return err
-		}
-		page, err = s.transcriptTail(ctx, tx, sessionID, &before)
-		return err
-	})
-	if err != nil {
-		return SessionDetail{}, TranscriptPage{}, err
-	}
-	return d, page, nil
 }

@@ -4,6 +4,7 @@
 // files (pages/session-detail.tsx, components/transcript.tsx); this file
 // re-exports them so main.tsx and public.tsx keep importing from one module.
 
+import { FunnelIcon } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
@@ -22,9 +23,6 @@ import {
 } from "../format";
 import "../sessions.css";
 import type { ProjectFacet, SessionRow, SessionsResponse } from "../types";
-
-export { Transcript } from "../components/transcript";
-export { SessionPage } from "./session-detail";
 
 const SORT_OPTIONS = [
   { key: "updated", label: "Recent" },
@@ -177,6 +175,7 @@ export function SessionsPage() {
   const [morePages, setMorePages] = useState<SessionRow[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: filterKey deliberately resets pagination; the effect does not otherwise read it.
   useEffect(() => {
     setMorePages([]);
@@ -201,7 +200,7 @@ export function SessionsPage() {
 
   const rows = useMemo(
     () => [
-      ...(state.kind === "ready" ? (state.data.sessions ?? []) : []),
+      ...(state.kind === "ready" ? state.data.sessions : []),
       ...morePages,
     ],
     [state, morePages],
@@ -221,7 +220,7 @@ export function SessionsPage() {
       const result = await request<SessionsResponse>(
         `/api/v1/app/sessions?${next.toString()}`,
       );
-      setMorePages((cur) => [...cur, ...(result.sessions ?? [])]);
+      setMorePages((cur) => [...cur, ...result.sessions]);
       setHasMore(result.has_more);
     } finally {
       setLoadingMore(false);
@@ -249,8 +248,24 @@ export function SessionsPage() {
       <AsyncView state={state}>
         {(data) => (
           <section className="sessions-list">
-            <header className="sessions-toolbar">
-              <div className="sessions-scope">
+            <header
+              className={
+                filtersOpen
+                  ? "sessions-toolbar filters-open"
+                  : "sessions-toolbar"
+              }
+            >
+              <button
+                type="button"
+                className="filters-toggle"
+                aria-expanded={filtersOpen}
+                aria-controls="sessions-scope-panel sessions-filter-panel"
+                onClick={() => setFiltersOpen((open) => !open)}
+              >
+                <FunnelIcon size={14} aria-hidden="true" />
+                Filters
+              </button>
+              <div className="sessions-scope" id="sessions-scope-panel">
                 <span className="sessions-total">
                   Sessions
                   <span className="count-badge">
@@ -298,7 +313,10 @@ export function SessionsPage() {
                   Empty
                 </label>
               </div>
-              <div className="sessions-filter-controls">
+              <div
+                className="sessions-filter-controls"
+                id="sessions-filter-panel"
+              >
                 <select
                   aria-label="Project"
                   value={params.get("project") ?? ""}
@@ -313,7 +331,7 @@ export function SessionsPage() {
                   }
                 >
                   <option value="">All projects</option>
-                  {(data.facets.Projects ?? []).map((item) => (
+                  {data.facets.Projects.map((item) => (
                     <option key={item.ID} value={String(item.ID)}>
                       {projectFacetLabel(item)} ({formatCount(item.Count)})
                     </option>
@@ -333,13 +351,13 @@ export function SessionsPage() {
                   }
                 >
                   <option value="">All agents</option>
-                  {(data.facets.Agents ?? []).map((item) => (
+                  {data.facets.Agents.map((item) => (
                     <option key={item.Value} value={item.Value}>
                       {item.Value} ({formatCount(item.Count)})
                     </option>
                   ))}
                 </select>
-                {(data.facets.Machines ?? []).length > 1 ? (
+                {data.facets.Machines.length > 1 ? (
                   <select
                     aria-label="Machine"
                     value={params.get("machine") ?? ""}
@@ -354,14 +372,14 @@ export function SessionsPage() {
                     }
                   >
                     <option value="">All machines</option>
-                    {(data.facets.Machines ?? []).map((item) => (
+                    {data.facets.Machines.map((item) => (
                       <option key={item.Value} value={item.Value}>
                         {item.Value} ({formatCount(item.Count)})
                       </option>
                     ))}
                   </select>
                 ) : null}
-                {(data.facets.Users ?? []).length > 1 ? (
+                {data.facets.Users.length > 1 ? (
                   <select
                     aria-label="Account"
                     value={params.get("user") ?? ""}
@@ -376,7 +394,7 @@ export function SessionsPage() {
                     }
                   >
                     <option value="">All accounts</option>
-                    {(data.facets.Users ?? []).map((item) => (
+                    {data.facets.Users.map((item) => (
                       <option key={item.Value} value={item.Value}>
                         {item.Value} ({formatCount(item.Count)})
                       </option>
@@ -406,11 +424,11 @@ export function SessionsPage() {
             </header>
             <ActiveFilterChips
               params={params}
-              projects={data.facets.Projects ?? []}
+              projects={data.facets.Projects}
               setParams={setParams}
             />
             <div className="sessions-feed">
-              {(rows ?? []).length === 0 ? (
+              {rows.length === 0 ? (
                 <div className="empty-state">
                   <h2>No matching sessions</h2>
                   <p>Clear a filter or search for a different phrase.</p>
@@ -537,6 +555,34 @@ function ActiveFilterChips({
   );
 }
 
+// splitTitleTail separates a title into a head and a fixed-length tail
+// rendered as two flex children (see .srow-title in sessions.css): the head
+// gets a CSS ellipsis and the tail never shrinks. A JS-computed head length
+// can only ever assume one column width, and the row is exactly as wide as a
+// phone screen as it is a desktop one, so letting the browser's own ellipsis
+// size the head means the same split works at any width, and the part that
+// tells two automation runs apart (an "Automation ID: ..." suffix, say)
+// survives instead of being the part an end truncation cuts.
+export function splitTitleTail(
+  text: string,
+  tailLen = 24,
+): { head: string; tail: string } {
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  if (collapsed.length <= tailLen) return { head: collapsed, tail: "" };
+  // Start the tail at a word boundary. The seam only becomes visible once the
+  // head ellipsizes, which is exactly when the tail earns its keep, and a tail
+  // that opens mid-word there ("...ush current state please") reads as a
+  // rendering fault rather than as the end of the prompt. The space belongs to
+  // the tail, whose white-space: pre keeps it, so head + tail still reproduces
+  // the collapsed title exactly on a row wide enough to show all of it. A final
+  // token longer than the tail (a hash, a URL) has no boundary to snap to and
+  // keeps the hard cut, which is the right answer for an id.
+  const hardCut = collapsed.length - tailLen;
+  const boundary = collapsed.indexOf(" ", hardCut);
+  const cut = boundary === -1 ? hardCut : boundary;
+  return { head: collapsed.slice(0, cut), tail: collapsed.slice(cut) };
+}
+
 function SessionFeedRow({
   session,
   fadeProject,
@@ -544,7 +590,9 @@ function SessionFeedRow({
   session: SessionRow;
   fadeProject: boolean;
 }) {
-  const title = stripPromptPreamble(session.Title);
+  const title =
+    stripPromptPreamble(session.Title) || sessionRowProject(session);
+  const { head, tail } = splitTitleTail(title);
   const {
     triggerRef: rowRef,
     popoverRef: overviewRef,
@@ -583,14 +631,10 @@ function SessionFeedRow({
             </span>
           ) : (
             <span className="srow-title">
-              {title || sessionRowProject(session)}
+              <span className="srow-title-head">{head}</span>
+              {tail && <span className="srow-title-tail">{tail}</span>}
             </span>
           )}
-          <SessionPublicTag
-            visibility={session.Visibility}
-            publicID={session.PublicID}
-            linked={false}
-          />
           <FallbackTag count={session.ModelFallbackCount} />
         </div>
         <div className="srow-meta">
@@ -607,8 +651,12 @@ function SessionFeedRow({
       <div className="srow-signals">
         <ProjectKindCell kind={session.ProjectKind} />
         <FanoutCell session={session} />
+        <PublicCell session={session} />
+        <span className="srow-cost mono">
+          {formatCost(session.TotalCostUSD)}
+        </span>
         <SessionGrade grade={session.Grade} />
-        <SessionOutcome outcome={session.Outcome} />
+        <SessionOutcome outcome={session.Outcome} endedAt={session.EndedAt} />
       </div>
       <span
         className="session-overview popover"
@@ -625,7 +673,7 @@ function SessionFeedRow({
           <dt>Total tokens</dt>
           <dd>{formatTokens(sessionTokens(session))}</dd>
           <dt>Session cost</dt>
-          <dd>{formatCost(session.TotalCostUSD, session.CostIncomplete)}</dd>
+          <dd>{formatCost(session.TotalCostUSD)}</dd>
         </dl>
         <span className="session-overview-meta">
           {session.Agent} on {session.Machine}
@@ -677,6 +725,23 @@ function ProjectKindCell({ kind }: { kind: string }) {
   );
 }
 
+// PublicCell holds the same fixed-width slot as the kind and fan-out chips
+// (an empty placeholder when the row is private) so a public session's badge
+// never needs a line of its own the way it did sitting inline with the title.
+function PublicCell({ session }: { session: SessionRow }) {
+  if (session.Visibility !== "public")
+    return <span className="srow-public-empty" />;
+  return (
+    <span className="srow-public">
+      <SessionPublicTag
+        visibility={session.Visibility}
+        publicID={session.PublicID}
+        linked={false}
+      />
+    </span>
+  );
+}
+
 function FanoutCell({ session }: { session: SessionRow }) {
   const count = session.Tree.SubagentCount;
   if (count <= 0) return <span className="srow-fanout-empty" />;
@@ -695,9 +760,9 @@ function FanoutCell({ session }: { session: SessionRow }) {
         <dt>Subagents</dt>
         <dd>{formatCount(count)}</dd>
         <dt>Root session</dt>
-        <dd>{formatCost(session.TotalCostUSD, session.CostIncomplete)}</dd>
+        <dd>{formatCost(session.TotalCostUSD)}</dd>
         <dt>Total cost</dt>
-        <dd>{formatCost(session.Tree.CostUSD, session.Tree.CostIncomplete)}</dd>
+        <dd>{formatCost(session.Tree.CostUSD)}</dd>
       </dl>
       <p className="tip-copy">
         Total cost includes the root session and its subagents.

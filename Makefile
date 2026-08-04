@@ -2,9 +2,10 @@
 #
 # The React production build is committed because go:embed must see it at compile
 # time and release cross-compiles should need only Go. Development targets rebuild
-# it from frontend/ before generating the remaining templ homepage.
+# it from frontend/ before generating the remaining templ error pages. The
+# public Astro site deploys separately through GitHub Pages.
 
-.PHONY: frontend-deps frontend frontend-check frontend-test generate build test vet fmt clean
+.PHONY: frontend-deps frontend frontend-check frontend-test site-deps site-check site generate build test vet fmt clean
 
 frontend-deps:
 	cd frontend && bun install --frozen-lockfile
@@ -18,10 +19,19 @@ frontend-check: frontend-deps
 frontend-test: frontend-deps
 	cd frontend && bun run test
 
+site-deps:
+	cd site && npm ci
+
+site-check: site-deps
+	cd site && npm run check
+
+site: site-check
+	cd site && npm run build
+
 generate:
 	go generate ./...
 
-# Compile every package after rebuilding both frontend layers.
+# Compile every package after rebuilding the embedded frontend.
 build: frontend generate
 	go build ./...
 

@@ -131,6 +131,9 @@
 .project-date-cell {
   white-space: nowrap;
 }
+.project-mobile-meta {
+  display: none;
+}
 .project-kind,
 .project-kind-empty {
   display: inline-flex;
@@ -174,13 +177,6 @@
   margin-top: 0;
 }
 
-/* The whole row is a click target (see ProjectRow's guarded onClick), but the
-   project name stays a real anchor so a modifier-click or middle-click still
-   opens it the native way instead of being swallowed by the row handler. */
-.row-link {
-  cursor: pointer;
-}
-
 /* The session table's remainder footer reads as a summary line, not another
    row of data, so it recedes a step from the rows above it. */
 .remainder td {
@@ -200,12 +196,6 @@
 }
 
 @media (max-width: 780px) {
-  .project-session-filters,
-  .project-page .activity-panel,
-  .project-head .head-actions > .button,
-  .project-head .head-actions > .tag.public {
-    display: none;
-  }
   .project-sessions {
     overflow: visible;
     padding: 0;
@@ -326,9 +316,7 @@
     gap: 10px;
   }
   .projects-table tbody tr {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 120px;
-    align-items: center;
+    display: block;
     overflow: hidden;
     background: var(--surface);
     border: 1px solid var(--border);
@@ -350,14 +338,14 @@
   .projects-table .project-location,
   .projects-table .project-kind-cell,
   .projects-table td.num,
+  .projects-table .project-activity-cell,
   .projects-table .project-date-cell {
     display: none;
   }
-  .projects-table .project-activity-cell {
-    padding: 12px;
-  }
-  .projects-table .project-activity,
-  .projects-table .project-activity .activity-bars {
-    width: 100%;
+  .projects-table .project-mobile-meta {
+    display: block;
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 12px;
   }
 }

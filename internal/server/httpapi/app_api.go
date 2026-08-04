@@ -10,7 +10,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/jssblck/akari/internal/guide"
 	"github.com/jssblck/akari/internal/server/auth"
 	"github.com/jssblck/akari/internal/server/ogimage"
 	"github.com/jssblck/akari/internal/server/store"
@@ -105,12 +104,7 @@ func (s *Server) handleAPIProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	project, err := s.Store.Project(r.Context(), id)
-	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "project not found")
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "load project")
+	if writeStoreErr(w, err, "project not found", "load project") {
 		return
 	}
 	rng, ok := apiRange(w, r)
@@ -357,12 +351,7 @@ func (s *Server) handleAPISession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	snapshot, err := s.Store.SessionSnapshotByID(r.Context(), id)
-	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "session not found")
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "load session")
+	if writeStoreErr(w, err, "session not found", "load session") {
 		return
 	}
 	p, _ := principalFrom(r.Context())
@@ -384,12 +373,7 @@ func (s *Server) handleAPISessionEarlier(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	page, err := s.Store.TranscriptTail(r.Context(), id, &before)
-	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "session not found")
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "load transcript")
+	if writeStoreErr(w, err, "session not found", "load transcript") {
 		return
 	}
 	writeJSON(w, http.StatusOK, transcriptResponse{Page: page})
@@ -412,6 +396,11 @@ func (s *Server) handleAPIAccount(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "load connections")
 		return
 	}
+	projects, err := s.Store.ListProjectPublications(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "load project publications")
+		return
+	}
 	var invites []store.Invite
 	if user.IsAdmin {
 		invites, err = s.Store.ListInvites(r.Context())
@@ -423,47 +412,15 @@ func (s *Server) handleAPIAccount(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, accountResponse{
 		User: appViewer{Authenticated: true, UserID: user.ID, Username: user.Username,
 			IsAdmin: user.IsAdmin, OverviewPublic: user.OverviewPublic},
-		Tokens: accountTokenDTOs(tokens), Connections: oauthGrantDTOs(grants), Invites: accountInviteDTOs(invites),
+		Projects: accountProjectDTOs(projects), Tokens: accountTokenDTOs(tokens),
+		Connections: oauthGrantDTOs(grants), Invites: accountInviteDTOs(invites),
 		Reparse: s.worker.FleetStatus(r.Context()),
-	})
-}
-
-func (s *Server) handleAPIGuide(w http.ResponseWriter, r *http.Request) {
-	slug := r.PathValue("slug")
-	if slug == "" {
-		slug = "index"
-	}
-	chapter, ok := guide.Lookup(slug)
-	if !ok {
-		writeError(w, http.StatusNotFound, "guide page not found")
-		return
-	}
-	rendered, err := chapter.Render()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "render guide")
-		return
-	}
-	raw, err := chapter.Raw()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "load guide")
-		return
-	}
-	chapters := guide.Chapters()
-	writeJSON(w, http.StatusOK, guideResponse{
-		Slug: chapter.Slug, Title: chapter.Title, Summary: chapter.Summary,
-		RawMarkdown: raw, Headings: rendered.Headings,
-		RawPath: chapter.RawRoute(), GitHubURL: chapter.GitHubURL(), Chapters: chapters,
 	})
 }
 
 func (s *Server) handleAPIPublicOverview(w http.ResponseWriter, r *http.Request) {
 	user, err := s.Store.PublicOverviewUser(r.Context(), r.PathValue("username"))
-	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "overview not published")
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "load overview")
+	if writeStoreErr(w, err, "overview not published", "load overview") {
 		return
 	}
 	if s.writeAPIReparseGate(w, r) {
@@ -496,12 +453,7 @@ func (s *Server) handleAPIPublicProject(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	project, err := s.Store.PublicProjectOverview(r.Context(), id)
-	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "project overview not published")
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "load project overview")
+	if writeStoreErr(w, err, "project overview not published", "load project overview") {
 		return
 	}
 	if s.writeAPIReparseGate(w, r) {
@@ -530,23 +482,14 @@ func (s *Server) handleAPIPublicProject(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleAPIPublicSession(w http.ResponseWriter, r *http.Request) {
-	if _, err := s.Store.SessionDetailByPublicID(r.Context(), r.PathValue("public_id")); errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "session not published")
-		return
-	} else if err != nil {
-		writeError(w, http.StatusInternalServerError, "load session")
+	if _, err := s.Store.SessionDetailByPublicID(r.Context(), r.PathValue("public_id")); writeStoreErr(w, err, "session not published", "load session") {
 		return
 	}
 	if s.writeAPIReparseGate(w, r) {
 		return
 	}
 	snapshot, err := s.Store.PublicSessionByID(r.Context(), r.PathValue("public_id"), nil)
-	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "session not published")
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "load session")
+	if writeStoreErr(w, err, "session not published", "load session") {
 		return
 	}
 	writeJSON(w, http.StatusOK, publicSessionResponse{Snapshot: snapshot})
@@ -558,23 +501,14 @@ func (s *Server) handleAPIPublicSessionEarlier(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusBadRequest, "invalid before cursor")
 		return
 	}
-	if _, err := s.Store.SessionDetailByPublicID(r.Context(), r.PathValue("public_id")); errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "session not published")
-		return
-	} else if err != nil {
-		writeError(w, http.StatusInternalServerError, "load session")
+	if _, err := s.Store.SessionDetailByPublicID(r.Context(), r.PathValue("public_id")); writeStoreErr(w, err, "session not published", "load session") {
 		return
 	}
 	if s.writeAPIReparseGate(w, r) {
 		return
 	}
 	snapshot, err := s.Store.PublicSessionByID(r.Context(), r.PathValue("public_id"), &before)
-	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "session not published")
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "load session")
+	if writeStoreErr(w, err, "session not published", "load session") {
 		return
 	}
 	writeJSON(w, http.StatusOK, publicSessionResponse{Snapshot: snapshot})
@@ -615,12 +549,7 @@ func (s *Server) handleAPISessionPublication(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		publicID, err := s.Store.PublishSession(r.Context(), id, p.UserID, candidate)
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "session not found")
-			return
-		}
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "publish session")
+		if writeStoreErr(w, err, "session not found", "publish session") {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"published": true, "public_id": publicID})
@@ -643,12 +572,7 @@ func (s *Server) handleAPIDeleteSession(w http.ResponseWriter, r *http.Request) 
 	}
 	p, _ := principalFrom(r.Context())
 	detail, err := s.Store.SessionDetailByID(r.Context(), id)
-	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "session not found")
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "load session")
+	if writeStoreErr(w, err, "session not found", "load session") {
 		return
 	}
 	if p.UserID != detail.OwnerID {
@@ -684,12 +608,7 @@ func (s *Server) handleAPIProjectPublication(w http.ResponseWriter, r *http.Requ
 	} else {
 		err = s.Store.UnpublishProjectOverview(r.Context(), id)
 	}
-	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "project not found")
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "update project publication")
+	if writeStoreErr(w, err, "project not found", "update project publication") {
 		return
 	}
 	s.analyticsSnapshots.invalidate(analyticsScope{kind: analyticsProjectScope, id: id})

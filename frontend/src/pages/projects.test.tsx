@@ -20,7 +20,6 @@ function project(overrides: Partial<Project> = {}): Project {
     TotalCacheRead: 0,
     TotalCacheWrite: 0,
     TotalCostUSD: 2.5,
-    CostIncomplete: false,
     LastActivity: "2026-07-13T12:00:00Z",
     OverviewPublic: false,
     ...overrides,
@@ -178,5 +177,22 @@ describe("ProjectsPage", () => {
       "101",
     );
     expect(screen.getByText("Peak day").nextSibling).toHaveTextContent("100");
+  });
+
+  it("keeps cost, session count, and recency in the mobile meta line", async () => {
+    stubProjectsResponse({
+      projects: [project({ ID: 1, TotalCostUSD: 2.5, SessionCount: 10 })],
+      sparklines: { "1": [0, 1] },
+    });
+    render(
+      <MemoryRouter initialEntries={["/projects"]}>
+        <ProjectsPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Repositories");
+    const meta = document.querySelector(".project-mobile-meta");
+    expect(meta).toHaveTextContent("$2.50");
+    expect(meta).toHaveTextContent("10 sessions");
   });
 });

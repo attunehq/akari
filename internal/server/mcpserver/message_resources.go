@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jssblck/akari/internal/casenc"
 	"github.com/jssblck/akari/internal/server/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -51,7 +52,7 @@ func parseMessageResourceURI(raw string) (int64, int, string, string, error) {
 		return 0, 0, "", "", errors.New("invalid message resource URI")
 	}
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(parts) != 5 || parts[1] != "messages" || (parts[3] != "content" && parts[3] != "thinking") || !validSHA256(parts[4]) {
+	if len(parts) != 5 || parts[1] != "messages" || (parts[3] != "content" && parts[3] != "thinking") || !casenc.ValidKey(parts[4]) {
 		return 0, 0, "", "", errors.New("invalid message resource URI")
 	}
 	sessionID, err := strconv.ParseInt(parts[0], 10, 64)
@@ -63,18 +64,6 @@ func parseMessageResourceURI(raw string) (int64, int, string, string, error) {
 		return 0, 0, "", "", errors.New("invalid message resource URI")
 	}
 	return sessionID, ordinal, parts[3], parts[4], nil
-}
-
-func validSHA256(s string) bool {
-	if len(s) != 64 {
-		return false
-	}
-	for _, r := range s {
-		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
-			return false
-		}
-	}
-	return true
 }
 
 func callerIDFromExtra(extra *mcp.RequestExtra) (int64, error) {

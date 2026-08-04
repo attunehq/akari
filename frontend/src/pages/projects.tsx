@@ -7,12 +7,11 @@ import {
   useSearchParams,
 } from "react-router-dom";
 
-import { request, useAPI } from "../api";
+import { useAPI } from "../api";
 import { AsyncView } from "../components/async-view";
 import { ActivityBars } from "../components/charts";
 import { ToolsInstrument } from "../components/insights/tools";
 import { TooltipHost } from "../components/insights/tooltip";
-import { attempt } from "../components/notices";
 import { RangeTabs } from "../components/range-tabs";
 import { stripPromptPreamble } from "../components/session-quality";
 import { SessionGrade, SessionOutcome } from "../components/session-signals";
@@ -26,7 +25,7 @@ import {
 } from "../format";
 import "../projects.css";
 import { withBase } from "../base";
-import { normalizeInsights } from "../normalize-insights";
+import { guideURL } from "../links";
 import type {
   Project,
   ProjectResponse,
@@ -38,8 +37,7 @@ import { AnalyticsPanel } from "./overview";
 
 // isLocalKind mirrors the server's IsLocalKind: a standalone or orphaned
 // project has no git remote, so it groups and labels apart from a repository
-// everywhere the UI distinguishes the two (the projects ledger, the
-// publicity control, the session filter facets).
+// in the projects ledger and session filter facets.
 function isLocalKind(kind: string): boolean {
   return kind === "standalone" || kind === "orphaned";
 }
@@ -48,10 +46,7 @@ function normalizeSparklines(
   sparklines: ProjectsResponse["sparklines"],
 ): Record<string, number[]> {
   return Object.fromEntries(
-    Object.entries(sparklines ?? {}).map(([key, values]) => [
-      key,
-      values ?? [],
-    ]),
+    Object.entries(sparklines).map(([key, values]) => [key, values]),
   );
 }
 
@@ -168,7 +163,6 @@ function ProjectTokensCell({ project }: { project: Project }) {
         cacheRead={project.TotalCacheRead}
         cacheWrite={project.TotalCacheWrite}
         costUSD={project.TotalCostUSD}
-        costIncomplete={project.CostIncomplete}
       />
     </HoverTip>
   );
@@ -241,6 +235,19 @@ function ProjectLocation({ value, tail }: { value: string; tail: boolean }) {
   );
 }
 
+// ProjectMobileMeta carries the cost, session count and recency that the
+// mobile card layout has no other cell for, since the numeric and date
+// columns are hidden below the table breakpoint.
+function ProjectMobileMeta({ project }: { project: Project }) {
+  return (
+    <span className="project-mobile-meta">
+      {formatCost(project.TotalCostUSD)} · {formatCount(project.SessionCount)}{" "}
+      session{project.SessionCount === 1 ? "" : "s"} ·{" "}
+      {relativeTime(project.LastActivity)}
+    </span>
+  );
+}
+
 // ProjectRow makes the whole row a click target while keeping a real anchor
 // for modifier-clicks (open in new tab, copy link): a plain click anywhere in
 // the row navigates via the router, but a click on the anchor itself, or one
@@ -284,6 +291,7 @@ function ProjectRow({
             </>
           ) : null}
         </span>
+        <ProjectMobileMeta project={project} />
       </td>
       <td className="project-kind-cell">
         <ProjectKindCell kind={project.Kind} />
@@ -402,7 +410,7 @@ export function ProjectsPage() {
       </div>
       <AsyncView state={state}>
         {(data) => {
-          const allProjects = data.projects ?? [];
+          const allProjects = data.projects;
           if (allProjects.length === 0)
             return (
               <section className="empty-state">
@@ -411,7 +419,7 @@ export function ProjectsPage() {
                   Run an akari client sync to create the first project and
                   session.
                 </p>
-                <a className="button" href={withBase("/guide")}>
+                <a className="button" href={guideURL}>
                   Read the setup guide
                 </a>
               </section>
@@ -472,7 +480,8 @@ export function ProjectsPage() {
 // ProjectToolbar is the project page's session filter: three auto-applying
 // selects (Agent, User, Machine) that narrow the whole scoped view (the usage
 // panel and the session table both re-fetch under the chosen facets), reading
-// and writing the same URL params the project API already accepts.
+// and writing the same URL params the project API already accepts. It renders
+// beside the activity range because those controls describe the same scope.
 function ProjectToolbar({ facets }: { facets: ProjectResponse["facets"] }) {
   const [params, setParams] = useSearchParams();
   const update = (key: string, value: string) => {
@@ -484,14 +493,13 @@ function ProjectToolbar({ facets }: { facets: ProjectResponse["facets"] }) {
   return (
     <fieldset className="filter-row">
       <legend className="sr-only">Session filters</legend>
-      <span className="label">Filter</span>
       <select
         aria-label="Agent"
         value={params.get("agent") ?? ""}
         onChange={(event) => update("agent", event.target.value)}
       >
         <option value="">All agents</option>
-        {(facets.Agents ?? []).map((agent) => (
+        {facets.Agents.map((agent) => (
           <option key={agent} value={agent}>
             {agent}
           </option>
@@ -503,7 +511,7 @@ function ProjectToolbar({ facets }: { facets: ProjectResponse["facets"] }) {
         onChange={(event) => update("user", event.target.value)}
       >
         <option value="">All users</option>
-        {(facets.Users ?? []).map((user) => (
+        {facets.Users.map((user) => (
           <option key={user} value={user}>
             {user}
           </option>
@@ -515,7 +523,7 @@ function ProjectToolbar({ facets }: { facets: ProjectResponse["facets"] }) {
         onChange={(event) => update("machine", event.target.value)}
       >
         <option value="">All machines</option>
-        {(facets.Machines ?? []).map((machine) => (
+        {facets.Machines.map((machine) => (
           <option key={machine} value={machine}>
             {machine}
           </option>
@@ -555,85 +563,36 @@ export function ProjectPage() {
     <div className="page project-page">
       <AsyncView state={state}>
         {(data) => {
-          const insights = normalizeInsights(data.insights);
-          const local = isLocalKind(data.project.Kind);
+          const insights = data.insights;
           const remainderTokens =
             data.remainder.Input +
             data.remainder.Output +
             data.remainder.CacheRead +
             data.remainder.CacheWrite;
-          const togglePublicity = async () => {
-            const next = !data.project.OverviewPublic;
-            const ok = await attempt(
-              request(`/api/v1/app/projects/${data.project.ID}/publication`, {
-                method: "PUT",
-                body: JSON.stringify({ published: next }),
-              }),
-              next
-                ? "Project overview published."
-                : "Project overview made private.",
-            );
-            if (ok) window.location.reload();
-          };
           return (
             <>
-              <header className="page-head project-head">
-                <div>
-                  <span className="crumb">
-                    <Link to="/projects">Projects</Link> /{" "}
-                    {data.project.Host || "local"}
-                  </span>
-                  <h1>{projectLabel(data.project)}</h1>
-                  <p>{data.project.RemoteKey}</p>
-                </div>
-                <div className="head-actions">
-                  <RangeTabs ranges={data.ranges ?? []} active={data.range} />
-                  {!local ? (
-                    data.project.OverviewPublic ? (
-                      <>
-                        <a
-                          className="tag public"
-                          href={withBase(`/p/${data.project.ID}`)}
-                          target="_blank"
-                          rel="noopener"
-                          title="Open the public page in a new tab"
-                        >
-                          public <ArrowSquareOutIcon size={10} />
-                        </a>
-                        <button
-                          type="button"
-                          className="button secondary"
-                          onClick={togglePublicity}
-                          title="Hide the public page. The URL is the project id, so making it public again brings the same link back."
-                        >
-                          Make private
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        className="button secondary"
-                        onClick={togglePublicity}
-                        title="Anyone can read this project's usage overview while it is public. Sessions stay private."
-                      >
-                        Make overview public
-                      </button>
-                    )
-                  ) : null}
-                </div>
+              <header className="page-head">
+                <span className="crumb">
+                  <Link to="/projects">Projects</Link> /{" "}
+                  {projectLabel(data.project)}
+                </span>
               </header>
-              <div className="project-session-filters">
-                <ProjectToolbar facets={data.facets} />
-              </div>
-              <AnalyticsPanel analytics={data.analytics} showUsers />
+              <AnalyticsPanel
+                analytics={data.analytics}
+                showUsers
+                mobileActivity="range-only"
+                activityControls={
+                  <>
+                    <ProjectToolbar facets={data.facets} />
+                    <RangeTabs ranges={data.ranges} active={data.range} />
+                  </>
+                }
+              />
               <section className="instrument compact project-sessions">
                 <div className="section-head">
-                  <div>
-                    <h2>Sessions</h2>
-                    <p>Usage-bearing sessions inside the selected window.</p>
-                  </div>
+                  <h2>Sessions</h2>
                 </div>
-                {(data.sessions ?? []).length === 0 ? (
+                {data.sessions.length === 0 ? (
                   <p className="empty-inline">
                     No sessions match these filters.
                   </p>
@@ -657,7 +616,7 @@ export function ProjectPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {(data.sessions ?? []).map((session) => (
+                        {data.sessions.map((session) => (
                           <tr key={session.ID}>
                             <td className="project-session-title-cell">
                               <Link
@@ -689,15 +648,11 @@ export function ProjectPage() {
                                   cacheRead={session.TotalCacheRead}
                                   cacheWrite={session.TotalCacheWrite}
                                   costUSD={session.TotalCostUSD}
-                                  costIncomplete={session.CostIncomplete}
                                 />
                               </HoverTip>
                             </td>
                             <td className="num">
-                              {formatCost(
-                                session.TotalCostUSD,
-                                session.CostIncomplete,
-                              )}
+                              {formatCost(session.TotalCostUSD)}
                             </td>
                             <td
                               className="muted"
@@ -707,7 +662,10 @@ export function ProjectPage() {
                             </td>
                             <td className="project-session-signals">
                               <SessionGrade grade={session.Grade} />
-                              <SessionOutcome outcome={session.Outcome} />
+                              <SessionOutcome
+                                outcome={session.Outcome}
+                                endedAt={session.EndedAt}
+                              />
                             </td>
                           </tr>
                         ))}
@@ -734,15 +692,11 @@ export function ProjectPage() {
                                   cacheRead={data.remainder.CacheRead}
                                   cacheWrite={data.remainder.CacheWrite}
                                   costUSD={data.remainder.CostUSD}
-                                  costIncomplete={data.remainder.CostIncomplete}
                                 />
                               </HoverTip>
                             </td>
                             <td className="num">
-                              {formatCost(
-                                data.remainder.CostUSD,
-                                data.remainder.CostIncomplete,
-                              )}
+                              {formatCost(data.remainder.CostUSD)}
                             </td>
                             <td></td>
                             <td className="project-session-signals"></td>

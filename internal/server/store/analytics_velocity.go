@@ -30,12 +30,6 @@ type VelocityStats struct {
 // a note rather than a row of dashes and zeros on a window with no timed turns.
 func (v VelocityStats) HasData() bool { return v.Turns > 0 || v.ActiveSeconds > 0 }
 
-// HasThroughput reports whether there was any active time to divide by, so the panel can
-// dash the per-minute rates rather than print a 0.0 that reads as a real measurement when
-// the denominator is undefined (a single-message scope, or one whose every gap exceeds the
-// idle cap).
-func (v VelocityStats) HasThroughput() bool { return v.ActiveSeconds > 0 }
-
 // activeGapSeconds is the idle threshold that separates "still working" from "walked
 // away": a gap between two consecutive messages counts toward active time only when it is
 // at most this long. A five-minute cap keeps a lunch break or an overnight pause out of

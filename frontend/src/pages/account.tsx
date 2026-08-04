@@ -11,6 +11,7 @@ import { AsyncView } from "../components/async-view";
 import { attempt, notify } from "../components/notices";
 import { formatTime } from "../format";
 import type {
+  AccountProject,
   AccountResponse,
   Connection,
   CreatedInviteResponse,
@@ -41,14 +42,18 @@ export function AccountPage() {
       <AsyncView state={state}>
         {(data) => (
           <div className="account-sections">
-            <TokenSection tokens={data.tokens ?? []} refresh={refresh} />
+            <TokenSection tokens={data.tokens} refresh={refresh} />
             <PublicationSection user={data.user} refresh={refresh} />
+            <ProjectPublicationSection
+              projects={data.projects}
+              refresh={refresh}
+            />
             <ConnectionSection
-              connections={data.connections ?? []}
+              connections={data.connections}
               refresh={refresh}
             />
             {data.user.is_admin ? (
-              <InviteSection invites={data.invites ?? []} refresh={refresh} />
+              <InviteSection invites={data.invites} refresh={refresh} />
             ) : null}
             {data.user.is_admin ? (
               <ReparseSection status={data.reparse} refresh={refresh} />
@@ -68,6 +73,9 @@ function TokenSection({
   refresh: () => void;
 }) {
   const [secret, setSecret] = useState("");
+  const [name, setName] = useState("");
+  const activeTokens = tokens.filter((token) => !token.RevokedAt);
+  const revokedTokens = tokens.filter((token) => token.RevokedAt);
   return (
     <section className="settings-section">
       <div className="settings-copy">
@@ -97,6 +105,7 @@ function TokenSection({
               );
               setSecret(result.token);
               form.reset();
+              setName("");
               notify("Token created", "ok");
               refresh();
             } catch (error) {
@@ -109,13 +118,19 @@ function TokenSection({
             }
           }}
         >
-          <input name="name" required placeholder="Token name" />
+          <input
+            name="name"
+            required
+            placeholder="Token name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
           <select name="scope" defaultValue="ingest">
             <option value="ingest">Ingest</option>
             <option value="read">Read</option>
             <option value="full">Full</option>
           </select>
-          <button className="button" type="submit">
+          <button className="button" type="submit" disabled={!name.trim()}>
             Create
           </button>
         </form>
@@ -134,44 +149,58 @@ function TokenSection({
           </div>
         ) : null}
         <div className="settings-list">
-          {tokens.map((token) => (
-            <div
-              className={
-                token.RevokedAt ? "settings-row revoked" : "settings-row"
-              }
-              key={token.ID}
-            >
+          {activeTokens.map((token) => (
+            <div className="settings-row" key={token.ID}>
               <div>
                 <strong>{token.Name}</strong>
                 <span>
                   {token.Scope} · created {formatTime(token.CreatedAt)}
                 </span>
               </div>
-              {token.RevokedAt ? (
-                <span className="tag">revoked</span>
-              ) : (
-                <button
-                  type="button"
-                  className="icon-link danger"
-                  aria-label={`Revoke ${token.Name}`}
-                  onClick={async () => {
-                    if (
-                      await attempt(
-                        request(`/api/v1/tokens/${token.ID}/revoke`, {
-                          method: "POST",
-                        }),
-                        "Token revoked",
-                      )
+              <button
+                type="button"
+                className="icon-link danger"
+                aria-label={`Revoke ${token.Name}`}
+                onClick={async () => {
+                  if (
+                    await attempt(
+                      request(`/api/v1/tokens/${token.ID}/revoke`, {
+                        method: "POST",
+                      }),
+                      "Token revoked",
                     )
-                      refresh();
-                  }}
-                >
-                  <TrashIcon />
-                </button>
-              )}
+                  )
+                    refresh();
+                }}
+              >
+                <TrashIcon />
+              </button>
             </div>
           ))}
         </div>
+        {revokedTokens.length > 0 ? (
+          <details className="token-revoked-fold">
+            <summary>
+              <span className="token-revoked-summary-label">
+                {revokedTokens.length} revoked
+              </span>
+              <span className="token-revoked-hint muted" aria-hidden="true" />
+            </summary>
+            <div className="settings-list">
+              {revokedTokens.map((token) => (
+                <div className="settings-row revoked" key={token.ID}>
+                  <div>
+                    <strong>{token.Name}</strong>
+                    <span>
+                      {token.Scope} · created {formatTime(token.CreatedAt)}
+                    </span>
+                  </div>
+                  <span className="tag">revoked</span>
+                </div>
+              ))}
+            </div>
+          </details>
+        ) : null}
       </div>
     </section>
   );
@@ -184,7 +213,6 @@ function PublicationSection({
   user: Viewer;
   refresh: () => void;
 }) {
-  const [copied, setCopied] = useState(false);
   const publicURL = absoluteURL(
     `/u/${encodeURIComponent(user.username ?? "")}`,
   );
@@ -198,34 +226,15 @@ function PublicationSection({
       </div>
       <div className="settings-control">
         <div className="settings-row">
-          <div>
+          <div className="publication-summary">
             <strong>{user.overview_public ? "Published" : "Private"}</strong>
             {user.overview_public ? (
-              <span className="share-link-row">
-                <a
-                  className="share-link"
-                  href={publicURL}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {publicURL}
-                </a>
-                <button
-                  type="button"
-                  className="icon-link"
-                  aria-label="Copy public link"
-                  title="Copy link"
-                  onClick={async () => {
-                    await navigator.clipboard.writeText(publicURL);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1200);
-                  }}
-                >
-                  {copied ? <CheckIcon /> : <CopyIcon />}
-                </button>
-              </span>
+              <PublicLink url={publicURL} copyLabel="Copy public link" />
             ) : (
-              <span>No public overview.</span>
+              <span>
+                Publishing shows total cost, tokens, and session counts to
+                anyone with the link.
+              </span>
             )}
           </div>
           <button
@@ -248,6 +257,149 @@ function PublicationSection({
           >
             {user.overview_public ? "Make private" : "Publish"}
           </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PublicLink({ url, copyLabel }: { url: string; copyLabel: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timeout = window.setTimeout(() => setCopied(false), 1200);
+    return () => window.clearTimeout(timeout);
+  }, [copied]);
+  return (
+    <span className="share-link-row">
+      <a className="share-link" href={url} target="_blank" rel="noreferrer">
+        {url}
+      </a>
+      <button
+        type="button"
+        className="icon-link"
+        aria-label={copyLabel}
+        title="Copy link"
+        onClick={async () => {
+          await navigator.clipboard.writeText(url);
+          setCopied(true);
+        }}
+      >
+        {copied ? <CheckIcon /> : <CopyIcon />}
+      </button>
+    </span>
+  );
+}
+
+function ProjectPublicationSection({
+  projects,
+  refresh,
+}: {
+  projects: AccountProject[];
+  refresh: () => void;
+}) {
+  const [selectedProjectID, setSelectedProjectID] = useState("");
+  const unpublishedProjects = projects.filter((project) => !project.published);
+  const publishedProjects = projects.filter((project) => project.published);
+  return (
+    <section className="settings-section">
+      <div className="settings-copy">
+        <h2>Public project overviews</h2>
+        <p>
+          Publish aggregate usage for repository projects. Session content stays
+          private.
+        </p>
+      </div>
+      <div className="settings-control">
+        <form
+          className="inline-form project-publication-form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            const project = unpublishedProjects.find(
+              (candidate) => String(candidate.id) === selectedProjectID,
+            );
+            if (!project) return;
+            if (
+              await attempt(
+                request(`/api/v1/app/projects/${project.id}/publication`, {
+                  method: "PUT",
+                  body: JSON.stringify({ published: true }),
+                }),
+                "Project overview published",
+              )
+            ) {
+              setSelectedProjectID("");
+              refresh();
+            }
+          }}
+        >
+          <select
+            aria-label="Project to publish"
+            value={selectedProjectID}
+            disabled={unpublishedProjects.length === 0}
+            onChange={(event) => setSelectedProjectID(event.target.value)}
+          >
+            <option value="">
+              {unpublishedProjects.length === 0
+                ? "No private projects available"
+                : "Select a project"}
+            </option>
+            {unpublishedProjects.map((project) => (
+              <option key={project.id} value={String(project.id)}>
+                {project.name === project.remote_key
+                  ? project.name
+                  : `${project.name} - ${project.remote_key}`}
+              </option>
+            ))}
+          </select>
+          <button
+            className="button secondary"
+            type="submit"
+            disabled={!selectedProjectID}
+          >
+            Publish
+          </button>
+        </form>
+        <div className="settings-list project-publication-list">
+          {publishedProjects.length === 0 ? (
+            <p className="empty-inline">No public project overviews.</p>
+          ) : (
+            publishedProjects.map((project) => {
+              const publicURL = absoluteURL(`/p/${project.id}`);
+              return (
+                <div className="settings-row" key={project.id}>
+                  <div className="publication-summary">
+                    <strong>{project.name}</strong>
+                    <PublicLink
+                      url={publicURL}
+                      copyLabel={`Copy public link for ${project.name}`}
+                    />
+                  </div>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    onClick={async () => {
+                      if (
+                        await attempt(
+                          request(
+                            `/api/v1/app/projects/${project.id}/publication`,
+                            {
+                              method: "PUT",
+                              body: JSON.stringify({ published: false }),
+                            },
+                          ),
+                          "Project overview made private",
+                        )
+                      )
+                        refresh();
+                    }}
+                  >
+                    Make private
+                  </button>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </section>

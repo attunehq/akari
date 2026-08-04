@@ -1,8 +1,9 @@
 // Package pricing computes session cost from a model rate table compiled into
 // the binary. There is no runtime catalog or refresh: updating rates means a new
 // build. Rates are a snapshot in USD per one million tokens and are intentionally
-// approximate; an unknown model yields known=false so callers can mark a cost as
-// partial rather than reporting a misleading zero.
+// approximate. An unknown model has a zero rate: every dollar figure in Akari is
+// already a best-effort estimate, and zero is the single representation for a
+// price the table does not know.
 //
 // A model's price carries a time dimension: each model maps to a list of
 // date-effective rates, and a lookup selects the entry in effect at the usage
@@ -60,8 +61,8 @@ var sonnet5Sticker = time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 //
 // A prefix that looked uniform today would silently misprice the next version that
 // repriced. With exact matching that whole bug class is impossible: a model we have not
-// listed (a new minor, a new variant) falls through to known=false and is reported as
-// an incomplete cost rather than a wrong number.
+// listed (a new minor, a new variant) prices at zero rather than inheriting a
+// potentially wrong family rate.
 //
 // Keys are the canonical, dateless IDs. Lookup strips a trailing release-date
 // snapshot before matching (see datedSnapshot), so both the alias
@@ -82,8 +83,10 @@ var table = map[string][]DatedRate{
 	"claude-mythos-5":       flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1.00}),
 	"claude-mythos-preview": flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1.00}),
 
-	// Opus: 4.0/4.1 at $15/$75, 4.5 onward at $5/$25. "claude-opus-4" is Opus
-	// 4.0's dateless ID (claude-opus-4-20250514 normalizes to it).
+	// Opus: 4.0/4.1 at $15/$75, 4.5 onward at $5/$25, which Opus 5 holds (it is a
+	// drop-in upgrade at Opus 4.8's rate). "claude-opus-4" is Opus 4.0's dateless
+	// ID (claude-opus-4-20250514 normalizes to it); "claude-opus-5" carries no date
+	// snapshot at all.
 	"claude-opus-4":   flat(Rate{Input: 15, Output: 75, CacheWrite: 18.75, CacheRead: 1.50}),
 	"claude-opus-4-0": flat(Rate{Input: 15, Output: 75, CacheWrite: 18.75, CacheRead: 1.50}),
 	"claude-opus-4-1": flat(Rate{Input: 15, Output: 75, CacheWrite: 18.75, CacheRead: 1.50}),
@@ -91,6 +94,7 @@ var table = map[string][]DatedRate{
 	"claude-opus-4-6": flat(Rate{Input: 5, Output: 25, CacheWrite: 6.25, CacheRead: 0.50}),
 	"claude-opus-4-7": flat(Rate{Input: 5, Output: 25, CacheWrite: 6.25, CacheRead: 0.50}),
 	"claude-opus-4-8": flat(Rate{Input: 5, Output: 25, CacheWrite: 6.25, CacheRead: 0.50}),
+	"claude-opus-5":   flat(Rate{Input: 5, Output: 25, CacheWrite: 6.25, CacheRead: 0.50}),
 
 	// Sonnet: $3/$15 from 3.5 through 5, except Sonnet 5's launch promo. Sonnet 5
 	// launched at an introductory $2/$10 per MTok through 2026-08-31 and reverts to
@@ -127,28 +131,23 @@ var table = map[string][]DatedRate{
 	// GPT-5.6 is the first OpenAI family to BILL cache writes (creation tokens at
 	// 1.25x input; the $6.25/$3.125/$1.25 column on the pricing page), a real break
 	// from the free-write convention every older OpenAI model follows (see below).
-	// CacheWrite still stays zero here, but for a different reason than the older
-	// models: not because writes are free, but because Codex does not yet persist the
-	// write count. Its rollout carries only input_tokens and cached_input_tokens, so
-	// akari has no cache-write volume to multiply. Setting a nonzero rate now would be
-	// inert (times zero) and would misrepresent the table as complete. This under-bills
-	// the write premium (0.25x input on written tokens only, always an undercount) until
-	// Codex emits the count and the parser reads it. Tracked in issue #126, which also
-	// records the input = total - cached - cacheWrite subtraction the parser fix needs.
-	"gpt-5.6":       flat(Rate{Input: 5, Output: 30, CacheRead: 0.50}),
-	"gpt-5.6-sol":   flat(Rate{Input: 5, Output: 30, CacheRead: 0.50}),
-	"gpt-5.6-terra": flat(Rate{Input: 2.50, Output: 15, CacheRead: 0.25}),
-	"gpt-5.6-luna":  flat(Rate{Input: 1, Output: 6, CacheRead: 0.10}),
+	// The Codex reducer reads token_count's cache_write_input_tokens (zero on every
+	// rollout observed so far, but live in the schema) and subtracts it from the
+	// combined input alongside the cached reads, so the write premium prices
+	// correctly the moment Codex reports a nonzero count (issue #126).
+	"gpt-5.6":       flat(Rate{Input: 5, Output: 30, CacheWrite: 6.25, CacheRead: 0.50}),
+	"gpt-5.6-sol":   flat(Rate{Input: 5, Output: 30, CacheWrite: 6.25, CacheRead: 0.50}),
+	"gpt-5.6-terra": flat(Rate{Input: 2.50, Output: 15, CacheWrite: 3.125, CacheRead: 0.25}),
+	"gpt-5.6-luna":  flat(Rate{Input: 1, Output: 6, CacheWrite: 1.25, CacheRead: 0.10}),
 	//
-	// CacheWrite is deliberately left unset (zero) for every OpenAI model, and that
-	// is not a missing rate: OpenAI does not bill cache creation as its own line.
-	// Caching there is automatic and free to write, so a token newly cached is
-	// charged once at the standard input rate, and only re-reads of it are
-	// discounted (CacheRead). The Codex parser reflects this by reporting the whole
-	// uncached remainder (total prompt minus cached) as Input and only the cached
-	// hits as CacheRead, so those cache-write tokens are already priced at Input.
-	// Adding a nonzero CacheWrite here would double-count them: OpenAI never reports
-	// a separate cache-write count for it to multiply, so it must stay zero.
+	// CacheWrite is deliberately left unset (zero) for every OpenAI model before
+	// GPT-5.6, and that is not a missing rate: those models do not bill cache
+	// creation as its own line. Caching there is automatic and free to write, so a
+	// token newly cached is charged once at the standard input rate, and only
+	// re-reads of it are discounted (CacheRead). The Codex parser reports the
+	// uncached, unwritten remainder as Input and the cached hits as CacheRead, and
+	// these models report no cache-write count, so their write tokens stay priced
+	// at Input. Adding a nonzero CacheWrite here would misstate their pricing.
 	//
 	// The -pro tiers carry no CacheRead on purpose: OpenAI disables prompt-cache
 	// retention for them, so a repeated prefix is re-billed at full input ($30/M)
@@ -218,37 +217,24 @@ func RateAt(model string, at time.Time) (Rate, bool) {
 	return rateAt(rates, at), true
 }
 
-// Known reports whether a model is priced at all, independent of any date. A model's
-// windows all share one ID, so its presence in the table does not depend on when it ran;
-// a by-model view that only needs to fold unpriced models into an "Other" bucket asks
-// this rather than picking an arbitrary window's rate.
-func Known(model string) bool {
-	m := normalize(model)
-	if m == "" {
-		return false
-	}
-	_, ok := table[m]
-	return ok
-}
-
-// Cost returns the USD cost for a token count under a model at the time the usage
-// occurred, and whether the model was priced. Token counts are in tokens (not millions).
-// The time selects the date-effective rate window.
-func Cost(model string, at time.Time, input, output, cacheWrite, cacheRead int) (float64, bool) {
+// Cost returns the estimated USD cost for a token count under a model at the time
+// the usage occurred. Token counts are in tokens (not millions). An unknown model
+// returns zero. The time selects the date-effective rate window.
+func Cost(model string, at time.Time, input, output, cacheWrite, cacheRead int) float64 {
 	r, ok := RateAt(model, at)
 	if !ok {
-		return 0, false
+		return 0
 	}
 	const million = 1_000_000.0
 	cost := float64(input)/million*r.Input +
 		float64(output)/million*r.Output +
 		float64(cacheWrite)/million*r.CacheWrite +
 		float64(cacheRead)/million*r.CacheRead
-	return cost, true
+	return cost
 }
 
 // CacheSavings returns the USD that prompt caching saved versus paying the full
-// uncached input rate for the same prompt tokens, and whether the model was priced.
+// uncached input rate for the same prompt tokens. An unknown model returns zero.
 // The time selects the date-effective rate window, so cached volume prices at the rate
 // in effect when it was spent.
 //
@@ -271,13 +257,13 @@ func Cost(model string, at time.Time, input, output, cacheWrite, cacheRead int) 
 // that rolls many events into one figure must bucket them so every event in a bucket
 // falls in one rate window (see store/analytics_cache.go), since a single time picks a
 // single window for the whole sum.
-func CacheSavings(model string, at time.Time, cacheRead, cacheWrite int64) (float64, bool) {
+func CacheSavings(model string, at time.Time, cacheRead, cacheWrite int64) float64 {
 	r, ok := RateAt(model, at)
 	if !ok {
-		return 0, false
+		return 0
 	}
 	const million = 1_000_000.0
 	saving := float64(cacheRead)/million*(r.Input-r.CacheRead) +
 		float64(cacheWrite)/million*(r.Input-r.CacheWrite)
-	return saving, true
+	return saving
 }

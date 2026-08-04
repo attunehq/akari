@@ -7,6 +7,7 @@ import (
 	"github.com/jssblck/akari/internal/config"
 	"github.com/jssblck/akari/internal/server/parse"
 	"github.com/jssblck/akari/internal/server/store"
+	"github.com/jssblck/akari/migrations"
 )
 
 // runSettle grades every settled-but-ungraded session once, then exits. The
@@ -26,7 +27,7 @@ func runSettle(args []string) error {
 	}
 	defer st.Close()
 
-	if err := migrateStore(ctx, st); err != nil {
+	if err := st.Migrate(ctx, migrations.FS); err != nil {
 		return err
 	}
 	// The grading guard keys on the running epoch (RefreshSessionSignals skips

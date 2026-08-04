@@ -195,81 +195,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/app/guide/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Read the user guide index */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Guide chapter and chapter index */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["GuideResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/app/guide/{slug}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Read a user guide chapter */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    slug: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Guide chapter and chapter index */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["GuideResponse"];
-                    };
-                };
-                404: components["responses"]["NotFound"];
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/app/insights": {
         parameters: {
             query?: never;
@@ -842,6 +767,49 @@ export interface paths {
                 404: components["responses"]["NotFound"];
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/app/sessions/{id}/append": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a session's turns past a rendered ordinal */
+        get: {
+            parameters: {
+                query: {
+                    after: number;
+                };
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Session snapshot fragment */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SessionResponse"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                404: components["responses"]["NotFound"];
+                503: components["responses"]["ProjectionRebuilding"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1579,49 +1547,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/app/sessions/{id}/append": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Read a session's turns past a rendered ordinal */
-        get: {
-            parameters: {
-                query: {
-                    after: number;
-                };
-                header?: never;
-                path: {
-                    id: number;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Session snapshot fragment */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["SessionResponse"];
-                    };
-                };
-                400: components["responses"]["BadRequest"];
-                404: components["responses"]["NotFound"];
-                503: components["responses"]["ProjectionRebuilding"];
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1637,11 +1562,19 @@ export interface components {
             RedeemedAt: string | null;
             RedeemedBy: string | null;
         };
+        AccountProject: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            published: boolean;
+            remote_key: string;
+        };
         AccountResponse: {
-            connections: components["schemas"]["OAuthGrant"][] | null;
-            invites: components["schemas"]["AccountInvite"][] | null;
+            connections: components["schemas"]["OAuthGrant"][];
+            invites: components["schemas"]["AccountInvite"][];
+            projects: components["schemas"]["AccountProject"][];
             reparse: components["schemas"]["Status"];
-            tokens: components["schemas"]["AccountToken"][] | null;
+            tokens: components["schemas"]["AccountToken"][];
             user: components["schemas"]["Viewer"];
         };
         AccountToken: {
@@ -1655,11 +1588,10 @@ export interface components {
             Scope: string;
         };
         Analytics: {
-            Agents: components["schemas"]["Breakdown"][] | null;
+            Agents: components["schemas"]["Breakdown"][];
             Cache: components["schemas"]["CacheStats"];
-            CostIncomplete: boolean;
-            Models: components["schemas"]["Breakdown"][] | null;
-            Series: components["schemas"]["DayPoint"][] | null;
+            Models: components["schemas"]["Breakdown"][];
+            Series: components["schemas"]["DayPoint"][];
             /** Format: int64 */
             Sessions: number;
             /** Format: int64 */
@@ -1673,22 +1605,22 @@ export interface components {
             TotalOut: number;
             /** Format: int64 */
             TotalReasoning: number;
-            Users: components["schemas"]["Breakdown"][] | null;
+            Users: components["schemas"]["Breakdown"][];
         };
         AnnounceSession: {
             /** @enum {string} */
             agent: "claude" | "codex" | "pi";
-            source_session_id: string;
+            cwd?: string;
+            git_branch?: string;
             /**
              * @default remote
              * @enum {string}
              */
             kind: "remote" | "standalone" | "orphaned";
-            project_remote?: string;
             local_root?: string;
-            git_branch?: string;
-            cwd?: string;
             machine?: string;
+            project_remote?: string;
+            source_session_id: string;
             /** @default false */
             terminal: boolean;
         };
@@ -1706,7 +1638,6 @@ export interface components {
             CacheRead: number;
             /** Format: int64 */
             CacheWrite: number;
-            CostIncomplete: boolean;
             CostUSD: number;
             /** Format: int64 */
             Input: number;
@@ -1727,15 +1658,7 @@ export interface components {
             Input: number;
             /** Format: int64 */
             Output: number;
-            SavingsIncomplete: boolean;
             SavingsUSD: number;
-        };
-        Chapter: {
-            /** Format: int64 */
-            Order: number;
-            Slug: string;
-            Summary: string;
-            Title: string;
         };
         ChurnFile: {
             /** Format: int64 */
@@ -1759,15 +1682,15 @@ export interface components {
         ChurnTrend: {
             /** Format: int64 */
             Clipped: number;
-            Files: number[] | null;
+            Files: number[];
             /** Format: int64 */
             Projects: number;
-            ReEdits: number[] | null;
+            ReEdits: number[];
             /** Format: int64 */
             TotalHotFiles: number;
             /** Format: int64 */
             TotalReEdits: number;
-            Tree: components["schemas"]["ChurnNode"][] | null;
+            Tree: components["schemas"]["ChurnNode"][];
         };
         ConcurrencyStats: {
             AvgConcurrent: number;
@@ -1809,8 +1732,8 @@ export interface components {
             Tokens: number;
         };
         CreateInvite: {
-            note?: string;
             expires_hours?: number;
+            note?: string;
         };
         CreateToken: {
             name: string;
@@ -1859,24 +1782,21 @@ export interface components {
             project_id: number;
         };
         Economics: {
-            AbandonedIncomplete: boolean;
             AbandonedSharePct: number;
-            CacheHitRate: number[] | null;
+            CacheHitRate: number[];
             CacheHitRateLatest: number;
-            CacheMeasured: boolean[] | null;
-            CacheSavings: number[] | null;
-            CacheSavingsIncomplete: boolean;
-            CostAbandoned: number[] | null;
-            CostCompleted: number[] | null;
-            CostIncomplete: boolean;
-            CostOther: number[] | null;
+            CacheMeasured: boolean[];
+            CacheSavings: number[];
+            CostAbandoned: number[];
+            CostCompleted: number[];
+            CostOther: number[];
             TotalAbandoned: number;
             TotalCacheSavings: number;
             TotalSpend: number;
         };
         Error: {
-            error: string;
             code?: string;
+            error: string;
         };
         FacetCount: {
             /** Format: int64 */
@@ -1884,23 +1804,22 @@ export interface components {
             Value: string;
         };
         FacetValues: {
-            Agents: string[] | null;
-            Machines: string[] | null;
-            Users: string[] | null;
+            Agents: string[];
+            Machines: string[];
+            Users: string[];
         };
         FileChurn: {
             /** Format: int64 */
             Clipped: number;
-            Files: components["schemas"]["ChurnFile"][] | null;
+            Files: components["schemas"]["ChurnFile"][];
         };
         FleetMix: {
-            Models: components["schemas"]["ModelSeries"][] | null;
+            Models: components["schemas"]["ModelSeries"][];
             /** Format: int64 */
             NewestFirst: number;
             NewestModel: string;
         };
         Gallery: {
-            CostIncomplete: boolean;
             LongestCostUSD: number;
             LongestDurationS: number;
             MedianCompletedCostUSD: number;
@@ -1908,42 +1827,25 @@ export interface components {
             MedianDurationS: number;
             PriciestCostUSD: number;
             PriciestDurationS: number;
-            Rows: components["schemas"]["GallerySession"][] | null;
+            Rows: components["schemas"]["GallerySession"][];
             /** Format: int64 */
             Total: number;
         };
         GallerySession: {
             Archetype: string;
-            CostIncomplete: boolean;
             CostUSD: number;
             DurationS: number;
             Grade: string;
             Outcome: string;
         };
         GlobalFacetValues: {
-            Agents: components["schemas"]["FacetCount"][] | null;
-            Machines: components["schemas"]["FacetCount"][] | null;
-            Projects: components["schemas"]["ProjectFacet"][] | null;
-            Users: components["schemas"]["FacetCount"][] | null;
-        };
-        GuideResponse: {
-            chapters: components["schemas"]["Chapter"][] | null;
-            github_url: string;
-            headings: components["schemas"]["Heading"][] | null;
-            raw_markdown: string;
-            raw_path: string;
-            slug: string;
-            summary: string;
-            title: string;
-        };
-        Heading: {
-            ID: string;
-            /** Format: int64 */
-            Level: number;
-            Text: string;
+            Agents: components["schemas"]["FacetCount"][];
+            Machines: components["schemas"]["FacetCount"][];
+            Projects: components["schemas"]["ProjectFacet"][];
+            Users: components["schemas"]["FacetCount"][];
         };
         Insights: {
-            Archetypes: components["schemas"]["LabeledCount"][] | null;
+            Archetypes: components["schemas"]["LabeledCount"][];
             Churn: components["schemas"]["FileChurn"];
             Concurrency: components["schemas"]["ConcurrencyStats"];
             Context: components["schemas"]["ContextHealthStats"];
@@ -1958,7 +1860,7 @@ export interface components {
             generated_at: string;
             insights: components["schemas"]["Insights"];
             range: string;
-            ranges: components["schemas"]["DateRange"][] | null;
+            ranges: components["schemas"]["DateRange"][];
         };
         LabeledCount: {
             /** Format: int64 */
@@ -1966,9 +1868,9 @@ export interface components {
             Key: string;
         };
         Login: {
-            username: string;
             /** Format: password */
             password: string;
+            username: string;
         };
         LoginResponse: {
             is_admin: boolean;
@@ -2012,7 +1914,7 @@ export interface components {
             /** Format: int64 */
             First: number;
             Model: string;
-            Share: number[] | null;
+            Share: number[];
             WindowShare: number;
         };
         OAuthConsentResponse: {
@@ -2038,9 +1940,9 @@ export interface components {
         OverviewResponse: {
             analytics: components["schemas"]["Analytics"];
             range: string;
-            ranges: components["schemas"]["DateRange"][] | null;
-            selected_user_ids: number[] | null;
-            users: components["schemas"]["OverviewUser"][] | null;
+            ranges: components["schemas"]["DateRange"][];
+            selected_user_ids: number[];
+            users: components["schemas"]["OverviewUser"][];
         };
         OverviewUser: {
             /** Format: int64 */
@@ -2064,37 +1966,12 @@ export interface components {
             insights: components["schemas"]["Insights"];
             project: components["schemas"]["ProjectSummary"];
             range: string;
-            ranges: components["schemas"]["DateRange"][] | null;
+            ranges: components["schemas"]["DateRange"][];
             remainder: components["schemas"]["SessionRemainder"];
-            sessions: components["schemas"]["ProjectSessionSummary"][] | null;
-        };
-        ProjectSummary: {
-            CostIncomplete: boolean;
-            DisplayName: string;
-            Host: string;
-            /** Format: int64 */
-            ID: number;
-            Kind: string;
-            LastActivity: string | null;
-            OverviewPublic: boolean;
-            Owner: string;
-            RemoteKey: string;
-            Repo: string;
-            /** Format: int64 */
-            SessionCount: number;
-            /** Format: int64 */
-            TotalCacheRead: number;
-            /** Format: int64 */
-            TotalCacheWrite: number;
-            TotalCostUSD: number;
-            /** Format: int64 */
-            TotalInput: number;
-            /** Format: int64 */
-            TotalOutput: number;
+            sessions: components["schemas"]["ProjectSessionSummary"][];
         };
         ProjectSessionSummary: {
             Agent: string;
-            CostIncomplete: boolean;
             EndedAt: string | null;
             GitBranch: string;
             Grade: string | null;
@@ -2124,11 +2001,41 @@ export interface components {
             Username: string;
             Visibility: string;
         };
+        ProjectSummary: {
+            DisplayName: string;
+            Host: string;
+            /** Format: int64 */
+            ID: number;
+            Kind: string;
+            LastActivity: string | null;
+            OverviewPublic: boolean;
+            Owner: string;
+            RemoteKey: string;
+            Repo: string;
+            /** Format: int64 */
+            SessionCount: number;
+            /** Format: int64 */
+            TotalCacheRead: number;
+            /** Format: int64 */
+            TotalCacheWrite: number;
+            TotalCostUSD: number;
+            /** Format: int64 */
+            TotalInput: number;
+            /** Format: int64 */
+            TotalOutput: number;
+        };
+        ProjectionRebuild: {
+            /** @constant */
+            code: "projection_rebuild";
+            /** @constant */
+            error: "projection rebuild in progress";
+            reparse: components["schemas"]["ReparseStatusResponse"];
+        };
         ProjectsResponse: {
-            projects: components["schemas"]["ProjectSummary"][] | null;
+            projects: components["schemas"]["ProjectSummary"][];
             sparklines: {
-                [key: string]: number[] | null;
-            } | null;
+                [key: string]: number[];
+            };
         };
         PromptHygiene: {
             /** Format: int64 */
@@ -2147,7 +2054,7 @@ export interface components {
         PublicOverviewResponse: {
             analytics: components["schemas"]["Analytics"];
             range: string;
-            ranges: components["schemas"]["DateRange"][] | null;
+            ranges: components["schemas"]["DateRange"][];
             username: string;
         };
         PublicProjectResponse: {
@@ -2155,18 +2062,16 @@ export interface components {
             insights: components["schemas"]["Insights"];
             project: components["schemas"]["ProjectSummary"];
             range: string;
-            ranges: components["schemas"]["DateRange"][] | null;
+            ranges: components["schemas"]["DateRange"][];
         };
         PublicSessionResponse: {
             snapshot: components["schemas"]["PublicSessionSnapshot"];
         };
         PublicSessionSnapshot: {
             Audit: components["schemas"]["SessionAudit"];
-            Outline: components["schemas"]["Message"][] | null;
             Page: components["schemas"]["TranscriptPage"];
             /** Format: int64 */
             ProjectionRevision: number;
-            Tools: components["schemas"]["ToolCallView"][] | null;
         };
         Publication: {
             published: boolean;
@@ -2177,16 +2082,16 @@ export interface components {
         QualityDistribution: {
             /** Format: int64 */
             Graded: number;
-            Grades: components["schemas"]["LabeledCount"][] | null;
-            Outcomes: components["schemas"]["LabeledCount"][] | null;
+            Grades: components["schemas"]["LabeledCount"][];
+            Outcomes: components["schemas"]["LabeledCount"][];
             /** Format: int64 */
             Sessions: number;
         };
         Register: {
-            username: string;
+            invite_token?: string;
             /** Format: password */
             password: string;
-            invite_token?: string;
+            username: string;
         };
         RegisteredUserResponse: {
             /** Format: int64 */
@@ -2209,7 +2114,7 @@ export interface components {
             revoked: boolean;
         };
         RhythmGrid: {
-            Cells: (number[] | null)[] | null;
+            Cells: number[][];
         };
         SearchSnippet: {
             /** Format: int64 */
@@ -2220,14 +2125,12 @@ export interface components {
         };
         SessionAudit: {
             Detail: components["schemas"]["SessionDetail"];
-            Fallbacks: components["schemas"]["ModelFallback"][] | null;
+            Fallbacks: components["schemas"]["ModelFallback"][];
             Signals: components["schemas"]["SessionSignals"];
-            Subagents: components["schemas"]["SubagentRow"][] | null;
+            Subagents: components["schemas"]["SubagentRow"][];
         };
         SessionDetail: {
             Agent: string;
-            CacheSavingsIncomplete: boolean;
-            CostIncomplete: boolean;
             Cwd: string;
             EndedAt: string | null;
             GitBranch: string;
@@ -2241,14 +2144,22 @@ export interface components {
             ModelFallbackCount: number;
             /** Format: int64 */
             OwnerID: number;
+            /** Format: int64 */
+            PRNumber: number;
+            PRRepo: string;
+            PRURL: string;
             ParentID: number | null;
+            PermissionMode: string;
             /** Format: int64 */
             ProjectID: number;
             ProjectKey: string;
             ProjectKind: string;
             ProjectName: string;
             PublicID: string | null;
+            ReasoningEffort: string;
+            Slug: string;
             StartedAt: string | null;
+            SubagentName: string;
             Title: string;
             /** Format: int64 */
             TotalCacheRead: number;
@@ -2264,6 +2175,15 @@ export interface components {
             UserMessageCount: number;
             Username: string;
             Visibility: string;
+        };
+        SessionEvent: {
+            Attrs: {
+                [key: string]: unknown;
+            };
+            Kind: string;
+            MessageOrdinal: number | null;
+            /** Format: date-time */
+            OccurredAt: string;
         };
         SessionFilter: {
             /** Format: int64 */
@@ -2299,7 +2219,6 @@ export interface components {
             CacheRead: number;
             /** Format: int64 */
             CacheWrite: number;
-            CostIncomplete: boolean;
             CostUSD: number;
             /** Format: int64 */
             Input: number;
@@ -2315,7 +2234,6 @@ export interface components {
         };
         SessionRow: {
             Agent: string;
-            CostIncomplete: boolean;
             EndedAt: string | null;
             GitBranch: string;
             Grade: string | null;
@@ -2352,6 +2270,12 @@ export interface components {
             Username: string;
             Visibility: string;
         };
+        SessionShape: {
+            /** Format: int64 */
+            DupIDs: number;
+            Outline: components["schemas"]["Message"][];
+            Tools: components["schemas"]["ToolCallView"][];
+        };
         SessionSignals: {
             AssistantTurns: number | null;
             ContextResetCount: number | null;
@@ -2387,15 +2311,11 @@ export interface components {
         };
         SessionSnapshot: {
             Audit: components["schemas"]["SessionAudit"];
-            /** Format: int64 */
-            DupIDs: number;
-            Outline: components["schemas"]["Message"][] | null;
             Page: components["schemas"]["TranscriptPage"];
-            Tools: components["schemas"]["ToolCallView"][] | null;
+            Shape: components["schemas"]["SessionShape"] | null;
         };
         SessionSummary: {
             Agent: string;
-            CostIncomplete: boolean;
             EndedAt: string | null;
             GitBranch: string;
             /** Format: int64 */
@@ -2427,28 +2347,28 @@ export interface components {
             facets: components["schemas"]["GlobalFacetValues"];
             filter: components["schemas"]["SessionFilter"];
             has_more: boolean;
-            sessions: components["schemas"]["SessionRow"][] | null;
+            sessions: components["schemas"]["SessionRow"][];
         };
         SignalTrends: {
-            AbandonedCount: number[] | null;
-            AbandonedRate: number[] | null;
-            ArchetypeShare: ({
+            AbandonedCount: number[];
+            AbandonedRate: number[];
+            ArchetypeShare: {
                 [key: string]: number;
-            } | null)[] | null;
-            CompletedCount: number[] | null;
-            CompletedRate: number[] | null;
-            ContextHistogram: components["schemas"]["ContextBucket"][] | null;
-            ContextMarkers: components["schemas"]["ContextMarker"][] | null;
-            ContextResets: number[] | null;
-            GPA: number[] | null;
-            GradeShare: ({
+            }[];
+            CompletedCount: number[];
+            CompletedRate: number[];
+            ContextHistogram: components["schemas"]["ContextBucket"][];
+            ContextMarkers: components["schemas"]["ContextMarker"][];
+            ContextResets: number[];
+            GPA: number[];
+            GradeShare: {
                 [key: string]: number;
-            } | null)[] | null;
-            HygieneNoCode: number[] | null;
-            HygieneRepeated: number[] | null;
-            HygieneTerse: number[] | null;
-            HygieneUnstructured: number[] | null;
-            OutcomeTotal: number[] | null;
+            }[];
+            HygieneNoCode: number[];
+            HygieneRepeated: number[];
+            HygieneTerse: number[];
+            HygieneUnstructured: number[];
+            OutcomeTotal: number[];
         };
         Status: {
             /** Format: int64 */
@@ -2466,7 +2386,6 @@ export interface components {
         };
         SubagentRow: {
             Agent: string;
-            CostIncomplete: boolean;
             EndedAt: string | null;
             GitBranch: string;
             Grade: string | null;
@@ -2481,6 +2400,7 @@ export interface components {
             Outcome: string;
             PublicID: string | null;
             StartedAt: string | null;
+            SubagentName: string;
             Title: string;
             /** Format: int64 */
             TotalCacheRead: number;
@@ -2497,16 +2417,15 @@ export interface components {
             Visibility: string;
         };
         SubagentStats: {
-            CostShare: number[] | null;
-            CostShareIncomplete: boolean;
+            CostShare: number[];
             CostThroughSubagentsPct: number;
             /** Format: int64 */
             DeepestTree: number;
-            DelegateShare: number[] | null;
-            FanoutOrder: string[] | null;
-            FanoutRows: ({
+            DelegateShare: number[];
+            FanoutOrder: string[];
+            FanoutRows: {
                 [key: string]: number;
-            } | null)[] | null;
+            }[];
             SessionsThatDelegatePct: number;
             /** Format: int64 */
             SubagentSessionsInWindow: number;
@@ -2522,9 +2441,12 @@ export interface components {
             scope: string;
         };
         TokensResponse: {
-            tokens: components["schemas"]["TokenListItem"][] | null;
+            tokens: components["schemas"]["TokenListItem"][];
         };
         ToolCallView: {
+            AttributionAgent: string;
+            AttributionPlugin: string;
+            AttributionSkill: string;
             /** Format: int64 */
             CallIndex: number;
             Category: string;
@@ -2542,11 +2464,15 @@ export interface components {
             ResultMediaType: string;
             ResultSHA: string;
             ResultStatus: string;
+            /** Format: int64 */
+            StructBytes: number;
+            StructMediaType: string;
+            StructSHA256: string;
             ToolName: string;
         };
         ToolFailSeries: {
             Name: string;
-            Rate: number[] | null;
+            Rate: number[];
         };
         ToolPoint: {
             /** Format: int64 */
@@ -2568,7 +2494,7 @@ export interface components {
         ToolStats: {
             /** Format: int64 */
             Clipped: number;
-            Tools: components["schemas"]["ToolStat"][] | null;
+            Tools: components["schemas"]["ToolStat"][];
             /** Format: int64 */
             TotalCalls: number;
             /** Format: int64 */
@@ -2577,41 +2503,41 @@ export interface components {
             Turns: number;
         };
         ToolTrends: {
-            FailFleet: number[] | null;
-            FailWorst: components["schemas"]["ToolFailSeries"][] | null;
-            Mix: ({
+            FailFleet: number[];
+            FailWorst: components["schemas"]["ToolFailSeries"][];
+            Mix: {
                 [key: string]: number;
-            } | null)[] | null;
-            MixOrder: string[] | null;
-            Reliability: components["schemas"]["ToolPoint"][] | null;
+            }[];
+            MixOrder: string[];
+            Reliability: components["schemas"]["ToolPoint"][];
         };
         TranscriptPage: {
-            Attachments: components["schemas"]["AttachmentView"][] | null;
+            Attachments: components["schemas"]["AttachmentView"][];
             /** Format: int64 */
             EarlierCount: number;
-            Fallbacks: components["schemas"]["ModelFallback"][] | null;
+            Events: components["schemas"]["SessionEvent"][];
+            Fallbacks: components["schemas"]["ModelFallback"][];
             HasEarlier: boolean;
             More: boolean;
-            Msgs: components["schemas"]["Message"][] | null;
-            Seed: components["schemas"]["Message"][] | null;
-            Tools: components["schemas"]["ToolCallView"][] | null;
+            Msgs: components["schemas"]["Message"][];
+            Seed: components["schemas"]["Message"][];
+            Tools: components["schemas"]["ToolCallView"][];
         };
         TranscriptResponse: {
             page: components["schemas"]["TranscriptPage"];
         };
         TreeRollup: {
-            CostIncomplete: boolean;
             CostUSD: number;
             /** Format: int64 */
             SubagentCount: number;
         };
         Trends: {
-            BucketStarts: string[] | null;
+            BucketStarts: string[];
             Churn: components["schemas"]["ChurnTrend"];
             Economics: components["schemas"]["Economics"];
             FleetMix: components["schemas"]["FleetMix"];
             Gallery: components["schemas"]["Gallery"];
-            Labels: string[] | null;
+            Labels: string[];
             Rhythm: components["schemas"]["RhythmGrid"];
             Signals: components["schemas"]["SignalTrends"];
             Subagents: components["schemas"]["SubagentStats"];
@@ -2626,8 +2552,7 @@ export interface components {
             CacheWrite: number;
             /** Format: int64 */
             ContextTokens: number;
-            CostIncomplete: boolean;
-            CostUSD: number | null;
+            CostUSD: number;
             /** Format: int64 */
             Input: number;
             /** Format: int64 */
@@ -2651,30 +2576,23 @@ export interface components {
             Turns: number;
         };
         VelocityTrends: {
-            ActiveHours: number[] | null;
-            MsgsPerMin: number[] | null;
-            ResponseP50: number[] | null;
-            ResponseP90: number[] | null;
-            ResponseP99: number[] | null;
-            ToolsPerMin: number[] | null;
-            WallHours: number[] | null;
+            ActiveHours: number[];
+            MsgsPerMin: number[];
+            ResponseP50: number[];
+            ResponseP90: number[];
+            ResponseP99: number[];
+            ToolsPerMin: number[];
+            WallHours: number[];
         };
         Viewer: {
             authenticated: boolean;
+            csrf_token?: string;
+            is_admin: boolean;
+            overview_public: boolean;
             /** Format: int64 */
             user_id?: number;
             username?: string;
-            is_admin: boolean;
-            overview_public: boolean;
-            csrf_token?: string;
             version: string;
-        };
-        ProjectionRebuild: {
-            /** @constant */
-            error: "projection rebuild in progress";
-            /** @constant */
-            code: "projection_rebuild";
-            reparse: components["schemas"]["ReparseStatusResponse"];
         };
     };
     responses: {
@@ -2705,15 +2623,6 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Authentication is required. */
-        Unauthorized: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["Error"];
-            };
-        };
         /** @description The parsed projection is rebuilding; retry after the requested delay. */
         ProjectionRebuilding: {
             headers: {
@@ -2723,6 +2632,15 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["ProjectionRebuild"];
+            };
+        };
+        /** @description Authentication is required. */
+        Unauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
             };
         };
     };

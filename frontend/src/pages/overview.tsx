@@ -1,6 +1,5 @@
-import { ArrowSquareOutIcon } from "@phosphor-icons/react";
 import { type ReactNode, useState } from "react";
-import { useOutletContext, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import { useAPI } from "../api";
 import {
@@ -18,26 +17,8 @@ import {
   formatTokens,
 } from "../format";
 import "../overview.css";
-import { withBase } from "../base";
-import type {
-  Analytics,
-  Breakdown,
-  OverviewResponse,
-  User,
-  Viewer,
-} from "../types";
-
-// formatSavings mirrors the server's FmtSavings: a non-negative saving reads
-// "saved $X", and the rare negative (cache written but never re-read enough
-// to repay the write premium) reads "cost $X" on its magnitude, so the Cache
-// tile stays honest without a stray minus sign. Incomplete appends "partial"
-// rather than the cost figures' "$X+" lower-bound marker, because an omitted
-// model's saving can run either direction, not just under the shown value.
-function formatSavings(usd: number, incomplete: boolean): string {
-  const verb = usd < 0 ? "cost " : "saved ";
-  const amount = formatCost(Math.abs(usd));
-  return incomplete ? `${verb}${amount} partial` : `${verb}${amount}`;
-}
+import { formatSavings } from "../pricing-format";
+import type { Analytics, Breakdown, OverviewResponse, User } from "../types";
 
 export function AnalyticsPanel({
   analytics,
@@ -51,9 +32,8 @@ export function AnalyticsPanel({
   // the default off so the accounts that ran in a repo stay private.
   showUsers?: boolean;
   // activityControls render in the Daily activity header row, directly under
-  // the stat strip. The overview page slots its range picker and account
-  // filter here; pages that keep those controls in their own header pass
-  // nothing.
+  // the stat strip. Scoped overview pages slot their range and facet filters
+  // here so the controls stay attached to the chart they configure.
   activityControls?: ReactNode;
   mobileActivity?: "full" | "range-only";
 }) {
@@ -93,7 +73,19 @@ export function AnalyticsPanel({
       <StatStrip>
         <Stat
           label="Cost"
-          value={formatCost(analytics.TotalCost, analytics.CostIncomplete)}
+          value={
+            <HoverTip summary={formatCost(analytics.TotalCost)}>
+              <dl className="tt-grid">
+                <dt>Without cache</dt>
+                <dd>
+                  {formatCost(analytics.TotalCost + analytics.Cache.SavingsUSD)}
+                </dd>
+              </dl>
+              <div className="tt-cost">
+                {formatSavings(analytics.Cache.SavingsUSD)}
+              </div>
+            </HoverTip>
+          }
         />
         <Stat
           label="Tokens"
@@ -124,10 +116,7 @@ export function AnalyticsPanel({
                 <dd>{formatTokens(analytics.Cache.Input)}</dd>
               </dl>
               <div className="tt-cost">
-                {formatSavings(
-                  analytics.Cache.SavingsUSD,
-                  analytics.Cache.SavingsIncomplete,
-                )}
+                {formatSavings(analytics.Cache.SavingsUSD)}
               </div>
             </HoverTip>
           }
@@ -140,10 +129,10 @@ export function AnalyticsPanel({
         mobileActivity={mobileActivity}
       />
       <div className="usage-breakdowns">
-        <BreakdownTable title="Models" rows={analytics.Models ?? []} />
-        <BreakdownTable title="Agents" rows={analytics.Agents ?? []} />
+        <BreakdownTable title="Models" rows={analytics.Models} />
+        <BreakdownTable title="Agents" rows={analytics.Agents} />
         {showUsers && (analytics.Users?.length ?? 0) > 1 ? (
-          <BreakdownTable title="Users" rows={analytics.Users ?? []} />
+          <BreakdownTable title="Users" rows={analytics.Users} />
         ) : null}
       </div>
     </>
@@ -210,19 +199,12 @@ function BreakdownTable({ title, rows }: { title: string; rows: Breakdown[] }) {
               row.Input + row.Output + row.CacheRead + row.CacheWrite;
             return (
               <div className="breakdown-row" key={row.Label}>
-                <span
-                  className="breakdown-fill"
-                  style={{
-                    width: `${Math.max((row.CostUSD / max) * 100, 1)}%`,
-                    background: `var(--viz-${(index % 8) + 1})`,
-                  }}
-                />
                 <div className="breakdown-head">
                   <span className="breakdown-label">
                     {row.Label || "unknown"}
                   </span>
-                  <span className="data">
-                    {formatCost(row.CostUSD, row.CostIncomplete)}
+                  <span className={row.CostUSD === 0 ? "data muted" : "data"}>
+                    {row.CostUSD === 0 ? "not priced" : formatCost(row.CostUSD)}
                   </span>
                 </div>
                 <div className="breakdown-sub">
@@ -233,8 +215,7 @@ function BreakdownTable({ title, rows }: { title: string; rows: Breakdown[] }) {
                       cacheRead={row.CacheRead}
                       cacheWrite={row.CacheWrite}
                       reasoning={row.Reasoning}
-                      costUSD={row.CostUSD}
-                      costIncomplete={row.CostIncomplete}
+                      {...(row.CostUSD === 0 ? {} : { costUSD: row.CostUSD })}
                     />
                   </HoverTip>
                   <span>
@@ -242,6 +223,15 @@ function BreakdownTable({ title, rows }: { title: string; rows: Breakdown[] }) {
                     tok · {row.Sessions} session{row.Sessions === 1 ? "" : "s"}
                   </span>
                 </div>
+                <span className="breakdown-track">
+                  <span
+                    className="breakdown-fill"
+                    style={{
+                      width: `${Math.max((row.CostUSD / max) * 100, 1)}%`,
+                      background: `var(--viz-${(index % 8) + 1})`,
+                    }}
+                  />
+                </span>
               </div>
             );
           })}
@@ -291,32 +281,11 @@ function AccountFilter({ users }: { users: User[] }) {
 }
 
 export function OverviewPage() {
-  const viewer = useOutletContext<Viewer>();
   const [params] = useSearchParams();
   const path = `/api/v1/app/overview?${params.toString()}`;
   const state = useAPI<OverviewResponse>(path);
   return (
     <div className="page">
-      {viewer.overview_public && viewer.username ? (
-        // A second entry point to the publicity control, so a published overview
-        // is discoverable from the overview itself and not only buried in the
-        // account settings. The chip links to the public view (scoped to this
-        // one user), and Manage jumps to the account control to toggle it off.
-        <div className="overview-public-badge">
-          <a
-            className="tag public"
-            href={withBase(`/u/${encodeURIComponent(viewer.username)}`)}
-            target="_blank"
-            rel="noopener"
-            title="Open the public page in a new tab"
-          >
-            public <ArrowSquareOutIcon size={10} />
-          </a>
-          <a className="muted-link" href={withBase("/account#publicity")}>
-            Manage
-          </a>
-        </div>
-      ) : null}
       <AsyncView state={state}>
         {(data) => (
           <AnalyticsPanel
@@ -325,10 +294,10 @@ export function OverviewPage() {
             mobileActivity="range-only"
             activityControls={
               <>
-                {(data.users ?? []).length > 1 ? (
-                  <AccountFilter users={data.users ?? []} />
+                {data.users.length > 1 ? (
+                  <AccountFilter users={data.users} />
                 ) : null}
-                <RangeTabs ranges={data.ranges ?? []} active={data.range} />
+                <RangeTabs ranges={data.ranges} active={data.range} />
               </>
             }
           />

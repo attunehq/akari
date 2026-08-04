@@ -215,4 +215,54 @@ package parse
 // anywhere in the turn, which also handles reordered framing without accepting
 // a prompt that quotes one marker. Rebuilding the corpus updates affected
 // message roles and their derived session data.
-const Epoch = 18
+//
+// Epoch 18 -> 19: represent unknown model prices as zero throughout the
+// projection and remove pricing-completeness state. Analytics now identifies
+// unknown models solely by zero cost and folds them into Other. Rebuilding the
+// corpus replaces historical NULL usage costs and refreshes every derived cost
+// rollup under the same best-effort estimate rule.
+// Epoch 19 -> 20: capture the transcript data the reducers previously dropped.
+// One bump carries the set because every piece is parser output and the rebuild
+// fills them all in one pass:
+//   - System prompts and injected instructions become message rows. Codex's
+//     session_meta base_instructions is a RoleSystem turn, its turn_context
+//     developer instructions and world_state AGENTS.md are RoleContext turns
+//     (deduped on change), and Claude's isMeta user lines, instruction-bearing
+//     attachment entries, and post-compaction summaries are RoleContext turns.
+//     Reclassifying Claude's isMeta lines also stops skill bodies from counting
+//     as user prompts (title, user_message_count, prompt hygiene), the same
+//     correction Epoch 8 made for Codex framing.
+//   - Codex reasoning summaries stream as agent_reasoning events while current
+//     builds encrypt the reasoning items; the reducer now keeps the event text
+//     when the items carried no plaintext, so ThinkingText survives again.
+//   - Codex token_count's cache_write_input_tokens joins the usage split (input
+//     = total - cached - written), paired with nonzero GPT-5.6 CacheWrite rates
+//     in the pricing table (issue #126); zero on the whole observed corpus, so
+//     no historical cost moves.
+//   - Claude pasted images (user image blocks) become attachments; the client
+//     lifts them to the CAS like Codex images.
+//   - The structured toolUseResult is lifted to the CAS and referenced from the
+//     tool call (struct_sha256) beside the flattened text result.
+//   - Tool calls carry Claude's attribution (agent, skill, plugin); sessions
+//     carry transcript-declared identity (custom title, slug, permission mode,
+//     reasoning effort, subagent name, PR link) and Codex's parent_thread_id,
+//     which the rebuild writes to parent_source_id so Codex subagent sessions
+//     finally link to their parents (migration 0053 generalizes linking onto
+//     that column).
+//   - A new session_events projection table records compactions (with Claude's
+//     token figures), turn telemetry, aborts, API errors, stop-hook summaries,
+//     subagent lifecycle events, and pi model/thinking-level changes.
+//
+// Parser output changes throughout, so the golden fixtures move and the rebuild
+// re-derives the corpus, including signals, at the running scoring. Bodies the
+// old client transform never lifted (Claude images, toolUseResult) fill only as
+// sessions re-sync, exactly like Epoch 17's surrogate fix.
+// Epoch 20 -> 21: price claude-opus-5 (Opus 5 at the current $5/$25 Opus rate;
+// see internal/pricing). Opus 5 usage was unknown to the pricing table before, so
+// its usage_events rows carry a zero per-row cost and its sessions read as
+// unpriced. This bump rebuilds the corpus so every Opus 5 usage row re-prices
+// through pricing.Cost in one pass. It is a pricing change, not a reducer-shape
+// change, and no golden fixture uses Opus 5, so the projection delta for the
+// fixtures is byte-for-byte identical and the golden snapshots do not move; the
+// bump is the reprice signal and stands on its own.
+const Epoch = 21

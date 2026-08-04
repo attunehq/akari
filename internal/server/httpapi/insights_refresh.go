@@ -91,8 +91,8 @@ func (r *insightsRefresher) get(ctx context.Context, rangeKey string) (store.Ins
 	}
 	ins, ok := snap.byRange[rangeKey]
 	if !ok {
-		// The handler normalizes the range through web.ParseRange and the pass computes
-		// every web.DateRanges key, so this is a wiring bug, not a user input.
+		// The handler normalizes the range through apiRange and the pass computes every
+		// web.DateRanges key, so this is a wiring bug, not a user input.
 		return store.Insights{}, time.Time{}, fmt.Errorf("insights snapshot has no range %q", rangeKey)
 	}
 	return ins, snap.at, nil

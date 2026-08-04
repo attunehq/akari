@@ -205,7 +205,7 @@ func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
 		return nil, fmt.Errorf("query users: %w", err)
 	}
 	defer rows.Close()
-	var out []User
+	out := []User{}
 	for rows.Next() {
 		var u User
 		if err := rows.Scan(&u.ID, &u.Username); err != nil {
@@ -251,7 +251,7 @@ func (s *Store) ListAPITokens(ctx context.Context, userID int64) ([]APIToken, er
 		return nil, err
 	}
 	defer rows.Close()
-	var out []APIToken
+	out := []APIToken{}
 	for rows.Next() {
 		var t APIToken
 		if err := rows.Scan(&t.ID, &t.UserID, &t.Name, &t.Scope, &t.CreatedAt, &t.LastUsedAt, &t.RevokedAt); err != nil {
@@ -333,7 +333,7 @@ func (s *Store) ListInvites(ctx context.Context) ([]Invite, error) {
 		return nil, fmt.Errorf("query invites: %w", err)
 	}
 	defer rows.Close()
-	var out []Invite
+	out := []Invite{}
 	for rows.Next() {
 		var inv Invite
 		if err := rows.Scan(&inv.ID, &inv.Note, &inv.CreatedBy, &inv.CreatedAt, &inv.ExpiresAt,

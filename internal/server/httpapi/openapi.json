@@ -2,64 +2,64 @@
   "components": {
     "responses": {
       "BadRequest": {
-        "description": "The request is invalid.",
         "content": {
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
             }
-          }
-        }
-      },
-      "Forbidden": {
-        "description": "The credential does not have the required scope.",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/Error"
-            }
-          }
-        }
-      },
-      "NotFound": {
-        "description": "The requested resource does not exist or is not visible.",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/Error"
-            }
-          }
-        }
-      },
-      "Unauthorized": {
-        "description": "Authentication is required.",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/Error"
-            }
-          }
-        }
-      },
-      "ProjectionRebuilding": {
-        "description": "The parsed projection is rebuilding; retry after the requested delay.",
-        "headers": {
-          "Retry-After": {
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "description": "Seconds before retrying."
           }
         },
+        "description": "The request is invalid."
+      },
+      "Forbidden": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "The credential does not have the required scope."
+      },
+      "NotFound": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "The requested resource does not exist or is not visible."
+      },
+      "ProjectionRebuilding": {
         "content": {
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/ProjectionRebuild"
             }
           }
+        },
+        "description": "The parsed projection is rebuilding; retry after the requested delay.",
+        "headers": {
+          "Retry-After": {
+            "description": "Seconds before retrying.",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
         }
+      },
+      "Unauthorized": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "Authentication is required."
       }
     },
     "schemas": {
@@ -124,6 +124,31 @@
         ],
         "type": "object"
       },
+      "AccountProject": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "published": {
+            "type": "boolean"
+          },
+          "remote_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "published",
+          "remote_key"
+        ],
+        "type": "object"
+      },
       "AccountResponse": {
         "additionalProperties": false,
         "properties": {
@@ -131,19 +156,19 @@
             "items": {
               "$ref": "#/components/schemas/OAuthGrant"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "invites": {
             "items": {
               "$ref": "#/components/schemas/AccountInvite"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/AccountProject"
+            },
+            "type": "array"
           },
           "reparse": {
             "$ref": "#/components/schemas/Status"
@@ -152,10 +177,7 @@
             "items": {
               "$ref": "#/components/schemas/AccountToken"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "user": {
             "$ref": "#/components/schemas/Viewer"
@@ -164,6 +186,7 @@
         "required": [
           "connections",
           "invites",
+          "projects",
           "reparse",
           "tokens",
           "user"
@@ -227,34 +250,22 @@
             "items": {
               "$ref": "#/components/schemas/Breakdown"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Cache": {
             "$ref": "#/components/schemas/CacheStats"
-          },
-          "CostIncomplete": {
-            "type": "boolean"
           },
           "Models": {
             "items": {
               "$ref": "#/components/schemas/Breakdown"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Series": {
             "items": {
               "$ref": "#/components/schemas/DayPoint"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Sessions": {
             "format": "int64",
@@ -287,16 +298,12 @@
             "items": {
               "$ref": "#/components/schemas/Breakdown"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
           "Agents",
           "Cache",
-          "CostIncomplete",
           "Models",
           "Series",
           "Sessions",
@@ -311,54 +318,54 @@
         "type": "object"
       },
       "AnnounceSession": {
-        "type": "object",
         "additionalProperties": false,
-        "required": [
-          "agent",
-          "source_session_id"
-        ],
         "properties": {
           "agent": {
-            "type": "string",
             "enum": [
               "claude",
               "codex",
               "pi"
-            ]
-          },
-          "source_session_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "remote",
-              "standalone",
-              "orphaned"
             ],
-            "default": "remote"
-          },
-          "project_remote": {
-            "type": "string"
-          },
-          "local_root": {
-            "type": "string"
-          },
-          "git_branch": {
             "type": "string"
           },
           "cwd": {
             "type": "string"
           },
+          "git_branch": {
+            "type": "string"
+          },
+          "kind": {
+            "default": "remote",
+            "enum": [
+              "remote",
+              "standalone",
+              "orphaned"
+            ],
+            "type": "string"
+          },
+          "local_root": {
+            "type": "string"
+          },
           "machine": {
             "type": "string"
           },
+          "project_remote": {
+            "type": "string"
+          },
+          "source_session_id": {
+            "minLength": 1,
+            "type": "string"
+          },
           "terminal": {
-            "type": "boolean",
-            "default": false
+            "default": false,
+            "type": "boolean"
           }
-        }
+        },
+        "required": [
+          "agent",
+          "source_session_id"
+        ],
+        "type": "object"
       },
       "AttachmentView": {
         "additionalProperties": false,
@@ -401,9 +408,6 @@
             "format": "int64",
             "type": "integer"
           },
-          "CostIncomplete": {
-            "type": "boolean"
-          },
           "CostUSD": {
             "type": "number"
           },
@@ -430,7 +434,6 @@
         "required": [
           "CacheRead",
           "CacheWrite",
-          "CostIncomplete",
           "CostUSD",
           "Input",
           "Label",
@@ -459,9 +462,6 @@
             "format": "int64",
             "type": "integer"
           },
-          "SavingsIncomplete": {
-            "type": "boolean"
-          },
           "SavingsUSD": {
             "type": "number"
           }
@@ -471,33 +471,7 @@
           "CacheWrite",
           "Input",
           "Output",
-          "SavingsIncomplete",
           "SavingsUSD"
-        ],
-        "type": "object"
-      },
-      "Chapter": {
-        "additionalProperties": false,
-        "properties": {
-          "Order": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "Slug": {
-            "type": "string"
-          },
-          "Summary": {
-            "type": "string"
-          },
-          "Title": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "Order",
-          "Slug",
-          "Summary",
-          "Title"
         ],
         "type": "object"
       },
@@ -574,10 +548,7 @@
               "format": "int64",
               "type": "integer"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Projects": {
             "format": "int64",
@@ -588,10 +559,7 @@
               "format": "int64",
               "type": "integer"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "TotalHotFiles": {
             "format": "int64",
@@ -605,10 +573,7 @@
             "items": {
               "$ref": "#/components/schemas/ChurnNode"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -737,38 +702,38 @@
         "type": "object"
       },
       "CreateInvite": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
+          "expires_hours": {
+            "minimum": 0,
+            "type": "integer"
+          },
           "note": {
             "type": "string"
-          },
-          "expires_hours": {
-            "type": "integer",
-            "minimum": 0
           }
-        }
+        },
+        "type": "object"
       },
       "CreateToken": {
-        "type": "object",
         "additionalProperties": false,
-        "required": [
-          "name"
-        ],
         "properties": {
           "name": {
             "type": "string"
           },
           "scope": {
-            "type": "string",
+            "default": "ingest",
             "enum": [
               "ingest",
               "read",
               "full"
             ],
-            "default": "ingest"
+            "type": "string"
           }
-        }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
       },
       "CreatedInviteResponse": {
         "additionalProperties": false,
@@ -906,9 +871,6 @@
       "Economics": {
         "additionalProperties": false,
         "properties": {
-          "AbandonedIncomplete": {
-            "type": "boolean"
-          },
           "AbandonedSharePct": {
             "type": "number"
           },
@@ -916,10 +878,7 @@
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "CacheHitRateLatest": {
             "type": "number"
@@ -928,52 +887,31 @@
             "items": {
               "type": "boolean"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "CacheSavings": {
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "CacheSavingsIncomplete": {
-            "type": "boolean"
+            "type": "array"
           },
           "CostAbandoned": {
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "CostCompleted": {
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "CostIncomplete": {
-            "type": "boolean"
+            "type": "array"
           },
           "CostOther": {
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "TotalAbandoned": {
             "type": "number"
@@ -986,16 +924,13 @@
           }
         },
         "required": [
-          "AbandonedIncomplete",
           "AbandonedSharePct",
           "CacheHitRate",
           "CacheHitRateLatest",
           "CacheMeasured",
           "CacheSavings",
-          "CacheSavingsIncomplete",
           "CostAbandoned",
           "CostCompleted",
-          "CostIncomplete",
           "CostOther",
           "TotalAbandoned",
           "TotalCacheSavings",
@@ -1004,19 +939,19 @@
         "type": "object"
       },
       "Error": {
-        "type": "object",
         "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
         "required": [
           "error"
         ],
-        "properties": {
-          "error": {
-            "type": "string"
-          },
-          "code": {
-            "type": "string"
-          }
-        }
+        "type": "object"
       },
       "FacetCount": {
         "additionalProperties": false,
@@ -1042,28 +977,19 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Machines": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Users": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -1084,10 +1010,7 @@
             "items": {
               "$ref": "#/components/schemas/ChurnFile"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -1103,10 +1026,7 @@
             "items": {
               "$ref": "#/components/schemas/ModelSeries"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "NewestFirst": {
             "format": "int64",
@@ -1126,9 +1046,6 @@
       "Gallery": {
         "additionalProperties": false,
         "properties": {
-          "CostIncomplete": {
-            "type": "boolean"
-          },
           "LongestCostUSD": {
             "type": "number"
           },
@@ -1154,10 +1071,7 @@
             "items": {
               "$ref": "#/components/schemas/GallerySession"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Total": {
             "format": "int64",
@@ -1165,7 +1079,6 @@
           }
         },
         "required": [
-          "CostIncomplete",
           "LongestCostUSD",
           "LongestDurationS",
           "MedianCompletedCostUSD",
@@ -1184,9 +1097,6 @@
           "Archetype": {
             "type": "string"
           },
-          "CostIncomplete": {
-            "type": "boolean"
-          },
           "CostUSD": {
             "type": "number"
           },
@@ -1202,7 +1112,6 @@
         },
         "required": [
           "Archetype",
-          "CostIncomplete",
           "CostUSD",
           "DurationS",
           "Grade",
@@ -1217,37 +1126,25 @@
             "items": {
               "$ref": "#/components/schemas/FacetCount"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Machines": {
             "items": {
               "$ref": "#/components/schemas/FacetCount"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Projects": {
             "items": {
               "$ref": "#/components/schemas/ProjectFacet"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Users": {
             "items": {
               "$ref": "#/components/schemas/FacetCount"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -1258,79 +1155,6 @@
         ],
         "type": "object"
       },
-      "GuideResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "chapters": {
-            "items": {
-              "$ref": "#/components/schemas/Chapter"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "github_url": {
-            "type": "string"
-          },
-          "headings": {
-            "items": {
-              "$ref": "#/components/schemas/Heading"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "raw_markdown": {
-            "type": "string"
-          },
-          "raw_path": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          },
-          "summary": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "chapters",
-          "github_url",
-          "headings",
-          "raw_markdown",
-          "raw_path",
-          "slug",
-          "summary",
-          "title"
-        ],
-        "type": "object"
-      },
-      "Heading": {
-        "additionalProperties": false,
-        "properties": {
-          "ID": {
-            "type": "string"
-          },
-          "Level": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "Text": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "ID",
-          "Level",
-          "Text"
-        ],
-        "type": "object"
-      },
       "Insights": {
         "additionalProperties": false,
         "properties": {
@@ -1338,10 +1162,7 @@
             "items": {
               "$ref": "#/components/schemas/LabeledCount"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Churn": {
             "$ref": "#/components/schemas/FileChurn"
@@ -1405,10 +1226,7 @@
             "items": {
               "$ref": "#/components/schemas/DateRange"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -1437,21 +1255,21 @@
         "type": "object"
       },
       "Login": {
-        "type": "object",
         "additionalProperties": false,
+        "properties": {
+          "password": {
+            "format": "password",
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
         "required": [
           "username",
           "password"
         ],
-        "properties": {
-          "username": {
-            "type": "string"
-          },
-          "password": {
-            "type": "string",
-            "format": "password"
-          }
-        }
+        "type": "object"
       },
       "LoginResponse": {
         "additionalProperties": false,
@@ -1673,10 +1491,7 @@
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "WindowShare": {
             "type": "number"
@@ -1777,29 +1592,20 @@
             "items": {
               "$ref": "#/components/schemas/DateRange"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "selected_user_ids": {
             "items": {
               "format": "int64",
               "type": "integer"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "users": {
             "items": {
               "$ref": "#/components/schemas/OverviewUser"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -1887,10 +1693,7 @@
             "items": {
               "$ref": "#/components/schemas/DateRange"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "remainder": {
             "$ref": "#/components/schemas/SessionRemainder"
@@ -1899,10 +1702,7 @@
             "items": {
               "$ref": "#/components/schemas/ProjectSessionSummary"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -1918,100 +1718,11 @@
         ],
         "type": "object"
       },
-      "ProjectSummary": {
-        "additionalProperties": false,
-        "properties": {
-          "CostIncomplete": {
-            "type": "boolean"
-          },
-          "DisplayName": {
-            "type": "string"
-          },
-          "Host": {
-            "type": "string"
-          },
-          "ID": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "Kind": {
-            "type": "string"
-          },
-          "LastActivity": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "OverviewPublic": {
-            "type": "boolean"
-          },
-          "Owner": {
-            "type": "string"
-          },
-          "RemoteKey": {
-            "type": "string"
-          },
-          "Repo": {
-            "type": "string"
-          },
-          "SessionCount": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "TotalCacheRead": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "TotalCacheWrite": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "TotalCostUSD": {
-            "type": "number"
-          },
-          "TotalInput": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "TotalOutput": {
-            "format": "int64",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "CostIncomplete",
-          "DisplayName",
-          "Host",
-          "ID",
-          "Kind",
-          "LastActivity",
-          "OverviewPublic",
-          "Owner",
-          "RemoteKey",
-          "Repo",
-          "SessionCount",
-          "TotalCacheRead",
-          "TotalCacheWrite",
-          "TotalCostUSD",
-          "TotalInput",
-          "TotalOutput"
-        ],
-        "type": "object"
-      },
       "ProjectSessionSummary": {
         "additionalProperties": false,
         "properties": {
           "Agent": {
             "type": "string"
-          },
-          "CostIncomplete": {
-            "type": "boolean"
           },
           "EndedAt": {
             "anyOf": [
@@ -2122,7 +1833,6 @@
         },
         "required": [
           "Agent",
-          "CostIncomplete",
           "EndedAt",
           "GitBranch",
           "Grade",
@@ -2146,6 +1856,110 @@
         ],
         "type": "object"
       },
+      "ProjectSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "DisplayName": {
+            "type": "string"
+          },
+          "Host": {
+            "type": "string"
+          },
+          "ID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Kind": {
+            "type": "string"
+          },
+          "LastActivity": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "OverviewPublic": {
+            "type": "boolean"
+          },
+          "Owner": {
+            "type": "string"
+          },
+          "RemoteKey": {
+            "type": "string"
+          },
+          "Repo": {
+            "type": "string"
+          },
+          "SessionCount": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "TotalCacheRead": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "TotalCacheWrite": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "TotalCostUSD": {
+            "type": "number"
+          },
+          "TotalInput": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "TotalOutput": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "DisplayName",
+          "Host",
+          "ID",
+          "Kind",
+          "LastActivity",
+          "OverviewPublic",
+          "Owner",
+          "RemoteKey",
+          "Repo",
+          "SessionCount",
+          "TotalCacheRead",
+          "TotalCacheWrite",
+          "TotalCostUSD",
+          "TotalInput",
+          "TotalOutput"
+        ],
+        "type": "object"
+      },
+      "ProjectionRebuild": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "projection_rebuild",
+            "type": "string"
+          },
+          "error": {
+            "const": "projection rebuild in progress",
+            "type": "string"
+          },
+          "reparse": {
+            "$ref": "#/components/schemas/ReparseStatusResponse"
+          }
+        },
+        "required": [
+          "code",
+          "error",
+          "reparse"
+        ],
+        "type": "object"
+      },
       "ProjectsResponse": {
         "additionalProperties": false,
         "properties": {
@@ -2153,25 +1967,16 @@
             "items": {
               "$ref": "#/components/schemas/ProjectSummary"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "sparklines": {
             "additionalProperties": {
               "items": {
                 "type": "number"
               },
-              "type": [
-                "array",
-                "null"
-              ]
+              "type": "array"
             },
-            "type": [
-              "object",
-              "null"
-            ]
+            "type": "object"
           }
         },
         "required": [
@@ -2231,10 +2036,7 @@
             "items": {
               "$ref": "#/components/schemas/DateRange"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "username": {
             "type": "string"
@@ -2267,10 +2069,7 @@
             "items": {
               "$ref": "#/components/schemas/DateRange"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -2300,52 +2099,32 @@
           "Audit": {
             "$ref": "#/components/schemas/SessionAudit"
           },
-          "Outline": {
-            "items": {
-              "$ref": "#/components/schemas/Message"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
           "Page": {
             "$ref": "#/components/schemas/TranscriptPage"
           },
           "ProjectionRevision": {
             "format": "int64",
             "type": "integer"
-          },
-          "Tools": {
-            "items": {
-              "$ref": "#/components/schemas/ToolCallView"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
           }
         },
         "required": [
           "Audit",
-          "Outline",
           "Page",
-          "ProjectionRevision",
-          "Tools"
+          "ProjectionRevision"
         ],
         "type": "object"
       },
       "Publication": {
-        "type": "object",
         "additionalProperties": false,
-        "required": [
-          "published"
-        ],
         "properties": {
           "published": {
             "type": "boolean"
           }
-        }
+        },
+        "required": [
+          "published"
+        ],
+        "type": "object"
       },
       "PublicationResponse": {
         "additionalProperties": false,
@@ -2370,19 +2149,13 @@
             "items": {
               "$ref": "#/components/schemas/LabeledCount"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Outcomes": {
             "items": {
               "$ref": "#/components/schemas/LabeledCount"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Sessions": {
             "format": "int64",
@@ -2398,24 +2171,24 @@
         "type": "object"
       },
       "Register": {
-        "type": "object",
         "additionalProperties": false,
+        "properties": {
+          "invite_token": {
+            "type": "string"
+          },
+          "password": {
+            "format": "password",
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
         "required": [
           "username",
           "password"
         ],
-        "properties": {
-          "username": {
-            "type": "string"
-          },
-          "password": {
-            "type": "string",
-            "format": "password"
-          },
-          "invite_token": {
-            "type": "string"
-          }
-        }
+        "type": "object"
       },
       "RegisteredUserResponse": {
         "additionalProperties": false,
@@ -2490,15 +2263,9 @@
                 "format": "int64",
                 "type": "integer"
               },
-              "type": [
-                "array",
-                "null"
-              ]
+              "type": "array"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -2538,10 +2305,7 @@
             "items": {
               "$ref": "#/components/schemas/ModelFallback"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Signals": {
             "$ref": "#/components/schemas/SessionSignals"
@@ -2550,10 +2314,7 @@
             "items": {
               "$ref": "#/components/schemas/SubagentRow"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -2569,12 +2330,6 @@
         "properties": {
           "Agent": {
             "type": "string"
-          },
-          "CacheSavingsIncomplete": {
-            "type": "boolean"
-          },
-          "CostIncomplete": {
-            "type": "boolean"
           },
           "Cwd": {
             "type": "string"
@@ -2623,6 +2378,16 @@
             "format": "int64",
             "type": "integer"
           },
+          "PRNumber": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "PRRepo": {
+            "type": "string"
+          },
+          "PRURL": {
+            "type": "string"
+          },
           "ParentID": {
             "anyOf": [
               {
@@ -2633,6 +2398,9 @@
                 "type": "null"
               }
             ]
+          },
+          "PermissionMode": {
+            "type": "string"
           },
           "ProjectID": {
             "format": "int64",
@@ -2657,6 +2425,12 @@
               }
             ]
           },
+          "ReasoningEffort": {
+            "type": "string"
+          },
+          "Slug": {
+            "type": "string"
+          },
           "StartedAt": {
             "anyOf": [
               {
@@ -2667,6 +2441,9 @@
                 "type": "null"
               }
             ]
+          },
+          "SubagentName": {
+            "type": "string"
           },
           "Title": {
             "type": "string"
@@ -2706,8 +2483,6 @@
         },
         "required": [
           "Agent",
-          "CacheSavingsIncomplete",
-          "CostIncomplete",
           "Cwd",
           "EndedAt",
           "GitBranch",
@@ -2717,13 +2492,20 @@
           "MessageCount",
           "ModelFallbackCount",
           "OwnerID",
+          "PRNumber",
+          "PRRepo",
+          "PRURL",
           "ParentID",
+          "PermissionMode",
           "ProjectID",
           "ProjectKey",
           "ProjectKind",
           "ProjectName",
           "PublicID",
+          "ReasoningEffort",
+          "Slug",
           "StartedAt",
+          "SubagentName",
           "Title",
           "TotalCacheRead",
           "TotalCacheSavingsUSD",
@@ -2734,6 +2516,40 @@
           "UserMessageCount",
           "Username",
           "Visibility"
+        ],
+        "type": "object"
+      },
+      "SessionEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "Attrs": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "Kind": {
+            "type": "string"
+          },
+          "MessageOrdinal": {
+            "anyOf": [
+              {
+                "format": "int64",
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "OccurredAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "Attrs",
+          "Kind",
+          "MessageOrdinal",
+          "OccurredAt"
         ],
         "type": "object"
       },
@@ -2848,9 +2664,6 @@
             "format": "int64",
             "type": "integer"
           },
-          "CostIncomplete": {
-            "type": "boolean"
-          },
           "CostUSD": {
             "type": "number"
           },
@@ -2870,7 +2683,6 @@
         "required": [
           "CacheRead",
           "CacheWrite",
-          "CostIncomplete",
           "CostUSD",
           "Input",
           "Output",
@@ -2903,9 +2715,6 @@
         "properties": {
           "Agent": {
             "type": "string"
-          },
-          "CostIncomplete": {
-            "type": "boolean"
           },
           "EndedAt": {
             "anyOf": [
@@ -3035,7 +2844,6 @@
         },
         "required": [
           "Agent",
-          "CostIncomplete",
           "EndedAt",
           "GitBranch",
           "Grade",
@@ -3062,6 +2870,33 @@
           "UserMessageCount",
           "Username",
           "Visibility"
+        ],
+        "type": "object"
+      },
+      "SessionShape": {
+        "additionalProperties": false,
+        "properties": {
+          "DupIDs": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Outline": {
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            },
+            "type": "array"
+          },
+          "Tools": {
+            "items": {
+              "$ref": "#/components/schemas/ToolCallView"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "DupIDs",
+          "Outline",
+          "Tools"
         ],
         "type": "object"
       },
@@ -3236,38 +3071,24 @@
           "Audit": {
             "$ref": "#/components/schemas/SessionAudit"
           },
-          "DupIDs": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "Outline": {
-            "items": {
-              "$ref": "#/components/schemas/Message"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
           "Page": {
             "$ref": "#/components/schemas/TranscriptPage"
           },
-          "Tools": {
-            "items": {
-              "$ref": "#/components/schemas/ToolCallView"
-            },
-            "type": [
-              "array",
-              "null"
+          "Shape": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionShape"
+              },
+              {
+                "type": "null"
+              }
             ]
           }
         },
         "required": [
           "Audit",
-          "DupIDs",
-          "Outline",
           "Page",
-          "Tools"
+          "Shape"
         ],
         "type": "object"
       },
@@ -3276,9 +3097,6 @@
         "properties": {
           "Agent": {
             "type": "string"
-          },
-          "CostIncomplete": {
-            "type": "boolean"
           },
           "EndedAt": {
             "anyOf": [
@@ -3376,7 +3194,6 @@
         },
         "required": [
           "Agent",
-          "CostIncomplete",
           "EndedAt",
           "GitBranch",
           "ID",
@@ -3414,10 +3231,7 @@
             "items": {
               "$ref": "#/components/schemas/SessionRow"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -3436,151 +3250,100 @@
               "format": "int64",
               "type": "integer"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "AbandonedRate": {
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "ArchetypeShare": {
             "items": {
               "additionalProperties": {
                 "type": "number"
               },
-              "type": [
-                "object",
-                "null"
-              ]
+              "type": "object"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "CompletedCount": {
             "items": {
               "format": "int64",
               "type": "integer"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "CompletedRate": {
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "ContextHistogram": {
             "items": {
               "$ref": "#/components/schemas/ContextBucket"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "ContextMarkers": {
             "items": {
               "$ref": "#/components/schemas/ContextMarker"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "ContextResets": {
             "items": {
               "format": "int64",
               "type": "integer"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "GPA": {
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "GradeShare": {
             "items": {
               "additionalProperties": {
                 "type": "number"
               },
-              "type": [
-                "object",
-                "null"
-              ]
+              "type": "object"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "HygieneNoCode": {
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "HygieneRepeated": {
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "HygieneTerse": {
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "HygieneUnstructured": {
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "OutcomeTotal": {
             "items": {
               "format": "int64",
               "type": "integer"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -3650,9 +3413,6 @@
         "properties": {
           "Agent": {
             "type": "string"
-          },
-          "CostIncomplete": {
-            "type": "boolean"
           },
           "EndedAt": {
             "anyOf": [
@@ -3728,6 +3488,9 @@
               }
             ]
           },
+          "SubagentName": {
+            "type": "string"
+          },
           "Title": {
             "type": "string"
           },
@@ -3763,7 +3526,6 @@
         },
         "required": [
           "Agent",
-          "CostIncomplete",
           "EndedAt",
           "GitBranch",
           "Grade",
@@ -3775,6 +3537,7 @@
           "Outcome",
           "PublicID",
           "StartedAt",
+          "SubagentName",
           "Title",
           "TotalCacheRead",
           "TotalCacheWrite",
@@ -3794,13 +3557,7 @@
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "CostShareIncomplete": {
-            "type": "boolean"
+            "type": "array"
           },
           "CostThroughSubagentsPct": {
             "type": "number"
@@ -3813,19 +3570,13 @@
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "FanoutOrder": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "FanoutRows": {
             "items": {
@@ -3833,15 +3584,9 @@
                 "format": "int64",
                 "type": "integer"
               },
-              "type": [
-                "object",
-                "null"
-              ]
+              "type": "object"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "SessionsThatDelegatePct": {
             "type": "number"
@@ -3853,7 +3598,6 @@
         },
         "required": [
           "CostShare",
-          "CostShareIncomplete",
           "CostThroughSubagentsPct",
           "DeepestTree",
           "DelegateShare",
@@ -3921,10 +3665,7 @@
             "items": {
               "$ref": "#/components/schemas/TokenListItem"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -3935,6 +3676,15 @@
       "ToolCallView": {
         "additionalProperties": false,
         "properties": {
+          "AttributionAgent": {
+            "type": "string"
+          },
+          "AttributionPlugin": {
+            "type": "string"
+          },
+          "AttributionSkill": {
+            "type": "string"
+          },
           "CallIndex": {
             "format": "int64",
             "type": "integer"
@@ -3978,11 +3728,24 @@
           "ResultStatus": {
             "type": "string"
           },
+          "StructBytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "StructMediaType": {
+            "type": "string"
+          },
+          "StructSHA256": {
+            "type": "string"
+          },
           "ToolName": {
             "type": "string"
           }
         },
         "required": [
+          "AttributionAgent",
+          "AttributionPlugin",
+          "AttributionSkill",
           "CallIndex",
           "Category",
           "Detail",
@@ -3996,6 +3759,9 @@
           "ResultMediaType",
           "ResultSHA",
           "ResultStatus",
+          "StructBytes",
+          "StructMediaType",
+          "StructSHA256",
           "ToolName"
         ],
         "type": "object"
@@ -4010,10 +3776,7 @@
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -4086,10 +3849,7 @@
             "items": {
               "$ref": "#/components/schemas/ToolStat"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "TotalCalls": {
             "format": "int64",
@@ -4120,52 +3880,34 @@
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "FailWorst": {
             "items": {
               "$ref": "#/components/schemas/ToolFailSeries"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Mix": {
             "items": {
               "additionalProperties": {
                 "type": "number"
               },
-              "type": [
-                "object",
-                "null"
-              ]
+              "type": "object"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "MixOrder": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Reliability": {
             "items": {
               "$ref": "#/components/schemas/ToolPoint"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -4184,23 +3926,23 @@
             "items": {
               "$ref": "#/components/schemas/AttachmentView"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "EarlierCount": {
             "format": "int64",
             "type": "integer"
           },
+          "Events": {
+            "items": {
+              "$ref": "#/components/schemas/SessionEvent"
+            },
+            "type": "array"
+          },
           "Fallbacks": {
             "items": {
               "$ref": "#/components/schemas/ModelFallback"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "HasEarlier": {
             "type": "boolean"
@@ -4212,33 +3954,25 @@
             "items": {
               "$ref": "#/components/schemas/Message"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Seed": {
             "items": {
               "$ref": "#/components/schemas/Message"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Tools": {
             "items": {
               "$ref": "#/components/schemas/ToolCallView"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
           "Attachments",
           "EarlierCount",
+          "Events",
           "Fallbacks",
           "HasEarlier",
           "More",
@@ -4263,9 +3997,6 @@
       "TreeRollup": {
         "additionalProperties": false,
         "properties": {
-          "CostIncomplete": {
-            "type": "boolean"
-          },
           "CostUSD": {
             "type": "number"
           },
@@ -4275,7 +4006,6 @@
           }
         },
         "required": [
-          "CostIncomplete",
           "CostUSD",
           "SubagentCount"
         ],
@@ -4289,10 +4019,7 @@
               "format": "date-time",
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Churn": {
             "$ref": "#/components/schemas/ChurnTrend"
@@ -4310,10 +4037,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "Rhythm": {
             "$ref": "#/components/schemas/RhythmGrid"
@@ -4365,18 +4089,8 @@
             "format": "int64",
             "type": "integer"
           },
-          "CostIncomplete": {
-            "type": "boolean"
-          },
           "CostUSD": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "number"
           },
           "Input": {
             "format": "int64",
@@ -4395,7 +4109,6 @@
           "CacheRead",
           "CacheWrite",
           "ContextTokens",
-          "CostIncomplete",
           "CostUSD",
           "Input",
           "Output",
@@ -4455,64 +4168,43 @@
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "MsgsPerMin": {
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "ResponseP50": {
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "ResponseP90": {
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "ResponseP99": {
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "ToolsPerMin": {
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "WallHours": {
             "items": {
               "type": "number"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -4527,23 +4219,12 @@
         "type": "object"
       },
       "Viewer": {
-        "type": "object",
         "additionalProperties": false,
-        "required": [
-          "authenticated",
-          "is_admin",
-          "overview_public",
-          "version"
-        ],
         "properties": {
           "authenticated": {
             "type": "boolean"
           },
-          "user_id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "username": {
+          "csrf_token": {
             "type": "string"
           },
           "is_admin": {
@@ -4552,47 +4233,36 @@
           "overview_public": {
             "type": "boolean"
           },
-          "csrf_token": {
+          "user_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "username": {
             "type": "string"
           },
           "version": {
             "type": "string"
           }
-        }
-      },
-      "ProjectionRebuild": {
-        "type": "object",
-        "additionalProperties": false,
+        },
         "required": [
-          "code",
-          "error",
-          "reparse"
+          "authenticated",
+          "is_admin",
+          "overview_public",
+          "version"
         ],
-        "properties": {
-          "error": {
-            "type": "string",
-            "const": "projection rebuild in progress"
-          },
-          "code": {
-            "type": "string",
-            "const": "projection_rebuild"
-          },
-          "reparse": {
-            "$ref": "#/components/schemas/ReparseStatusResponse"
-          }
-        }
+        "type": "object"
       }
     },
     "securitySchemes": {
       "bearerToken": {
-        "type": "http",
+        "bearerFormat": "akari token",
         "scheme": "bearer",
-        "bearerFormat": "akari token"
+        "type": "http"
       },
       "sessionCookie": {
-        "type": "apiKey",
         "in": "cookie",
-        "name": "akari_session"
+        "name": "akari_session",
+        "type": "apiKey"
       }
     }
   },
@@ -4627,8 +4297,8 @@
       "delete": {
         "parameters": [
           {
-            "name": "client_id",
             "in": "path",
+            "name": "client_id",
             "required": true,
             "schema": {
               "type": "string"
@@ -4660,12 +4330,12 @@
       "delete": {
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int64"
+              "format": "int64",
+              "type": "integer"
             }
           }
         ],
@@ -4696,14 +4366,14 @@
     "/api/v1/app/account/overview-publication": {
       "put": {
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/Publication"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -4744,76 +4414,21 @@
         ]
       }
     },
-    "/api/v1/app/guide/": {
-      "get": {
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GuideResponse"
-                }
-              }
-            },
-            "description": "Guide chapter and chapter index"
-          }
-        },
-        "security": [],
-        "summary": "Read the user guide index",
-        "tags": [
-          "Public"
-        ]
-      }
-    },
-    "/api/v1/app/guide/{slug}": {
-      "get": {
-        "parameters": [
-          {
-            "name": "slug",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GuideResponse"
-                }
-              }
-            },
-            "description": "Guide chapter and chapter index"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          }
-        },
-        "security": [],
-        "summary": "Read a user guide chapter",
-        "tags": [
-          "Public"
-        ]
-      }
-    },
     "/api/v1/app/insights": {
       "get": {
         "parameters": [
           {
-            "name": "range",
             "in": "query",
+            "name": "range",
             "schema": {
-              "type": "string",
               "enum": [
                 "7d",
                 "30d",
                 "90d",
                 "year",
                 "all"
-              ]
+              ],
+              "type": "string"
             }
           }
         ],
@@ -4845,44 +4460,44 @@
       "get": {
         "parameters": [
           {
+            "in": "query",
             "name": "client_id",
-            "in": "query",
             "required": true,
             "schema": {
               "type": "string"
             }
           },
           {
+            "in": "query",
             "name": "redirect_uri",
-            "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uri"
+              "format": "uri",
+              "type": "string"
             }
           },
           {
+            "in": "query",
             "name": "state",
-            "in": "query",
             "required": true,
             "schema": {
               "type": "string"
             }
           },
           {
+            "in": "query",
             "name": "code_challenge",
-            "in": "query",
             "required": true,
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "resource",
             "in": "query",
+            "name": "resource",
             "schema": {
-              "type": "string",
-              "format": "uri"
+              "format": "uri",
+              "type": "string"
             }
           }
         ],
@@ -4914,28 +4529,28 @@
       "get": {
         "parameters": [
           {
-            "name": "range",
             "in": "query",
+            "name": "range",
             "schema": {
-              "type": "string",
               "enum": [
                 "7d",
                 "30d",
                 "90d",
                 "year",
                 "all"
-              ]
+              ],
+              "type": "string"
             }
           },
           {
-            "name": "user",
             "in": "query",
+            "name": "user",
             "schema": {
-              "type": "array",
               "items": {
-                "type": "integer",
-                "format": "int64"
-              }
+                "format": "int64",
+                "type": "integer"
+              },
+              "type": "array"
             }
           }
         ],
@@ -4993,45 +4608,45 @@
       "get": {
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int64"
+              "format": "int64",
+              "type": "integer"
             }
           },
           {
-            "name": "range",
             "in": "query",
+            "name": "range",
             "schema": {
-              "type": "string",
               "enum": [
                 "7d",
                 "30d",
                 "90d",
                 "year",
                 "all"
-              ]
+              ],
+              "type": "string"
             }
           },
           {
+            "in": "query",
             "name": "agent",
-            "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
+            "in": "query",
             "name": "machine",
-            "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "user",
             "in": "query",
+            "name": "user",
             "schema": {
               "type": "string"
             }
@@ -5068,24 +4683,24 @@
       "put": {
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int64"
+              "format": "int64",
+              "type": "integer"
             }
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/Publication"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -5112,26 +4727,26 @@
       "get": {
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int64"
+              "format": "int64",
+              "type": "integer"
             }
           },
           {
-            "name": "range",
             "in": "query",
+            "name": "range",
             "schema": {
-              "type": "string",
               "enum": [
                 "7d",
                 "30d",
                 "90d",
                 "year",
                 "all"
-              ]
+              ],
+              "type": "string"
             }
           }
         ],
@@ -5167,8 +4782,8 @@
       "get": {
         "parameters": [
           {
-            "name": "public_id",
             "in": "path",
+            "name": "public_id",
             "required": true,
             "schema": {
               "type": "string"
@@ -5204,20 +4819,20 @@
       "get": {
         "parameters": [
           {
-            "name": "public_id",
             "in": "path",
+            "name": "public_id",
             "required": true,
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "before",
             "in": "query",
+            "name": "before",
             "required": true,
             "schema": {
-              "type": "integer",
-              "minimum": 0
+              "minimum": 0,
+              "type": "integer"
             }
           }
         ],
@@ -5250,25 +4865,25 @@
       "get": {
         "parameters": [
           {
-            "name": "username",
             "in": "path",
+            "name": "username",
             "required": true,
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "range",
             "in": "query",
+            "name": "range",
             "schema": {
-              "type": "string",
               "enum": [
                 "7d",
                 "30d",
                 "90d",
                 "year",
                 "all"
-              ]
+              ],
+              "type": "string"
             }
           }
         ],
@@ -5327,48 +4942,47 @@
       "get": {
         "parameters": [
           {
+            "in": "query",
             "name": "q",
-            "in": "query",
             "schema": {
-              "type": "string",
-              "maxLength": 200
+              "maxLength": 200,
+              "type": "string"
             }
           },
           {
+            "in": "query",
             "name": "project",
-            "in": "query",
             "schema": {
-              "type": "integer",
               "format": "int64",
-              "minimum": 1
+              "minimum": 1,
+              "type": "integer"
             }
           },
           {
+            "in": "query",
             "name": "agent",
-            "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
+            "in": "query",
             "name": "machine",
-            "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
+            "in": "query",
             "name": "user",
-            "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "grade",
             "in": "query",
+            "name": "grade",
             "schema": {
-              "type": "string",
               "enum": [
                 "A",
                 "B",
@@ -5376,113 +4990,114 @@
                 "D",
                 "F",
                 "unscored"
-              ]
+              ],
+              "type": "string"
             }
           },
           {
-            "name": "outcome",
             "in": "query",
+            "name": "outcome",
             "schema": {
-              "type": "string",
               "enum": [
                 "completed",
                 "abandoned",
                 "errored",
                 "unknown"
-              ]
+              ],
+              "type": "string"
             }
           },
           {
+            "in": "query",
             "name": "after",
-            "in": "query",
             "schema": {
-              "type": "integer",
               "format": "int64",
-              "minimum": 1
+              "minimum": 1,
+              "type": "integer"
             }
           },
           {
-            "name": "range",
             "in": "query",
+            "name": "range",
             "schema": {
-              "type": "string",
               "enum": [
                 "7d",
                 "30d",
                 "90d",
                 "year",
                 "all"
-              ]
+              ],
+              "type": "string"
             }
           },
           {
-            "name": "sort",
             "in": "query",
+            "name": "sort",
             "schema": {
-              "type": "string",
               "enum": [
                 "updated",
                 "messages",
                 "tokens",
                 "cost"
-              ]
+              ],
+              "type": "string"
             }
           },
           {
-            "name": "dir",
             "in": "query",
+            "name": "dir",
             "schema": {
-              "type": "string",
               "enum": [
                 "asc",
                 "desc"
-              ]
+              ],
+              "type": "string"
             }
           },
           {
+            "in": "query",
             "name": "empty",
-            "in": "query",
             "schema": {
-              "type": "string",
               "enum": [
                 "1"
-              ]
+              ],
+              "type": "string"
             }
           },
           {
+            "in": "query",
             "name": "subagents",
-            "in": "query",
             "schema": {
-              "type": "string",
               "enum": [
                 "1"
-              ]
+              ],
+              "type": "string"
             }
           },
           {
+            "in": "query",
             "name": "spanned",
-            "in": "query",
             "schema": {
-              "type": "string",
               "enum": [
                 "1"
-              ]
+              ],
+              "type": "string"
             }
           },
           {
+            "in": "query",
             "name": "limit",
-            "in": "query",
             "schema": {
-              "type": "integer",
-              "minimum": 1,
+              "default": 100,
               "maximum": 200,
-              "default": 100
+              "minimum": 1,
+              "type": "integer"
             }
           },
           {
-            "name": "after_value",
-            "in": "query",
             "description": "Observed sort value paired with after for stable keyset pagination.",
+            "in": "query",
+            "name": "after_value",
             "schema": {
               "type": "string"
             }
@@ -5516,12 +5131,12 @@
       "delete": {
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int64"
+              "format": "int64",
+              "type": "integer"
             }
           }
         ],
@@ -5551,12 +5166,12 @@
       "get": {
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int64"
+              "format": "int64",
+              "type": "integer"
             }
           }
         ],
@@ -5584,28 +5199,77 @@
         ]
       }
     },
+    "/api/v1/app/sessions/{id}/append": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Session snapshot fragment"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/ProjectionRebuilding"
+          }
+        },
+        "summary": "Read a session's turns past a rendered ordinal",
+        "tags": [
+          "Application"
+        ]
+      }
+    },
     "/api/v1/app/sessions/{id}/publication": {
       "put": {
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int64"
+              "format": "int64",
+              "type": "integer"
             }
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/Publication"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -5632,21 +5296,21 @@
       "get": {
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int64"
+              "format": "int64",
+              "type": "integer"
             }
           },
           {
-            "name": "before",
             "in": "query",
+            "name": "before",
             "required": true,
             "schema": {
-              "type": "integer",
-              "minimum": 0
+              "minimum": 0,
+              "type": "integer"
             }
           }
         ],
@@ -5674,14 +5338,14 @@
     "/api/v1/auth/login": {
       "post": {
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/Login"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -5728,14 +5392,14 @@
     "/api/v1/auth/register": {
       "post": {
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/Register"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "201": {
@@ -5766,25 +5430,25 @@
       "put": {
         "parameters": [
           {
-            "name": "sha256",
             "in": "path",
+            "name": "sha256",
             "required": true,
             "schema": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
             }
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/octet-stream": {
               "schema": {
-                "type": "string",
-                "format": "binary"
+                "format": "binary",
+                "type": "string"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "201": {
@@ -5816,14 +5480,14 @@
     "/api/v1/ingest/session": {
       "post": {
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/AnnounceSession"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -5846,25 +5510,25 @@
       "post": {
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int64"
+              "format": "int64",
+              "type": "integer"
             }
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/octet-stream": {
               "schema": {
-                "type": "string",
-                "format": "binary"
+                "format": "binary",
+                "type": "string"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -5881,12 +5545,12 @@
       "post": {
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int64"
+              "format": "int64",
+              "type": "integer"
             }
           }
         ],
@@ -5905,12 +5569,12 @@
       "post": {
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int64"
+              "format": "int64",
+              "type": "integer"
             }
           }
         ],
@@ -5928,14 +5592,14 @@
     "/api/v1/invites": {
       "post": {
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CreateInvite"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "201": {
@@ -6002,21 +5666,21 @@
       "get": {
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int64"
+              "format": "int64",
+              "type": "integer"
             }
           },
           {
-            "name": "sha256",
             "in": "path",
+            "name": "sha256",
             "required": true,
             "schema": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
             }
           }
         ],
@@ -6055,14 +5719,14 @@
       },
       "post": {
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CreateToken"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "201": {
@@ -6086,12 +5750,12 @@
       "post": {
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int64"
+              "format": "int64",
+              "type": "integer"
             }
           }
         ],
@@ -6128,55 +5792,6 @@
         "tags": [
           "Operations"
         ]
-      }
-    },
-    "/api/v1/app/sessions/{id}/append": {
-      "get": {
-        "tags": [
-          "Application"
-        ],
-        "summary": "Read a session's turns past a rendered ordinal",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          },
-          {
-            "name": "after",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 0
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Session snapshot fragment",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "503": {
-            "$ref": "#/components/responses/ProjectionRebuilding"
-          }
-        }
       }
     }
   },

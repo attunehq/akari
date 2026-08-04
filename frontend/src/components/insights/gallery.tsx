@@ -100,7 +100,7 @@ function GalleryChart({ trends }: { trends: Trends }) {
                       duration <b>{fmtDuration(p.DurationS)}</b>
                     </TooltipRow>
                     <TooltipRow>
-                      cost <b>{formatCost(p.CostUSD, p.CostIncomplete)}</b>
+                      cost <b>{formatCost(p.CostUSD)}</b>
                     </TooltipRow>
                     <TooltipRow>
                       grade <b>{p.Grade || "unscored"}</b>
@@ -127,7 +127,11 @@ export function SessionGalleryInstrument({ trends }: { trends: Trends }) {
         <h2 id="gallery-h">Session gallery</h2>
       </div>
       <div className="panel">
-        <GalleryChart trends={trends} />
+        <div className="overflow-x">
+          <div style={{ minWidth: 480 }}>
+            <GalleryChart trends={trends} />
+          </div>
+        </div>
         <Legend
           items={ARCHETYPE_ORDER.map((key) => ({
             color: archetypeColor(key),

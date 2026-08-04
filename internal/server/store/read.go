@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,20 +30,6 @@ type ProjectSummary struct {
 	// four classes the overview heatmap surfaces per day).
 	TotalCacheRead  int64
 	TotalCacheWrite int64
-	// CostIncomplete is true when any session folded into this project's totals
-	// carries an unpriced usage event, so the rolled-up cost is a lower bound. It
-	// is the OR of the per-session cost_incomplete flags, letting the index render
-	// the same "$X+" marker the per-session rows show instead of an exact figure
-	// that silently understates an aggregate built from incomplete sessions.
-	//
-	// Like every other figure on this index, it is rollup-scoped (every surviving
-	// usage row), so it can read true for a project whose only unpriced usage is
-	// undated while the all-time analytics panel, which drops undated rows off its
-	// time axis, reads exact. That is the one documented rollup-vs-analytics gap,
-	// the same one the token and cost totals carry (see, in package store's tests,
-	// TestUndatedUsageIsTheOnlyRollupAnalyticsGap): the flag tracks each surface's
-	// own displayed total rather than diverging from it.
-	CostIncomplete bool
 	// LastActivity is the most recent session activity in the project: max over its
 	// sessions' last_active_at (last-event time), not their updated_at write time,
 	// so a reparse of the project's sessions does not float it to the top of the
@@ -85,7 +72,6 @@ type SessionSummary struct {
 	TotalCacheWrite    int64
 	TotalCacheRead     int64
 	TotalCostUSD       float64
-	CostIncomplete     bool
 	Visibility         string
 	PublicID           *string
 	StartedAt          *time.Time
@@ -111,20 +97,24 @@ type SessionSummary struct {
 // per-model-priced rollup rides only the single-session read that needs it.
 type SessionDetail struct {
 	SessionSummary
-	OwnerID     int64
-	ProjectID   int64
-	ProjectKey  string
-	ProjectName string
-	ProjectKind string
-	Cwd         string
-	ParentID    *int64
+	OwnerID         int64
+	ProjectID       int64
+	ProjectKey      string
+	ProjectName     string
+	ProjectKind     string
+	Cwd             string
+	ParentID        *int64
+	Slug            string
+	PermissionMode  string
+	ReasoningEffort string
+	SubagentName    string
+	PRNumber        int
+	PRURL           string
+	PRRepo          string
 	// TotalCacheSavingsUSD is the session's rolled-up prompt-cache saving (folded by the
 	// rebuild beside total_cost_usd), so the Cache tile reads it in O(1) instead of
-	// scanning usage_events on every live refresh. CacheSavingsIncomplete flags that some
-	// cached volume rode an unpriced model, so the figure is partial (and, unlike cost,
-	// not a clean lower bound: an omitted model's saving can be either sign).
-	TotalCacheSavingsUSD   float64
-	CacheSavingsIncomplete bool
+	// scanning usage_events on every live refresh.
+	TotalCacheSavingsUSD float64
 }
 
 // Message is one transcript row for rendering. The prompt-hygiene facts (PromptShort,
@@ -184,15 +174,21 @@ type ToolCallView struct {
 	// FileRelPath is the worktree-relative form of FilePath (migration 0030), empty when the
 	// path sits outside the session's workspace or no cwd was known. The transcript shows it in
 	// preference to the absolute FilePath: the same repo file reads the same across worktrees.
-	FileRelPath     string
-	Detail          string
-	InputSHA        string
-	InputBytes      int64
-	InputMediaType  string
-	ResultSHA       string
-	ResultBytes     int64
-	ResultMediaType string
-	ResultStatus    string
+	FileRelPath       string
+	Detail            string
+	InputSHA          string
+	InputBytes        int64
+	InputMediaType    string
+	ResultSHA         string
+	ResultBytes       int64
+	ResultMediaType   string
+	ResultStatus      string
+	StructSHA256      string
+	StructBytes       int64
+	StructMediaType   string
+	AttributionAgent  string
+	AttributionSkill  string
+	AttributionPlugin string
 }
 
 // SessionFilter narrows a session list. Empty fields are ignored.
@@ -295,7 +291,7 @@ type SessionFilter struct {
 func (f SessionFilter) conds(sinceCol string) (conds []string, args []any) {
 	add := func(cond string, val any) {
 		args = append(args, val)
-		conds = append(conds, cond+" $"+itoa(len(args)))
+		conds = append(conds, cond+" $"+strconv.Itoa(len(args)))
 	}
 	if f.ProjectID != 0 {
 		add("s.project_id =", f.ProjectID)
@@ -317,17 +313,16 @@ func (f SessionFilter) conds(sinceCol string) (conds []string, args []any) {
 	}
 	if q := f.Query; q != "" {
 		args = append(args, likePattern(q))
-		conds = append(conds, "EXISTS (SELECT 1 FROM messages m WHERE m.session_id = s.id AND m.content ILIKE $"+itoa(len(args))+")")
+		conds = append(conds, "EXISTS (SELECT 1 FROM messages m WHERE m.session_id = s.id AND m.content ILIKE $"+strconv.Itoa(len(args))+")")
 	}
 	if !f.Since.IsZero() {
 		add(sinceCol+" >=", f.Since)
 	}
 	if f.RequireSpan {
-		// The exact predicate the concurrency sweep uses (spanFilter in
-		// analytics_concurrency.go): a parsed start and end and a non-negative duration.
-		// Kept in step by name so the busiest-user drill lists precisely the spanned
-		// cohort the panel counted. No placeholder: it is a plain column comparison.
-		conds = append(conds, "s.started_at IS NOT NULL AND s.ended_at IS NOT NULL AND s.ended_at >= s.started_at")
+		// The same predicate the concurrency sweep uses, so the busiest-user drill lists
+		// precisely the spanned cohort the panel counted. No placeholder: it is a plain
+		// column comparison.
+		conds = append(conds, spanFilter)
 	}
 	// Grade and outcome match the Insights distributions' definition exactly, so a
 	// drill-through from a panel bar opens precisely the sessions that bar counted
@@ -346,25 +341,25 @@ func (f SessionFilter) conds(sinceCol string) (conds []string, args []any) {
 	//     with a different outcome, folding the explicit 'unknown' row together with the
 	//     missing-row cases.
 	if g := f.Grade; g != "" {
-		gate := signalsCurrent()
+		gate := signalsCurrent
 		if g == "unscored" {
 			conds = append(conds, "NOT EXISTS (SELECT 1 FROM session_signals sig WHERE sig.session_id = s.id AND "+
 				gate+" AND sig.grade IS NOT NULL)")
 		} else {
 			args = append(args, g)
 			conds = append(conds, "EXISTS (SELECT 1 FROM session_signals sig WHERE sig.session_id = s.id AND "+
-				gate+" AND sig.grade = $"+itoa(len(args))+")")
+				gate+" AND sig.grade = $"+strconv.Itoa(len(args))+")")
 		}
 	}
 	if o := f.Outcome; o != "" {
-		gate := signalsCurrent()
+		gate := signalsCurrent
 		args = append(args, o)
 		if o == "unknown" {
 			conds = append(conds, "NOT EXISTS (SELECT 1 FROM session_signals sig WHERE sig.session_id = s.id AND "+
-				gate+" AND sig.outcome <> $"+itoa(len(args))+")")
+				gate+" AND sig.outcome <> $"+strconv.Itoa(len(args))+")")
 		} else {
 			conds = append(conds, "EXISTS (SELECT 1 FROM session_signals sig WHERE sig.session_id = s.id AND "+
-				gate+" AND sig.outcome = $"+itoa(len(args))+")")
+				gate+" AND sig.outcome = $"+strconv.Itoa(len(args))+")")
 		}
 	}
 	return conds, args
@@ -430,14 +425,6 @@ var sessionKeysetColumns = map[string]string{
 	"tokens":   "total_tokens",
 	"messages": "message_count",
 	"cost":     "total_cost_usd",
-}
-
-// IsSortKey reports whether key names a sortable column of the global session
-// list, so the handler can reject an unknown or tampered sort param before it
-// reaches the query builder.
-func IsSortKey(key string) bool {
-	_, ok := sessionSortColumns[key]
-	return ok
 }
 
 // resolvedSort returns the effective sort key and direction the query builder uses: the
@@ -525,7 +512,7 @@ func (f SessionFilter) keysetCond(firstArg int) (cond string, cargs []any, ok bo
 	if !desc {
 		op = ">"
 	}
-	idPH := "$" + itoa(firstArg)
+	idPH := "$" + strconv.Itoa(firstArg)
 	cargs = append(cargs, f.After)
 	// The value expression appears twice below but binds one slot, so the cursor value (or the
 	// subquery on the cursor id) is evaluated against the same boundary in both the col
@@ -533,7 +520,7 @@ func (f SessionFilter) keysetCond(firstArg int) (cond string, cargs []any, ok bo
 	valExpr := "(SELECT " + col + " FROM sessions WHERE id = " + idPH + ")"
 	if f.AfterVal != "" {
 		cargs = append(cargs, f.AfterVal)
-		valExpr = "$" + itoa(firstArg+1) + "::" + keysetColType[col]
+		valExpr = "$" + strconv.Itoa(firstArg+1) + "::" + keysetColType[col]
 	}
 	cond = fmt.Sprintf("(s.%s %s %s OR (s.%s = %s AND s.id %s %s))",
 		col, op, valExpr, col, valExpr, op, idPH)
@@ -553,7 +540,7 @@ type SessionRow struct {
 	// row, nil when the session is unscored or has not settled yet. Outcome is that
 	// row's outcome (completed / abandoned / errored / unknown), empty when no current
 	// row exists. Both come from a LEFT JOIN in globalSessionSelect gated by
-	// signalsCurrent(), so a feed row's grade and outcome match the drill filters and
+	// signalsCurrent, so a feed row's grade and outcome match the drill filters and
 	// the Insights panels rather than reading a stale verdict.
 	Grade   *string
 	Outcome string
@@ -604,7 +591,6 @@ func (s *Store) ListProjects(ctx context.Context) ([]ProjectSummary, error) {
 		        coalesce(sum(s.total_output_tokens), 0),
 		        coalesce(sum(s.total_cache_read_tokens), 0),
 		        coalesce(sum(s.total_cache_write_tokens), 0),
-		        coalesce(bool_or(s.cost_incomplete), false),
 		        max(s.last_active_at)
 		   FROM projects p
 		   LEFT JOIN sessions s ON s.project_id = p.id
@@ -614,12 +600,12 @@ func (s *Store) ListProjects(ctx context.Context) ([]ProjectSummary, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []ProjectSummary
+	out := []ProjectSummary{}
 	for rows.Next() {
 		var p ProjectSummary
 		if err := rows.Scan(&p.ID, &p.RemoteKey, &p.Host, &p.Owner, &p.Repo, &p.DisplayName, &p.Kind, &p.OverviewPublic,
 			&p.SessionCount, &p.TotalCostUSD, &p.TotalInput, &p.TotalOutput,
-			&p.TotalCacheRead, &p.TotalCacheWrite, &p.CostIncomplete, &p.LastActivity); err != nil {
+			&p.TotalCacheRead, &p.TotalCacheWrite, &p.LastActivity); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -647,7 +633,7 @@ const sessionSelect = `
 	       s.message_count, s.user_message_count, s.model_fallback_count,
 	       s.total_input_tokens, s.total_output_tokens,
 	       s.total_cache_write_tokens, s.total_cache_read_tokens,
-	       s.total_cost_usd, s.cost_incomplete, s.visibility, s.public_id,
+	       s.total_cost_usd, s.visibility, s.public_id,
 	       s.started_at, s.ended_at, s.last_active_at
 	  FROM sessions s
 	  JOIN users u ON u.id = s.user_id`
@@ -678,10 +664,12 @@ const titleCap = 240
 // harness boilerplate. The strip is anchored and non-greedy so it removes exactly the
 // leading caveat and nothing past its close; a message without one is unchanged.
 var titleLateralSQL = `LEFT JOIN LATERAL (
-	         SELECT left(regexp_replace(m.content, '^\s*<local-command-caveat>.*?</local-command-caveat>\s*', ''), ` + itoa(titleCap) + `) AS content
-	           FROM messages m
-	          WHERE m.session_id = s.id AND m.role = 'user'
-	          ORDER BY m.ordinal LIMIT 1
+	         SELECT coalesce(nullif(s.custom_title, ''), (
+	                  SELECT left(regexp_replace(m.content, '^\s*<local-command-caveat>.*?</local-command-caveat>\s*', ''), ` + strconv.Itoa(titleCap) + `)
+	                    FROM messages m
+	                   WHERE m.session_id = s.id AND m.role = 'user'
+	                   ORDER BY m.ordinal LIMIT 1
+	                )) AS content
 	       ) title ON true`
 
 // snippetSQLWindowRadius and snippetSQLWindowLen bound the matching-message content
@@ -731,12 +719,8 @@ const messageReadColumns = `m.ordinal, m.role, m.content, m.thinking_text, m.mod
 //     cost. It is maintained at insert (projection.go) as each surviving usage row lands, so this
 //     read joins one indexed row per message rather than scanning and grouping usage_events. The
 //     context occupancy (input + cache read + cache write, output excluded) is computed here from
-//     the joined sums. cost_count (the number of priced rows folded into the turn) rides along so
-//     the scan can apply the all-unpriced-is-nil rule (a turn with no priced row reads nil cost, not
-//     a summed zero that would misread as free; a mixed turn keeps its priced partial), and
-//     cost_incomplete flags a turn that folded a token-bearing but unpriced row so the priced cost
-//     reads as a lower bound. That cost_incomplete rule mirrors costIncompleteExpr (analytics.go),
-//     so a turn's "$X+" marker and the session and analytics cost markers agree. Only turn-attributed
+//     the joined sums. Unknown model prices are already stored as zero, so the cost is one scalar.
+//     Only turn-attributed
 //     usage contributes to the rollup: a NULL-ordinal usage row belongs to the session totals, not
 //     to any one message, so it is never folded here (projection.go skips it). This is the deliberate
 //     divergence from the stored context signal (gatherContextHealth), which folds every raw
@@ -763,7 +747,7 @@ const messagesFullSelect = `
 	       coalesce(mtu.input_tokens,0), coalesce(mtu.output_tokens,0), coalesce(mtu.cache_read_tokens,0), coalesce(mtu.cache_write_tokens,0),
 	       coalesce(mtu.reasoning_tokens,0),
 	       coalesce(mtu.input_tokens,0) + coalesce(mtu.cache_read_tokens,0) + coalesce(mtu.cache_write_tokens,0),
-	       mtu.cost_sum, coalesce(mtu.cost_count,0), coalesce(mtu.cost_incomplete, false)
+	       coalesce(mtu.cost_sum, 0)
 	  FROM messages m
 	  LEFT JOIN message_turn_usage mtu ON mtu.session_id = m.session_id AND mtu.message_ordinal = m.ordinal
 	 WHERE m.session_id = $1`
@@ -779,7 +763,7 @@ const messagesFullQuery = messagesFullSelect + `
 // caller's window args start at $2.
 const messagesWindowQuery = `
 	SELECT ` + messageReadColumns + `,
-	       false, 0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::bigint, NULL::double precision, 0::bigint, false
+	       false, 0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::double precision
 	  FROM messages m
 	 WHERE m.session_id = $1`
 
@@ -790,18 +774,3 @@ const messagesWindowQuery = `
 // up a tooltip, a transcript-notice map, or an MCP payload). Callers pass this to
 // SessionModelFallbacks and lean on the count for the true total.
 const ModelFallbackListCap = 100
-
-// itoa avoids strconv noise in query building.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(b[i:])
-}

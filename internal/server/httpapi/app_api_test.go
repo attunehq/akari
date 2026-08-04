@@ -48,18 +48,16 @@ func doJSON(t *testing.T, client *http.Client, method, url string, body any) (*h
 
 func errorsIsEOF(err error) bool { return err == io.EOF }
 
-func TestHomepageStaysTemplatedWhileApplicationRoutesServeReact(t *testing.T) {
+func TestHomepageRedirectsWhileApplicationRoutesServeReact(t *testing.T) {
 	t.Parallel()
 	server, _ := newTestServer(t)
 
-	home := readBody(t, mustGet(t, http.DefaultClient, server.URL+"/"))
-	if !strings.Contains(home, "Know what your agents actually did") {
-		t.Fatal("root no longer renders the templated homepage")
-	}
-	for _, unwanted := range []string{"/app-assets/", "htmx", "charts.js", "app.js"} {
-		if strings.Contains(home, unwanted) {
-			t.Fatalf("templated homepage ships application runtime %q", unwanted)
-		}
+	client := newClient(t)
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	home := mustGet(t, client, server.URL+"/")
+	home.Body.Close()
+	if home.StatusCode != http.StatusPermanentRedirect || home.Header.Get("Location") != web.ProductSiteURL+"/" {
+		t.Fatalf("GET / = %d Location %q, want 308 to product site", home.StatusCode, home.Header.Get("Location"))
 	}
 
 	login := readBody(t, mustGet(t, http.DefaultClient, server.URL+"/login"))
@@ -191,7 +189,7 @@ func TestPublicProjectAPIOmitsUserBreakdown(t *testing.T) {
 		},
 		Usage: []store.ProjUsage{{
 			MessageOrdinal: &ordinal, Model: "claude-fable-5",
-			Input: 100, Output: 50, CostUSD: &cost,
+			Input: 100, Output: 50, CostUSD: cost,
 			OccurredAt: time.Now().UTC(), DedupKey: "public-users-split-0",
 		}},
 	})
@@ -258,6 +256,32 @@ func TestPublicationAPIsRequireExplicitState(t *testing.T) {
 		if response.StatusCode != http.StatusBadRequest || body["error"] != "published is required" {
 			t.Errorf("PUT %s: status=%d body=%v", path, response.StatusCode, body)
 		}
+	}
+}
+
+func TestAccountAPIListsRepositoryPublicationControls(t *testing.T) {
+	t.Parallel()
+	server, st := newTestServer(t)
+	client := registerAdmin(t, server.URL)
+	remoteID, err := st.UpsertProject(t.Context(), "github.com/jssblck/akari", "github.com", "jssblck", "akari", "akari", "remote")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertProject(t.Context(), "local:grace:C:/work/scratch", "grace", "", "", "scratch", "standalone"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PublishProjectOverview(t.Context(), remoteID); err != nil {
+		t.Fatal(err)
+	}
+
+	response, account := doJSON(t, client, http.MethodGet, server.URL+"/api/v1/app/account", nil)
+	projects, ok := account["projects"].([]any)
+	if response.StatusCode != http.StatusOK || !ok || len(projects) != 1 {
+		t.Fatalf("account projects: status=%d projects=%v body=%v", response.StatusCode, projects, account)
+	}
+	project, ok := projects[0].(map[string]any)
+	if !ok || project["id"] != float64(remoteID) || project["name"] != "akari" || project["published"] != true {
+		t.Fatalf("account project = %#v, want published akari project %d", projects[0], remoteID)
 	}
 }
 

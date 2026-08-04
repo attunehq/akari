@@ -7,14 +7,26 @@
 // the TranscriptWalker in internal/server/web/session_metrics.go.
 import {
   forwardRef,
+  memo,
   useEffect,
   useImperativeHandle,
   useMemo,
   useState,
 } from "react";
+import Markdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import { formatCost, formatCount, formatTime, formatTokens } from "../format";
-import type { Attachment, Message, ToolCall, TranscriptPage } from "../types";
+import type {
+  Attachment,
+  Message,
+  ModelFallback,
+  SessionEvent,
+  ToolCall,
+  TranscriptPage,
+  TurnUsage,
+} from "../types";
+import { SessionEventNotice } from "./session-event-notice";
 import {
   contextLabel,
   contextStamp,
@@ -30,20 +42,14 @@ import {
   turnLatency,
   turnTokenTotal,
 } from "./session-quality";
-import {
-  asFallbacks,
-  asFullMessage,
-  type ModelFallback,
-  type TurnUsageFull,
-} from "./session-types";
 import { HoverTip } from "./token-card";
 import { openToolInspector, ToolInspectorModal } from "./tool-inspector";
 
 type ShedMark = {
   fromTokens: number;
   toTokens: number;
-  fromUsage: TurnUsageFull;
-  toUsage: TurnUsageFull;
+  fromUsage: TurnUsage;
+  toUsage: TurnUsage;
 };
 type MsgMetrics = { latency: number; shed: ShedMark | null };
 
@@ -57,7 +63,7 @@ function walkMetrics(
 ): Map<number, MsgMetrics> {
   let anchor: Date | null = null;
   let prevContext = 0;
-  let prevUsage: TurnUsageFull | null = null;
+  let prevUsage: TurnUsage | null = null;
   let havePrev = false;
   const out = new Map<number, MsgMetrics>();
 
@@ -71,7 +77,7 @@ function walkMetrics(
       if (d >= 0) latency = d;
     }
     let shed: ShedMark | null = null;
-    const usage = asFullMessage(m).Usage;
+    const usage = m.Usage;
     if (usage) {
       if (
         havePrev &&
@@ -118,6 +124,14 @@ function fallbacksByOrdinal(fbs: ModelFallback[]): Map<number, ModelFallback> {
   return out;
 }
 
+function eventsByOrdinal(events: SessionEvent[]): Map<number, SessionEvent[]> {
+  const anchored = events.filter(
+    (event): event is SessionEvent & { MessageOrdinal: number } =>
+      event.MessageOrdinal !== null,
+  );
+  return groupByOrdinal(anchored);
+}
+
 function isImageMedia(mediaType: string): boolean {
   return mediaType.startsWith("image/");
 }
@@ -137,6 +151,44 @@ function formatBytes(n: number): string {
   if (n >= 1 << 10) return `${(n / (1 << 10)).toFixed(1)} KB`;
   return `${n} B`;
 }
+
+const HTTP_LINK = /^https?:\/\//i;
+
+// An agent can write anything into a link target, including a path or scheme
+// that only makes sense on the machine it ran on. Only http(s) targets become
+// a real, safely-attributed hyperlink; everything else renders as plain text
+// so transcript markdown can never turn into a silent navigation.
+const assistantMarkdownComponents: Components = {
+  a: ({ href, children }) =>
+    href && HTTP_LINK.test(href) ? (
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    ) : (
+      children
+    ),
+};
+
+// Re-parsing markdown on every transcript re-render (loading earlier history,
+// opening the tool inspector, a hover popover elsewhere on the page) would
+// make a long session sluggish, so this only re-renders when its own message
+// text changes.
+const AssistantContent = memo(function AssistantContent({
+  content,
+}: {
+  content: string;
+}) {
+  return (
+    <div className="content prose">
+      <Markdown
+        remarkPlugins={[remarkGfm]}
+        components={assistantMarkdownComponents}
+      >
+        {content}
+      </Markdown>
+    </div>
+  );
+});
 
 // TranscriptHandle is the imperative surface the session detail page uses to
 // splice a live SSE append into an already-loaded transcript. A normal prop
@@ -174,22 +226,20 @@ export const Transcript = forwardRef<
     ref,
     () => ({
       lastOrdinal: () => {
-        const msgs = page.Msgs ?? [];
+        const msgs = page.Msgs;
         return msgs.length > 0
           ? (msgs[msgs.length - 1]?.Ordinal ?? null)
           : null;
       },
       appendPage: (fragment) => {
-        if ((fragment.Msgs ?? []).length === 0) return;
+        if (fragment.Msgs.length === 0) return;
         setPage((cur) => ({
           ...cur,
-          Msgs: [...(cur.Msgs ?? []), ...(fragment.Msgs ?? [])],
-          Tools: [...(cur.Tools ?? []), ...(fragment.Tools ?? [])],
-          Attachments: [
-            ...(cur.Attachments ?? []),
-            ...(fragment.Attachments ?? []),
-          ],
-          Fallbacks: [...(cur.Fallbacks ?? []), ...(fragment.Fallbacks ?? [])],
+          Msgs: [...cur.Msgs, ...fragment.Msgs],
+          Tools: [...cur.Tools, ...fragment.Tools],
+          Attachments: [...cur.Attachments, ...fragment.Attachments],
+          Events: fragment.Events ?? cur.Events,
+          Fallbacks: [...cur.Fallbacks, ...fragment.Fallbacks],
         }));
       },
     }),
@@ -197,19 +247,20 @@ export const Transcript = forwardRef<
   );
 
   const toolsByOrdinal = useMemo(
-    () => groupByOrdinal(page.Tools ?? []),
+    () => groupByOrdinal(page.Tools),
     [page.Tools],
   );
   const attachmentsByOrdinal = useMemo(
-    () => groupByOrdinal(page.Attachments ?? []),
+    () => groupByOrdinal(page.Attachments),
     [page.Attachments],
   );
   const fallbacks = useMemo(
-    () => fallbacksByOrdinal(asFallbacks(page.Fallbacks)),
+    () => fallbacksByOrdinal(page.Fallbacks),
     [page.Fallbacks],
   );
+  const events = useMemo(() => eventsByOrdinal(page.Events), [page.Events]);
   const metrics = useMemo(
-    () => walkMetrics(page.Seed ?? [], page.Msgs ?? []),
+    () => walkMetrics(page.Seed, page.Msgs),
     [page.Seed, page.Msgs],
   );
 
@@ -237,17 +288,12 @@ export const Transcript = forwardRef<
               const earlier = await loadEarlier(page.Msgs?.[0]?.Ordinal ?? 0);
               setPage((cur) => ({
                 ...cur,
-                Msgs: [...(earlier.Msgs ?? []), ...(cur.Msgs ?? [])],
-                Seed: earlier.Seed ?? [],
-                Tools: [...(earlier.Tools ?? []), ...(cur.Tools ?? [])],
-                Attachments: [
-                  ...(earlier.Attachments ?? []),
-                  ...(cur.Attachments ?? []),
-                ],
-                Fallbacks: [
-                  ...(earlier.Fallbacks ?? []),
-                  ...(cur.Fallbacks ?? []),
-                ],
+                Msgs: [...earlier.Msgs, ...cur.Msgs],
+                Seed: earlier.Seed,
+                Tools: [...earlier.Tools, ...cur.Tools],
+                Attachments: [...earlier.Attachments, ...cur.Attachments],
+                Events: earlier.Events ?? cur.Events,
+                Fallbacks: [...earlier.Fallbacks, ...cur.Fallbacks],
                 HasEarlier: earlier.HasEarlier,
                 EarlierCount: earlier.EarlierCount,
               }));
@@ -275,16 +321,17 @@ export const Transcript = forwardRef<
           {loadError}
         </p>
       ) : null}
-      {(page.Msgs ?? []).length === 0 ? (
+      {page.Msgs.length === 0 ? (
         <div className="empty">No messages parsed yet.</div>
       ) : (
-        (page.Msgs ?? []).map((message) => (
+        page.Msgs.map((message) => (
           <MessageRow
             key={message.Ordinal}
             message={message}
             metrics={metrics.get(message.Ordinal) ?? { latency: 0, shed: null }}
             tools={toolsByOrdinal.get(message.Ordinal) ?? []}
             attachments={attachmentsByOrdinal.get(message.Ordinal) ?? []}
+            events={events.get(message.Ordinal) ?? []}
             fallback={fallbacks.get(message.Ordinal)}
             agent={agent}
             blobBase={blobBase}
@@ -300,6 +347,7 @@ function MessageRow({
   metrics,
   tools,
   attachments,
+  events,
   fallback,
   agent,
   blobBase,
@@ -308,20 +356,26 @@ function MessageRow({
   metrics: MsgMetrics;
   tools: ToolCall[];
   attachments: Attachment[];
+  events: SessionEvent[];
   fallback: ModelFallback | undefined;
   agent: string;
   blobBase: string;
 }) {
-  const full = asFullMessage(message);
   return (
     <>
       {metrics.shed ? <ShedDivider shed={metrics.shed} /> : null}
+      {events.map((event) => (
+        <SessionEventNotice
+          key={`${event.Kind}-${event.OccurredAt}-${JSON.stringify(event.Attrs)}`}
+          event={event}
+        />
+      ))}
       {fallback ? <FallbackNotice fallback={fallback} /> : null}
-      {message.Role === "context" ? (
+      {message.Role === "context" || message.Role === "system" ? (
         <ContextTurn message={message} />
       ) : (
         <MessageTurn
-          message={full}
+          message={message}
           metrics={metrics}
           tools={tools}
           attachments={attachments}
@@ -341,9 +395,9 @@ function ContextTurn({ message }: { message: Message }) {
       data-ordinal={message.Ordinal}
     >
       <summary className="context-summary">
-        <span className="role">context</span>
+        <span className="role">{message.Role}</span>
         <span className="tag context-kind">
-          {contextLabel(message.Content)}
+          {contextLabel(message.Content, message.Role)}
         </span>
         <span className="spacer" />
         <span className="muted small">{formatTime(message.Timestamp)}</span>
@@ -363,7 +417,7 @@ function MessageTurn({
   agent,
   blobBase,
 }: {
-  message: ReturnType<typeof asFullMessage>;
+  message: Message;
   metrics: MsgMetrics;
   tools: ToolCall[];
   attachments: Attachment[];
@@ -439,10 +493,7 @@ function MessageTurn({
                   {message.Usage.CostUSD !== null &&
                   message.Usage.CostUSD !== undefined ? (
                     <span className="stamp-cost mono">
-                      {formatCost(
-                        message.Usage.CostUSD,
-                        message.Usage.CostIncomplete,
-                      )}
+                      {formatCost(message.Usage.CostUSD)}
                     </span>
                   ) : null}
                 </>
@@ -454,7 +505,23 @@ function MessageTurn({
         </span>
         <time className="muted small">{formatTime(message.Timestamp)}</time>
       </div>
-      {band ? (
+      {message.HasThinking && message.ThinkingText ? (
+        <details className="thinking">
+          <summary>
+            <span className="thinking-summary-label">
+              Thinking{band ? ` (${thinkingBucketLabel(band)})` : ""}
+            </span>
+            <span
+              className="thinking-summary-hint muted small"
+              aria-hidden="true"
+            />
+          </summary>
+          <div className="thinking-body">{message.ThinkingText}</div>
+        </details>
+      ) : band ? (
+        // A redacted-thinking turn (the model reasoned but reported no text)
+        // has no disclosure to fold the level into, so it keeps the standalone
+        // badge as the only surface for that fact.
         <div
           className={`thinking-band band-${band}`}
           title="observed deliberation on this turn, on an absolute token scale (exact where the agent reports it, else estimated from the reasoning trace)"
@@ -465,14 +532,12 @@ function MessageTurn({
           </span>
         </div>
       ) : null}
-      {message.HasThinking && message.ThinkingText ? (
-        <details className="thinking">
-          <summary>Thinking</summary>
-          <div className="thinking-body">{message.ThinkingText}</div>
-        </details>
-      ) : null}
       {message.Content ? (
-        <div className="content">{message.Content}</div>
+        message.Role === "assistant" ? (
+          <AssistantContent content={message.Content} />
+        ) : (
+          <div className="content">{message.Content}</div>
+        )
       ) : null}
       {attachments.length > 0 ? (
         <div className="attachments">
@@ -496,7 +561,7 @@ function MessageTurn({
   );
 }
 
-function TurnCard({ usage }: { usage: TurnUsageFull }) {
+function TurnCard({ usage }: { usage: TurnUsage }) {
   return (
     <>
       <span className="tt-total">
@@ -551,7 +616,7 @@ function UsageGrid({
   label,
   className,
 }: {
-  usage: TurnUsageFull;
+  usage: TurnUsage;
   label: string;
   className?: string;
 }) {

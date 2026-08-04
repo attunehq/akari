@@ -8,6 +8,7 @@ import (
 
 	"github.com/jssblck/akari/internal/config"
 	"github.com/jssblck/akari/internal/server/store"
+	"github.com/jssblck/akari/migrations"
 )
 
 // runBackgroundSweep reclaims orphaned CAS blobs on a fixed interval until the
@@ -50,7 +51,7 @@ func runSweep(args []string) error {
 	}
 	defer st.Close()
 
-	if err := migrateStore(ctx, st); err != nil {
+	if err := st.Migrate(ctx, migrations.FS); err != nil {
 		return err
 	}
 

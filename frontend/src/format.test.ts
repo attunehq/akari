@@ -7,28 +7,24 @@ describe("formatCost", () => {
     expect(formatCost(0.0042)).toBe("$0.0042");
   });
 
-  it("appends + for an incomplete sub-cent cost", () => {
-    expect(formatCost(0.0042, true)).toBe("$0.0042+");
-  });
-
   it("does not take the sub-cent path at exactly zero", () => {
     expect(formatCost(0)).toBe("$0.00");
-  });
-
-  it("appends + for an incomplete cost at normal magnitude", () => {
-    expect(formatCost(1.5, true)).toBe("$1.50+");
   });
 
   it("uses two decimal digits under $10", () => {
     expect(formatCost(1.5)).toBe("$1.50");
   });
 
-  it("uses one decimal digit from $10 up to $100", () => {
-    expect(formatCost(12.34)).toBe("$12.3");
+  it("keeps two decimal digits from $10 up to $100", () => {
+    expect(formatCost(12.34)).toBe("$12.34");
   });
 
-  it("uses zero decimal digits at $100 and above", () => {
-    expect(formatCost(123.4)).toBe("$123");
+  it("keeps two decimal digits at $100 and above", () => {
+    expect(formatCost(123.4)).toBe("$123.40");
+  });
+
+  it("keeps two decimal digits into the thousands", () => {
+    expect(formatCost(5925)).toBe("$5,925.00");
   });
 });
 

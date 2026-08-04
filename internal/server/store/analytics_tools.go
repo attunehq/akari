@@ -128,7 +128,7 @@ func (s *Store) ToolStats(ctx context.Context, f AnalyticsFilter) (ToolStats, er
 // scalar subqueries over agg. agg is referenced several times, which makes Postgres materialize it
 // once, so the grouping runs a single time.
 func (s *Store) toolStatsFrom(ctx context.Context, q querier, f AnalyticsFilter) (ToolStats, error) {
-	var ts ToolStats
+	ts := ToolStats{Tools: []ToolStat{}}
 
 	filter, args := f.clauseFor("s.started_at")
 	limitArg := fmt.Sprintf("$%d", len(args)+1)

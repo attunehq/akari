@@ -27,10 +27,11 @@ type ConcurrencyStats struct {
 // show an empty state rather than a peak of zero.
 func (c ConcurrencyStats) HasData() bool { return c.Sessions > 0 }
 
-// spanFilter is the shared predicate that keeps the sweep honest: a session counts
-// toward concurrency only with a parsed start and end and a non-negative duration. It
-// sits at the front of every concurrency CTE so the three queries measure the same set.
-const spanFilter = " s.started_at IS NOT NULL AND s.ended_at IS NOT NULL AND s.ended_at >= s.started_at"
+// spanFilter is the shared predicate that keeps every span-based read honest: a
+// session counts only with a parsed start and end and a non-negative duration. The
+// concurrency CTEs, the wall-span and gallery trends, and the busiest-user drill all
+// splice it, so they measure the same cohort by construction rather than by comment.
+const spanFilter = "s.started_at IS NOT NULL AND s.ended_at IS NOT NULL AND s.ended_at >= s.started_at"
 
 // ConcurrencyStats computes the scope's overlap figures for the Insights page. Fleet peak, busiest
 // user, and the average plus session count are three separate reads over the same span set, so it
@@ -71,7 +72,7 @@ func (s *Store) concurrencyStatsFrom(ctx context.Context, q querier, f Analytics
 	err := q.QueryRow(ctx,
 		`WITH spans AS (
 		   SELECT s.started_at AS a, s.ended_at AS b
-		     FROM sessions s WHERE`+spanFilter+filter+`
+		     FROM sessions s WHERE `+spanFilter+filter+`
 		 ),
 		 ev AS (
 		   SELECT a AS t, 1 AS d FROM spans
@@ -96,7 +97,7 @@ func (s *Store) concurrencyStatsFrom(ctx context.Context, q querier, f Analytics
 	err = q.QueryRow(ctx,
 		`WITH spans AS (
 		   SELECT s.user_id AS u, s.started_at AS a, s.ended_at AS b
-		     FROM sessions s WHERE`+spanFilter+filter+`
+		     FROM sessions s WHERE `+spanFilter+filter+`
 		 ),
 		 ev AS (
 		   SELECT u, a AS t, 1 AS d FROM spans
@@ -127,7 +128,7 @@ func (s *Store) concurrencyStatsFrom(ctx context.Context, q querier, f Analytics
 		`SELECT count(*),
 		        coalesce(sum(extract(epoch FROM (s.ended_at - s.started_at))), 0),
 		        min(s.started_at), max(s.ended_at)
-		   FROM sessions s WHERE`+spanFilter+filter, args...).Scan(&cs.Sessions, &sumSecs, &minStart, &maxEnd); err != nil {
+		   FROM sessions s WHERE `+spanFilter+filter, args...).Scan(&cs.Sessions, &sumSecs, &minStart, &maxEnd); err != nil {
 		return ConcurrencyStats{}, fmt.Errorf("concurrency span aggregate: %w", err)
 	}
 	if minStart != nil && maxEnd != nil {

@@ -3,7 +3,6 @@ package httpapi
 import (
 	"time"
 
-	"github.com/jssblck/akari/internal/guide"
 	"github.com/jssblck/akari/internal/server/parse"
 	"github.com/jssblck/akari/internal/server/store"
 	"github.com/jssblck/akari/internal/server/web"
@@ -80,11 +79,19 @@ type transcriptResponse struct {
 }
 
 type accountResponse struct {
-	User        appViewer          `json:"user"`
-	Tokens      []accountTokenDTO  `json:"tokens"`
-	Connections []oauthGrantDTO    `json:"connections"`
-	Invites     []accountInviteDTO `json:"invites"`
-	Reparse     parse.Status       `json:"reparse"`
+	User        appViewer           `json:"user"`
+	Projects    []accountProjectDTO `json:"projects"`
+	Tokens      []accountTokenDTO   `json:"tokens"`
+	Connections []oauthGrantDTO     `json:"connections"`
+	Invites     []accountInviteDTO  `json:"invites"`
+	Reparse     parse.Status        `json:"reparse"`
+}
+
+type accountProjectDTO struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	RemoteKey string `json:"remote_key"`
+	Published bool   `json:"published"`
 }
 
 type accountTokenDTO struct {
@@ -112,17 +119,6 @@ type accountInviteDTO struct {
 	ExpiresAt  *time.Time `json:"ExpiresAt"`
 	RedeemedBy *string    `json:"RedeemedBy"`
 	RedeemedAt *time.Time `json:"RedeemedAt"`
-}
-
-type guideResponse struct {
-	Slug        string          `json:"slug"`
-	Title       string          `json:"title"`
-	Summary     string          `json:"summary"`
-	RawMarkdown string          `json:"raw_markdown"`
-	Headings    []guide.Heading `json:"headings"`
-	RawPath     string          `json:"raw_path"`
-	GitHubURL   string          `json:"github_url"`
-	Chapters    []guide.Chapter `json:"chapters"`
 }
 
 type publicOverviewResponse struct {
@@ -254,6 +250,20 @@ func accountTokenDTOs(tokens []store.APIToken) []accountTokenDTO {
 		out[i] = accountTokenDTO{
 			ID: token.ID, Name: token.Name, Scope: token.Scope,
 			CreatedAt: token.CreatedAt, LastUsedAt: token.LastUsedAt, RevokedAt: token.RevokedAt,
+		}
+	}
+	return out
+}
+
+func accountProjectDTOs(projects []store.ProjectPublication) []accountProjectDTO {
+	out := make([]accountProjectDTO, len(projects))
+	for i, project := range projects {
+		name := project.DisplayName
+		if name == "" {
+			name = project.RemoteKey
+		}
+		out[i] = accountProjectDTO{
+			ID: project.ID, Name: name, RemoteKey: project.RemoteKey, Published: project.OverviewPublic,
 		}
 	}
 	return out

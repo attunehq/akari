@@ -2,9 +2,11 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -50,6 +52,7 @@ type TranscriptPage struct {
 	Tools       []ToolCallView
 	Attachments []AttachmentView
 	Fallbacks   []ModelFallback
+	Events      []SessionEvent
 	// HasEarlier reports whether any rows precede the window, so the renderer knows to
 	// draw the "Show earlier" bar. EarlierCount is how many (for the bar's label).
 	HasEarlier   bool
@@ -59,6 +62,51 @@ type TranscriptPage struct {
 	// behind for an append to reconcile, and the handler should re-render the window
 	// whole instead of leaving a gap in the DOM.
 	More bool
+}
+
+// SessionEvent is one notable transcript occurrence. Attrs stays raw JSON so
+// event-specific fields cross the store boundary without a second schema.
+type SessionEvent struct {
+	MessageOrdinal *int64
+	Kind           string
+	Attrs          json.RawMessage
+	OccurredAt     time.Time
+}
+
+// SessionEvents returns the first bounded event set in transcript order.
+func (s *Store) SessionEvents(ctx context.Context, sessionID int64, limit int) ([]SessionEvent, error) {
+	return s.scanSessionEvents(ctx, s.Pool, sessionID, limit)
+}
+
+func (s *Store) scanSessionEvents(ctx context.Context, q querier, sessionID int64, limit int) ([]SessionEvent, error) {
+	if limit <= 0 || limit > ModelFallbackListCap {
+		limit = ModelFallbackListCap
+	}
+	rows, err := q.Query(ctx,
+		`SELECT message_ordinal, kind, attrs, occurred_at
+		   FROM session_events WHERE session_id = $1 ORDER BY seq LIMIT $2`, sessionID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query events for session %d: %w", sessionID, err)
+	}
+	defer rows.Close()
+	out := []SessionEvent{}
+	for rows.Next() {
+		var event SessionEvent
+		var attrs []byte
+		var occurredAt *time.Time
+		if err := rows.Scan(&event.MessageOrdinal, &event.Kind, &attrs, &occurredAt); err != nil {
+			return nil, fmt.Errorf("scan event for session %d: %w", sessionID, err)
+		}
+		event.Attrs = json.RawMessage(attrs)
+		if occurredAt != nil {
+			event.OccurredAt = *occurredAt
+		}
+		out = append(out, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate events for session %d: %w", sessionID, err)
+	}
+	return out, nil
 }
 
 // snapshotTx runs fn inside a repeatable-read, read-only transaction, so the several
@@ -77,7 +125,7 @@ func (s *Store) snapshotTx(ctx context.Context, fn func(tx pgx.Tx) error) error 
 // boundary (a user message) whenever one exists within the cap; a session with fewer
 // turns than the window simply starts at its beginning.
 func (s *Store) TranscriptTail(ctx context.Context, sessionID int64, before *int) (TranscriptPage, error) {
-	var page TranscriptPage
+	page := newTranscriptPage()
 	err := s.snapshotTx(ctx, func(tx pgx.Tx) error {
 		var err error
 		page, err = s.transcriptTail(ctx, tx, sessionID, before)
@@ -93,7 +141,7 @@ func (s *Store) TranscriptTail(ctx context.Context, sessionID int64, before *int
 // snapshot reads can pin the window to the same MVCC snapshot as the audit and shape
 // rows beside it.
 func (s *Store) transcriptTail(ctx context.Context, tx pgx.Tx, sessionID int64, before *int) (TranscriptPage, error) {
-	var page TranscriptPage
+	page := newTranscriptPage()
 	// The window's start: the TranscriptTailTurns-th user message counting back from
 	// the window's end. Walks the (session_id, ordinal) primary key backward; no row
 	// means the session has fewer turns than the window, so start at the beginning.
@@ -134,7 +182,7 @@ func (s *Store) transcriptTail(ctx context.Context, tx pgx.Tx, sessionID int64, 
 // the cap, More is set and the caller should fall back to a whole-window re-render
 // rather than append a fragment with a gap after it.
 func (s *Store) TranscriptAfter(ctx context.Context, sessionID int64, after int) (TranscriptPage, error) {
-	var page TranscriptPage
+	page := newTranscriptPage()
 	err := s.snapshotTx(ctx, func(tx pgx.Tx) error {
 		var err error
 		page, err = s.transcriptAfter(ctx, tx, sessionID, after)
@@ -149,7 +197,7 @@ func (s *Store) TranscriptAfter(ctx context.Context, sessionID int64, after int)
 // transcriptAfter is TranscriptAfter inside a caller-owned transaction (see
 // transcriptTail).
 func (s *Store) transcriptAfter(ctx context.Context, tx pgx.Tx, sessionID int64, after int) (TranscriptPage, error) {
-	var page TranscriptPage
+	page := newTranscriptPage()
 	msgs, err := s.scanMessages(ctx, tx, sessionID,
 		messagesFullSelect+` AND m.ordinal > $2 ORDER BY m.ordinal LIMIT $3`,
 		sessionID, after, transcriptPageMessageCap+1)
@@ -181,6 +229,24 @@ func (s *Store) transcriptAfter(ctx context.Context, tx pgx.Tx, sessionID int64,
 	return page, nil
 }
 
+// newTranscriptPage returns a page whose every collection is already empty.
+//
+// Both readers below take early returns that skip a fill: an empty window has no tool
+// calls to look for, and a quiet append tick has no rows at all. Starting from empty
+// means those paths cannot leave a nil behind for the encoder to render as null, which
+// the browser contract declares impossible. Putting it here rather than in each fill is
+// what makes a future early return safe by construction.
+func newTranscriptPage() TranscriptPage {
+	return TranscriptPage{
+		Msgs:        []Message{},
+		Seed:        []Message{},
+		Tools:       []ToolCallView{},
+		Attachments: []AttachmentView{},
+		Fallbacks:   []ModelFallback{},
+		Events:      []SessionEvent{},
+	}
+}
+
 // fillWindowExtras loads the tool calls and attachments hanging on the page's window,
 // inside the same transaction as the window itself (see TranscriptPage.Tools). An empty
 // window carries neither.
@@ -210,6 +276,11 @@ func (s *Store) fillWindowExtras(ctx context.Context, tx pgx.Tx, sessionID int64
 		return err
 	}
 	page.Fallbacks = fallbacks
+	events, err := s.scanSessionEvents(ctx, tx, sessionID, ModelFallbackListCap)
+	if err != nil {
+		return err
+	}
+	page.Events = events
 	return nil
 }
 
@@ -246,7 +317,7 @@ const messagesOutlineQuery = `
 	       coalesce(m.prompt_short, false), coalesce(m.prompt_no_code, false), coalesce(m.prompt_digest, 0),
 	       (m.prompt_digest IS NOT NULL AND m.content_length > 0),
 	       coalesce(m.duplicate_prompt, false),
-	       false, 0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::bigint, NULL::double precision, 0::bigint, false
+	       false, 0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::double precision
 	  FROM messages m
 	 WHERE m.session_id = $1
 	 ORDER BY m.ordinal`

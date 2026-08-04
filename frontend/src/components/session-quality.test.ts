@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-
+import type { ModelFallback, SessionSignals, TurnUsage } from "../types";
 import {
   baseName,
   contextLabel,
@@ -23,7 +23,6 @@ import {
   outlineTitle,
   qualityGrade,
   qualityScoreLabel,
-  rowOutcomeNote,
   scoreBreakdownItems,
   shedLabel,
   stripPromptPreamble,
@@ -37,11 +36,6 @@ import {
   turnLatency,
   turnTokenTotal,
 } from "./session-quality";
-import type {
-  ModelFallback,
-  SessionSignals,
-  TurnUsageFull,
-} from "./session-types";
 
 function signals(overrides: Partial<SessionSignals> = {}): SessionSignals {
   return {
@@ -103,20 +97,13 @@ describe("quality grade / score label", () => {
   });
 });
 
-describe("outcomeLabel / rowOutcomeNote", () => {
+describe("outcomeLabel", () => {
   it("labels every known outcome", () => {
     expect(outcomeLabel("completed")).toBe("Completed");
     expect(outcomeLabel("abandoned")).toBe("Abandoned");
     expect(outcomeLabel("errored")).toBe("Errored");
     expect(outcomeLabel("unknown")).toBe("Unknown");
     expect(outcomeLabel("something-else")).toBe("Unknown");
-  });
-
-  it("only flags abandoned and errored on the feed row", () => {
-    expect(rowOutcomeNote("abandoned")).toBe("abandoned");
-    expect(rowOutcomeNote("errored")).toBe("errored");
-    expect(rowOutcomeNote("completed")).toBe("");
-    expect(rowOutcomeNote("unknown")).toBe("");
   });
 });
 
@@ -233,7 +220,7 @@ describe("isContextReset", () => {
 });
 
 describe("turn usage / cost / context helpers", () => {
-  function usage(overrides: Partial<TurnUsageFull> = {}): TurnUsageFull {
+  function usage(overrides: Partial<TurnUsage> = {}): TurnUsage {
     return {
       Input: 100,
       Output: 50,
@@ -241,7 +228,6 @@ describe("turn usage / cost / context helpers", () => {
       CacheWrite: 5,
       Reasoning: 0,
       CostUSD: 0.05,
-      CostIncomplete: false,
       ContextTokens: 1234,
       ...overrides,
     };
@@ -251,23 +237,14 @@ describe("turn usage / cost / context helpers", () => {
     expect(turnTokenTotal(usage())).toBe(165);
   });
 
-  it("labels a turn with no priced cost as unpriced", () => {
-    // CostUSD is typed as a plain number, but a Go nil *float64 still arrives
-    // over JSON as null, which is exactly the case turnCostLabel guards.
-    const noCost = { ...usage(), CostUSD: null as unknown as number };
-    const label = turnCostLabel(
-      noCost,
-      (v, incomplete) => `$${v}${incomplete ? "+" : ""}`,
-    );
-    expect(label).toBe("unpriced");
+  it("formats an unknown price as zero", () => {
+    const label = turnCostLabel(usage({ CostUSD: 0 }), (v) => `$${v}`);
+    expect(label).toBe("$0");
   });
 
   it("formats a priced turn through the given formatter", () => {
-    const label = turnCostLabel(
-      usage({ CostUSD: 0.5, CostIncomplete: true }),
-      (v, incomplete) => `$${v}${incomplete ? "+" : ""}`,
-    );
-    expect(label).toBe("$0.5+");
+    const label = turnCostLabel(usage({ CostUSD: 0.5 }), (v) => `$${v}`);
+    expect(label).toBe("$0.5");
   });
 
   it("stamps the context token figure", () => {
@@ -417,6 +394,9 @@ describe("contextLabel", () => {
   it("falls back to a generic label", () => {
     expect(contextLabel("something else entirely")).toBe("agent context");
   });
+  it("labels system turns without inspecting their contents", () => {
+    expect(contextLabel("policy text", "system")).toBe("system prompt");
+  });
 });
 
 describe("isDiffTool", () => {
@@ -435,6 +415,9 @@ describe("outlineTitle", () => {
     expect(
       outlineTitle("context", "<environment_context>x</environment_context>"),
     ).toBe("environment");
+  });
+  it("labels a system turn through contextLabel", () => {
+    expect(outlineTitle("system", "policy text")).toBe("system prompt");
   });
   it("collapses whitespace and passes short content through unchanged", () => {
     expect(outlineTitle("user", "  fix the   bug  ")).toBe("fix the bug");

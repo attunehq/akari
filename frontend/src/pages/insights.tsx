@@ -25,7 +25,6 @@ import "../insights.css";
 import { RangeTabs } from "../components/range-tabs";
 import { Stat, StatStrip } from "../components/stat-strip";
 import { formatCount, formatPercent } from "../format";
-import { normalizeInsights } from "../normalize-insights";
 import type { Insights, InsightsResponse } from "../types";
 
 // InsightsPanel is the project (and public-project) quality band: three
@@ -55,7 +54,7 @@ export function InsightsPanel({ insights }: { insights: Insights }) {
         <Stat
           label="Archetypes"
           value={formatCount(
-            (insights.Archetypes ?? []).filter((item) => item.Count > 0).length,
+            insights.Archetypes.filter((item) => item.Count > 0).length,
           )}
         />
         <Stat
@@ -160,20 +159,25 @@ function EmptyInsights() {
 
 export function InsightsPage() {
   const [params] = useSearchParams();
+  // A bare URL (no ?range) would otherwise fall through to the server's
+  // year-long default, which on a young instance draws a chart that is
+  // mostly empty. 90 days is a window this page's data actually fills.
+  const query = new URLSearchParams(params);
+  if (!query.has("range")) query.set("range", "90d");
   const state = useAPI<InsightsResponse>(
-    `/api/v1/app/insights?${params.toString()}`,
+    `/api/v1/app/insights?${query.toString()}`,
   );
   return (
     <div className="page">
       <AsyncView state={state}>
         {(data) => {
-          const insights = normalizeInsights(data.insights);
+          const insights = data.insights;
           const trends = insights.Trends;
           const hasData = !!trends && trends.BucketStarts.length > 0;
           return (
             <>
               <header className="page-head">
-                <RangeTabs ranges={data.ranges ?? []} active={data.range} />
+                <RangeTabs ranges={data.ranges} active={data.range} />
               </header>
               {!hasData || !trends ? (
                 <EmptyInsights />

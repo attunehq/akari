@@ -23,10 +23,12 @@ func (s *Store) scanDetail(ctx context.Context, q querier, where string, arg any
 		        s.message_count, s.user_message_count, s.model_fallback_count,
 		        s.total_input_tokens, s.total_output_tokens,
 		        s.total_cache_write_tokens, s.total_cache_read_tokens,
-		        s.total_cost_usd, s.cost_incomplete, s.visibility, s.public_id,
+		        s.total_cost_usd, s.visibility, s.public_id,
 		        s.started_at, s.ended_at, s.last_active_at,
 		        s.user_id, s.project_id, p.remote_key, p.display_name, p.kind, s.cwd, s.parent_session_id,
-		        s.total_cache_savings_usd, s.cache_savings_incomplete,
+		        s.slug, s.permission_mode, s.reasoning_effort, s.subagent_name,
+		        s.pr_number, s.pr_url, s.pr_repo,
+		        s.total_cache_savings_usd,
 		        coalesce(title.content, '')
 		   FROM sessions s
 		   JOIN users u ON u.id = s.user_id
@@ -37,10 +39,12 @@ func (s *Store) scanDetail(ctx context.Context, q querier, where string, arg any
 		&d.ID, &d.Agent, &d.Machine, &d.GitBranch, &d.Username,
 		&d.MessageCount, &d.UserMessageCount, &d.ModelFallbackCount,
 		&d.TotalInput, &d.TotalOutput, &d.TotalCacheWrite, &d.TotalCacheRead,
-		&d.TotalCostUSD, &d.CostIncomplete, &d.Visibility, &d.PublicID,
+		&d.TotalCostUSD, &d.Visibility, &d.PublicID,
 		&d.StartedAt, &d.EndedAt, &d.LastActiveAt,
 		&d.OwnerID, &d.ProjectID, &d.ProjectKey, &d.ProjectName, &d.ProjectKind, &d.Cwd, &d.ParentID,
-		&d.TotalCacheSavingsUSD, &d.CacheSavingsIncomplete,
+		&d.Slug, &d.PermissionMode, &d.ReasoningEffort, &d.SubagentName,
+		&d.PRNumber, &d.PRURL, &d.PRRepo,
+		&d.TotalCacheSavingsUSD,
 		&d.Title)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SessionDetail{}, ErrNotFound
@@ -126,29 +130,22 @@ func (s *Store) scanMessages(ctx context.Context, q querier, sessionID int64, qu
 		return nil, fmt.Errorf("query messages for session %d: %w", sessionID, err)
 	}
 	defer rows.Close()
-	var out []Message
+	out := []Message{}
 	for rows.Next() {
 		var m Message
 		var hasUsage bool
 		var u TurnUsage
-		var costSum *float64
-		var costCount int64
+		var costSum float64
 		if err := rows.Scan(&m.Ordinal, &m.Role, &m.Content, &m.ThinkingText, &m.Model,
 			&m.HasThinking, &m.HasToolUse, &m.ThinkingBytes, &m.Timestamp,
 			&m.PromptShort, &m.PromptNoCode, &m.PromptDigest, &m.PromptFactsCurrent,
 			&m.DuplicatePrompt,
 			&hasUsage, &u.Input, &u.Output, &u.CacheRead, &u.CacheWrite, &u.Reasoning, &u.ContextTokens,
-			&costSum, &costCount, &u.CostIncomplete); err != nil {
+			&costSum); err != nil {
 			return nil, fmt.Errorf("scan message for session %d: %w", sessionID, err)
 		}
 		if hasUsage {
-			// count(cost_usd) == 0 means every contributing row was unpriced, so the summed cost is
-			// meaningless: leave CostUSD nil rather than show a summed zero that reads as free. A mixed
-			// group keeps its priced partial (sum ignores NULLs), the all-unpriced-is-nil rule; the
-			// cost_incomplete flag then marks that partial as a lower bound.
-			if costCount > 0 {
-				u.CostUSD = costSum
-			}
+			u.CostUSD = costSum
 			usage := u
 			m.Usage = &usage
 		}
@@ -164,7 +161,9 @@ func (s *Store) scanMessages(ctx context.Context, q querier, sessionID int64, qu
 // and the session snapshot's in-transaction read.
 const toolCallsQuery = `SELECT message_ordinal, call_index, tool_name, coalesce(category,''), coalesce(file_path,''), coalesce(file_rel_path,''), coalesce(detail,''),
 	        coalesce(input_sha256,''), coalesce(input_bytes,0), coalesce(input_media_type,''),
-	        coalesce(result_sha256,''), coalesce(result_bytes,0), coalesce(result_media_type,''), coalesce(result_status,'')
+	        coalesce(result_sha256,''), coalesce(result_bytes,0), coalesce(result_media_type,''), coalesce(result_status,''),
+	        coalesce(struct_sha256,''), coalesce(struct_bytes,0), coalesce(struct_media_type,''),
+	        attribution_agent, attribution_skill, attribution_plugin
 	   FROM tool_calls WHERE session_id = $1 ORDER BY message_ordinal, call_index`
 
 // ToolCalls returns all of a session's tool calls as metadata, for the web
@@ -178,7 +177,9 @@ func (s *Store) ToolCalls(ctx context.Context, sessionID int64) ([]ToolCallView,
 // in-transaction read (which must see the same snapshot as the window's messages).
 const toolCallsInRangeQuery = `SELECT message_ordinal, call_index, tool_name, coalesce(category,''), coalesce(file_path,''), coalesce(file_rel_path,''), coalesce(detail,''),
 	        coalesce(input_sha256,''), coalesce(input_bytes,0), coalesce(input_media_type,''),
-	        coalesce(result_sha256,''), coalesce(result_bytes,0), coalesce(result_media_type,''), coalesce(result_status,'')
+	        coalesce(result_sha256,''), coalesce(result_bytes,0), coalesce(result_media_type,''), coalesce(result_status,''),
+	        coalesce(struct_sha256,''), coalesce(struct_bytes,0), coalesce(struct_media_type,''),
+	        attribution_agent, attribution_skill, attribution_plugin
 	   FROM tool_calls WHERE session_id = $1 AND message_ordinal BETWEEN $2 AND $3
 	   ORDER BY message_ordinal, call_index`
 
@@ -195,12 +196,14 @@ func (s *Store) scanToolCalls(ctx context.Context, q querier, query string, args
 		return nil, err
 	}
 	defer rows.Close()
-	var out []ToolCallView
+	out := []ToolCallView{}
 	for rows.Next() {
 		var t ToolCallView
 		if err := rows.Scan(&t.MessageOrdinal, &t.CallIndex, &t.ToolName, &t.Category, &t.FilePath, &t.FileRelPath, &t.Detail,
 			&t.InputSHA, &t.InputBytes, &t.InputMediaType,
-			&t.ResultSHA, &t.ResultBytes, &t.ResultMediaType, &t.ResultStatus); err != nil {
+			&t.ResultSHA, &t.ResultBytes, &t.ResultMediaType, &t.ResultStatus,
+			&t.StructSHA256, &t.StructBytes, &t.StructMediaType,
+			&t.AttributionAgent, &t.AttributionSkill, &t.AttributionPlugin); err != nil {
 			return nil, err
 		}
 		out = append(out, t)
@@ -214,19 +217,8 @@ func (s *Store) scanToolCalls(ctx context.Context, q querier, query string, args
 // per-ordinal map. Input, Output, CacheRead, CacheWrite, and Reasoning are the summed token
 // classes.
 //
-// CostUSD is the summed cost, but nil when EVERY contributing row's cost_usd was NULL: an
-// unpriced model has no cost to show, and a summed zero would read as "this turn was free"
-// rather than "we could not price it". A turn that mixes priced and unpriced rows returns the
-// priced partial (a lower bound), matching how the session-level cost total treats an
-// incomplete price.
-//
-// CostIncomplete is true when the turn folded in a usage row that carried real token volume but no
-// price, so CostUSD (when present) is a lower bound: the summed cost covers only the priced subset
-// of the token classes the card shows beside it. It is the per-turn shape of the session and
-// analytics costIncompleteExpr, so the turn's cost stamp gets the same "$X+" lower-bound marker
-// those figures do rather than an exact-looking cost next to unpriced tokens. It is false for a
-// fully-priced turn and for a fully-unpriced one (where CostUSD is nil and the card reads
-// "unpriced" instead).
+// CostUSD is the summed best-effort estimate. Unknown model rates contribute zero,
+// matching session and analytics totals.
 //
 // ContextTokens is the turn's context occupancy: Input + CacheRead + CacheWrite, output
 // EXCLUDED. It is the size of the prompt presented that turn (what the model had to read),
@@ -238,8 +230,7 @@ func (s *Store) scanToolCalls(ctx context.Context, q querier, query string, args
 // messageReadCTEs and pinned by TestMessagesTurnUsageDivergesFromContextFold.
 type TurnUsage struct {
 	Input, Output, CacheRead, CacheWrite, Reasoning int64
-	CostUSD                                         *float64
-	CostIncomplete                                  bool
+	CostUSD                                         float64
 	ContextTokens                                   int64
 }
 
@@ -307,7 +298,7 @@ func (s *Store) scanAttachments(ctx context.Context, q querier, query string, ar
 		return nil, fmt.Errorf("query attachments: %w", err)
 	}
 	defer rows.Close()
-	var out []AttachmentView
+	out := []AttachmentView{}
 	for rows.Next() {
 		var a AttachmentView
 		if err := rows.Scan(&a.MessageOrdinal, &a.SHA256, &a.MediaType, &a.ByteLen, &a.Filename); err != nil {
@@ -376,7 +367,7 @@ func (s *Store) scanModelFallbacks(ctx context.Context, q querier, sessionID int
 		return nil, fmt.Errorf("query model fallbacks for session %d: %w", sessionID, err)
 	}
 	defer rows.Close()
-	var out []ModelFallback
+	out := []ModelFallback{}
 	for rows.Next() {
 		var f ModelFallback
 		if err := rows.Scan(&f.MessageOrdinal, &f.FromModel, &f.ToModel, &f.Trigger,

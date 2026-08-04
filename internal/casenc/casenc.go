@@ -79,6 +79,23 @@ type Encoder struct {
 // New builds an Encoder with no compression-concurrency bound.
 func New() *Encoder { return &Encoder{} }
 
+// ValidKey reports whether s is a well-formed CAS key: the 64-character lowercase
+// hex sha256 every Encode/Hash path here produces. Every surface that accepts a key
+// from outside (blob serving, blob upload, MCP resource URIs) gates on this, so the
+// rule for what counts as a key lives with the code that mints them.
+func ValidKey(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
 // NewLimited builds an Encoder that lets at most maxConcurrency zstd compression
 // passes run at once across all goroutines that share it. A non-positive bound is
 // treated as unbounded, matching New.

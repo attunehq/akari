@@ -6,9 +6,9 @@
 // by Transcript, so both the authenticated and the public session view carry it.
 import { useEffect, useRef, useState } from "react";
 
+import type { ToolCall } from "../types";
 import { buildDiffView, type DiffView } from "./diff";
 import { isDiffTool } from "./session-quality";
-import type { ToolCallFull } from "./session-types";
 
 type ViewKey = "diff" | "input" | "result";
 type InspectorView = {
@@ -59,7 +59,7 @@ function buildViews(
 // opens the diff (when the tool is edit-family) or the input body, the "out:" stamp
 // opens the result.
 export function openToolInspector(
-  tool: ToolCallFull,
+  tool: ToolCall,
   blobBase: string,
   initialSlot?: "input" | "result",
 ) {

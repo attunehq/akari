@@ -57,6 +57,9 @@
   align-items: center;
   gap: 6px;
 }
+.filters-toggle {
+  display: none;
+}
 .sessions-total {
   display: inline-flex;
   align-items: center;
@@ -73,7 +76,6 @@
   gap: 6px;
   padding: 6px 8px;
   color: var(--muted);
-  cursor: pointer;
   font-size: 12px;
   white-space: nowrap;
 }
@@ -120,7 +122,6 @@
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 4px;
-  cursor: pointer;
   font-size: 11px;
 }
 .fchip:hover {
@@ -136,7 +137,6 @@
 .active-filters .clear {
   color: var(--muted);
   font-size: 11px;
-  cursor: pointer;
   background: none;
   border: 0;
 }
@@ -168,7 +168,7 @@
 /* ---- Feed row: the whole row is the click target ---- */
 .srow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 264px;
+  grid-template-columns: minmax(0, 1fr) 412px;
   align-items: start;
   gap: 18px;
   min-height: 65px;
@@ -192,17 +192,36 @@
   gap: 6px;
   flex-wrap: wrap;
 }
+/* The title shares its line with whatever tags a session carries, shrinking to
+   make room rather than claiming the full width and pushing them onto a line of
+   their own: a tag that wraps adds 30px to that one row and visibly breaks the
+   list's rhythm wherever a session happens to be tagged. */
 .srow-title {
-  flex: 1 1 100%;
-  overflow: hidden;
-  width: 100%;
-  max-width: none;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
   color: var(--text);
   font-size: 14px;
   font-weight: 600;
   line-height: 1.35;
+}
+/* The head takes an ellipsis at whatever width the row actually has, and the
+   tail never shrinks, so the same markup keeps a title's distinguishing end
+   in view on a phone-width row as on a wide desktop one, rather than a fixed
+   character count that only happens to fit one of the two. */
+.srow-title-head {
+  overflow: hidden;
+  min-width: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Flex items trim their own leading whitespace, which would silently weld the
+   tail's first word onto the head whenever the head is short enough to render
+   without an ellipsis. The title text arrives with its whitespace already
+   collapsed, so preserving it here only ever preserves single spaces. */
+.srow-title-tail {
+  flex: none;
+  white-space: pre;
 }
 .srow-meta {
   display: flex;
@@ -216,7 +235,7 @@
 .srow-meta > span + span::before {
   margin-right: 7px;
   color: var(--faint);
-  content: "/";
+  content: "\00B7";
 }
 .srow-proj {
   overflow: hidden;
@@ -236,8 +255,12 @@
   color: var(--muted);
   font-size: 11px;
 }
+/* The relative date is the shortest and least compressible fact in the meta
+   line, so it holds its size and the project path absorbs the shrinking. */
 .srow-date {
+  flex: none;
   color: var(--muted);
+  white-space: nowrap;
 }
 .srow-date .tip-card {
   max-width: min(320px, calc(100vw - 16px));
@@ -261,11 +284,11 @@
 }
 .srow-signals {
   display: grid;
-  grid-template-columns: 80px 104px 34px 28px;
+  grid-template-columns: 80px 104px 64px 72px 34px 28px;
   align-items: center;
   justify-items: end;
   gap: 6px;
-  width: 264px;
+  width: 412px;
   padding-top: 3px;
 }
 .srow-kind,
@@ -284,6 +307,24 @@
 }
 .srow-fanout .tag {
   margin-left: auto;
+  white-space: nowrap;
+}
+.srow-public,
+.srow-public-empty {
+  justify-self: end;
+  width: 64px;
+}
+.srow-public .tag {
+  margin-bottom: 0;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.srow-cost {
+  justify-self: end;
+  width: 72px;
+  color: var(--subtext);
+  font-size: 12px;
+  text-align: right;
   white-space: nowrap;
 }
 .session-overview {
@@ -342,7 +383,6 @@
   color: var(--lilac);
   background: none;
   border: 0;
-  cursor: pointer;
   font-size: 12px;
 }
 .showmore:hover {
@@ -378,8 +418,30 @@
     background: transparent;
     border: 0;
   }
-  .sessions-scope {
+  .filters-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px;
+    color: var(--subtext);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+  }
+  .filters-toggle:hover {
+    color: var(--text);
+    border-color: var(--lilac);
+  }
+  .sessions-scope,
+  .sessions-filter-controls {
+    display: none;
     flex-wrap: wrap;
+  }
+  .sessions-toolbar.filters-open .sessions-scope,
+  .sessions-toolbar.filters-open .sessions-filter-controls {
+    display: flex;
+    margin-top: 10px;
   }
   .sessions-filter-controls select {
     flex: 1 1 140px;
@@ -405,10 +467,14 @@
     background: transparent;
     border: 0;
   }
+  /* A phone row gives its full width to the title and meta and drops the
+     numbers onto a line of their own. Splitting the width instead left the
+     title about three characters wide and squeezed the relative date until it
+     broke across three lines. */
   .srow {
-    grid-template-columns: minmax(0, 1fr) 68px;
-    align-items: center;
-    gap: 10px;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 6px;
     overflow: hidden;
     min-height: 56px;
     padding: 10px 12px;
@@ -423,22 +489,36 @@
     display: block;
   }
   .srow-line > :not(.srow-title),
-  .srow-meta,
   .srow-kind,
   .srow-kind-empty,
   .srow-fanout,
-  .srow-fanout-empty {
+  .srow-fanout-empty,
+  .srow-public,
+  .srow-public-empty {
     display: none;
   }
   .srow-title {
-    display: block;
     font-size: 13px;
   }
+  .srow-agent {
+    display: none;
+  }
+  .srow-branch {
+    overflow: hidden;
+    max-width: 18ch;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .srow-signals {
-    grid-template-columns: 34px 28px;
-    grid-column: 2;
-    width: 68px;
+    grid-template-columns: auto auto auto;
+    justify-content: end;
+    gap: 10px;
+    width: auto;
     padding-top: 0;
+  }
+  .srow-cost {
+    width: auto;
+    font-size: 11px;
   }
   .feed-footer {
     min-height: 36px;
@@ -521,6 +601,12 @@ main:has(> .session-page) {
   grid-template-columns: 220px minmax(0, 1fr);
   align-items: start;
   gap: 16px;
+}
+/* OutlineRail renders nothing until parsing produces outline entries. Remove
+   the unused rail track in that state so the transcript is not auto-placed into
+   the 220px rail column. */
+.session-grid:not(:has(> .outline-rail)) {
+  grid-template-columns: minmax(0, 1fr);
 }
 .session-maincol {
   min-width: 0;
@@ -615,7 +701,6 @@ main:has(> .session-page) {
   gap: 8px;
   padding: 4px 0;
   color: var(--text);
-  cursor: pointer;
   list-style: none;
 }
 .subagents-fold > summary::-webkit-details-marker {
@@ -651,10 +736,9 @@ main:has(> .session-page) {
 .sub-verdict {
   white-space: nowrap;
 }
-tr.row-link {
-  cursor: pointer;
+.sub-agent .tag + .tag {
+  margin-left: 6px;
 }
-
 /* ---- Flow ribbon: the turn minimap ---- */
 /* The ticks squeeze to fit one row even in a dense session (Fix dense turn
    minimap overflow, 46441c1): a gradient background paints the tick's color over
@@ -897,7 +981,6 @@ body.modal-open {
   color: var(--faint);
   background: transparent;
   border: none;
-  cursor: pointer;
   font-size: 14px;
 }
 .insp-close:hover {
@@ -915,7 +998,6 @@ body.modal-open {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 4px;
-  cursor: pointer;
   font-size: 12px;
 }
 .seg-group .seg.active {
@@ -961,7 +1043,6 @@ body.modal-open {
   background: var(--surface);
   border: 1px dashed var(--border);
   border-radius: 6px;
-  cursor: pointer;
   font-size: 13px;
 }
 .transcript-earlier:hover {
@@ -1051,6 +1132,7 @@ body.modal-open {
 .stamp-cost {
   color: var(--muted);
   font-size: 11px;
+  white-space: nowrap;
 }
 .stamp-cost {
   color: var(--subtext);
@@ -1066,6 +1148,12 @@ body.modal-open {
   overflow-wrap: break-word;
   white-space: pre-wrap;
 }
+/* Markdown renders its own block structure (paragraphs, list items, code
+   fences), so a soft line break in the source must not become a literal
+   line break the way it would in preformatted plain text. */
+.msg .content.prose {
+  white-space: normal;
+}
 .thinking {
   margin-bottom: 8px;
 }
@@ -1073,9 +1161,17 @@ body.modal-open {
   color: var(--muted);
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  cursor: pointer;
   font-size: 12px;
   user-select: none;
+}
+.thinking:not([open]) summary .thinking-summary-hint::after {
+  content: "show";
+}
+.thinking[open] summary .thinking-summary-hint::after {
+  content: "hide";
+}
+.thinking summary:hover .thinking-summary-hint {
+  color: var(--lilac);
 }
 .thinking-body {
   padding-left: 12px;
@@ -1205,7 +1301,6 @@ a.attachment.file {
   font: inherit;
 }
 button.stamp {
-  cursor: pointer;
   transition:
     background 120ms ease,
     color 120ms ease,
@@ -1324,6 +1419,20 @@ pre.tool-body.error {
 }
 .msg-fallback {
   margin: 4px 0;
+}
+.msg-event {
+  margin: 4px 0;
+}
+.msg-event .event-label {
+  display: inline-block;
+  padding: 2px 8px;
+  color: var(--muted);
+  background: rgba(180, 164, 255, 0.06);
+  border: 1px solid rgba(180, 164, 255, 0.28);
+  border-radius: 4px;
+  font-family: "Geist Mono", monospace;
+  letter-spacing: 0.02em;
+  font-size: 11px;
 }
 .msg-fallback .fallback-label {
   display: inline-block;
