@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jssblck/akari/internal/config"
+	"github.com/jssblck/akari/internal/server/web"
 )
 
 func TestStripPrefix(t *testing.T) {
@@ -276,23 +277,20 @@ func TestPathPrefixExternalizesOpenAPIServer(t *testing.T) {
 	}
 }
 
-func TestPathPrefixExternalizesGuideSurfaces(t *testing.T) {
+func TestPathPrefixRedirectsProductSiteSurfaces(t *testing.T) {
 	server := newPrefixedTestServer(t)
 	client := newClient(t)
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
-	llms := readBody(t, mustGet(t, client, server.URL+testPrefix+"/llms.txt"))
-	if !strings.Contains(llms, server.URL+testPrefix+"/guide") {
-		t.Fatalf("llms.txt does not carry prefixed URLs: %s", llms)
-	}
-
-	// The landing page is the live templ surface: its static asset links and
-	// its navigation must externalize through the render context.
-	landing := readBody(t, mustGet(t, client, server.URL+testPrefix+"/"))
-	if !strings.Contains(landing, `href="`+testPrefix+`/static/css/base.css?v=`) {
-		t.Fatalf("landing page does not prefix static assets: %s", landing)
-	}
-	if !strings.Contains(landing, `href="`+testPrefix+`/guide"`) {
-		t.Fatalf("landing page does not prefix nav links: %s", landing)
+	for _, path := range []string{"/", "/guide/getting-started", "/llms.txt", "/og.png"} {
+		response := mustGet(t, client, server.URL+testPrefix+path)
+		response.Body.Close()
+		if response.StatusCode != http.StatusPermanentRedirect {
+			t.Errorf("GET %s = %d, want 308", path, response.StatusCode)
+		}
+		if got, want := response.Header.Get("Location"), web.ProductSiteURL+path; got != want {
+			t.Errorf("GET %s Location = %q, want %q", path, got, want)
+		}
 	}
 }
 

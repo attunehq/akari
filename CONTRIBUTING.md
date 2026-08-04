@@ -7,17 +7,17 @@ pricing table, or the maintainability of the system.
 
 ## Local setup
 
-Install Go (the version in `go.mod`), Bun, and Git. The application UI is React
-under `frontend/`; its committed production build is embedded in the Go binary.
-The root homepage uses [templ](https://templ.guide), pinned as a Go tool in
-`go.mod`, and its generated `internal/server/web/*_templ.go` files are
-gitignored. Use the Makefile to keep both frontend layers and Go in step:
+Install Go (the version in `go.mod`), Bun, Node.js 22, and Git. The application
+UI is React under `frontend/`; its committed production build is embedded in the
+Go binary. The public homepage and guide use Astro under `site/` and deploy to
+GitHub Pages. Use the Makefile to keep these surfaces in step:
 
 ```sh
 make build        # build React, generate templ, then build Go
 make test         # check, test, and build React, then run Go tests under -race
 make vet
 make fmt          # report files that are not gofmt-clean
+make site         # check and build the public site
 ```
 
 Integration tests that touch Postgres skip cleanly unless
@@ -35,8 +35,10 @@ databases; each test provisions and drops its own database. See
   the breakage plainly.
 - React under `frontend/` owns the application routes. Run `make frontend` after
   changing it and commit the rebuilt `internal/server/frontend/dist/` artifact.
-  The `.templ` files own only the root homepage; regenerate them after edits and
-  never commit the generated `*_templ.go` files.
+- Astro under `site/` owns the public homepage and user guide. Edit guide content
+  under `docs/user-guide/`, then run `make site`.
+- The `.templ` files own server-rendered error pages. Regenerate them after edits
+  and never commit the generated `*_templ.go` files.
 - Keep a schema change and its migration together: `migrations` holds the
   embedded SQL, and the server reparses stored sessions in the background when the
   parser changes, so a parser or projection change should still round-trip old

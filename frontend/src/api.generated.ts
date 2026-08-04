@@ -195,81 +195,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/app/guide/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Read the user guide index */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Guide chapter and chapter index */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["GuideResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/app/guide/{slug}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Read a user guide chapter */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    slug: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Guide chapter and chapter index */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["GuideResponse"];
-                    };
-                };
-                404: components["responses"]["NotFound"];
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/app/insights": {
         parameters: {
             query?: never;
@@ -1735,13 +1660,6 @@ export interface components {
             Output: number;
             SavingsUSD: number;
         };
-        Chapter: {
-            /** Format: int64 */
-            Order: number;
-            Slug: string;
-            Summary: string;
-            Title: string;
-        };
         ChurnFile: {
             /** Format: int64 */
             Edits: number;
@@ -1925,22 +1843,6 @@ export interface components {
             Machines: components["schemas"]["FacetCount"][];
             Projects: components["schemas"]["ProjectFacet"][];
             Users: components["schemas"]["FacetCount"][];
-        };
-        GuideResponse: {
-            chapters: components["schemas"]["Chapter"][];
-            github_url: string;
-            headings: components["schemas"]["Heading"][];
-            raw_markdown: string;
-            raw_path: string;
-            slug: string;
-            summary: string;
-            title: string;
-        };
-        Heading: {
-            ID: string;
-            /** Format: int64 */
-            Level: number;
-            Text: string;
         };
         Insights: {
             Archetypes: components["schemas"]["LabeledCount"][];

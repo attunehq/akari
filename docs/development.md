@@ -1,15 +1,17 @@
 # Development
 
 This page is the day-to-day development loop for akari: building the React app
-and templated homepage, running integration tests, working under eph, and
-seeding example data. For a quick
+and public site, running integration tests, working under eph, and seeding
+example data. For a quick
 orientation aimed at coding agents, read [AGENTS.md](../AGENTS.md) first.
 
 The application UI is React under `frontend/`. Vite writes its production build
 to `internal/server/frontend/dist/`, and Go embeds that directory in the server
 binary. The build artifact is committed so release cross-compilation and source
-builds need only Go. The root homepage remains server-rendered with
-[templ](https://templ.guide); its generated `*_templ.go` files are gitignored.
+builds need only Go. The public homepage and user guide are an Astro site under
+`site/`; GitHub Pages builds them from `site/` and `docs/user-guide/`. Templ
+remains only for server-rendered error pages, and its generated `*_templ.go`
+files are gitignored.
 
 The browser API contract lives in
 `internal/server/httpapi/openapi.json`. `bun run generate:api` regenerates
@@ -18,8 +20,8 @@ types no longer match the OpenAPI document. HTTP handlers return named DTOs from
 `internal/server/httpapi`; the contract tests compare those DTOs with the
 OpenAPI response schemas.
 
-Development builds require Bun. The Makefile keeps source, embedded assets, and
-the homepage generator in step:
+Application builds require Bun. Site builds require Node.js 22. The Makefile
+keeps source and generated assets in step:
 
 ```sh
 make build          # build React, generate templ, and build Go
@@ -27,6 +29,7 @@ make test           # check, test, and build React, then run Go tests under -rac
 make frontend       # rebuild the committed embedded React artifact
 make frontend-check # run Biome and TypeScript
 make frontend-test  # run the frontend unit tests
+make site            # check and build the public homepage and guide
 make vet
 make fmt
 ```
@@ -39,6 +42,7 @@ go generate ./...
 go build ./...
 go vet ./...
 go test ./...       # unit tests
+cd site && npm ci && npm run check && npm run build
 ```
 
 Integration tests provision an isolated database per test: each test creates a
@@ -152,6 +156,8 @@ yourself. It reads `AKARI_DATABASE_URL` and the upload target from `AKARI_URL`
 - `internal/client` is discovery, git remote resolution, the upload protocol,
   and the watch/daemon machinery.
 - `migrations` holds the embedded SQL schema.
+- `site` holds the Astro source for the GitHub Pages homepage and user guide.
+- `docs/user-guide` holds the guide Markdown rendered by the site.
 
 See [docs/DESIGN.md](./DESIGN.md) for the full engineering design and rationale,
 [docs/signals.md](./signals.md) for the per-session signals and the parse

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"testing"
 
 	"github.com/jssblck/akari/internal/server/parse"
@@ -16,17 +15,12 @@ func TestAuthenticatedResponsesArePrivateNoStore(t *testing.T) {
 	srv, _ := newTestServer(t)
 	client := registerAdmin(t, srv.URL)
 
-	for _, path := range []string{"/", "/account", "/api/v1/tokens"} {
+	for _, path := range []string{"/account", "/api/v1/tokens"} {
 		resp := mustGet(t, client, srv.URL+path)
 		resp.Body.Close()
 		if got := resp.Header.Get("Cache-Control"); got != "private, no-store" {
 			t.Errorf("GET %s Cache-Control = %q, want private, no-store", path, got)
 		}
-	}
-	resp := mustGet(t, client, srv.URL+"/guide")
-	resp.Body.Close()
-	if got := resp.Header.Get("Cache-Control"); got != "no-cache" {
-		t.Errorf("GET /guide Cache-Control = %q, want no-cache public shell", got)
 	}
 }
 
@@ -47,11 +41,6 @@ func TestExplicitCachePoliciesOverrideAuthenticatedDefault(t *testing.T) {
 		t.Fatalf("overview API Cache-Control = %q, want private dashboard cache", got)
 	}
 
-	resp = mustGet(t, http.DefaultClient, srv.URL+"/og.png")
-	resp.Body.Close()
-	if got := resp.Header.Get("Cache-Control"); !strings.HasPrefix(got, "public, max-age=") {
-		t.Fatalf("landing card Cache-Control = %q, want explicit public cache", got)
-	}
 }
 
 func TestRevocablePublicPagesAreNoStoreInEveryState(t *testing.T) {

@@ -170,16 +170,12 @@ func (s *Server) Routes() http.Handler {
 	// icon there so that automatic hit does not 404.
 	mux.HandleFunc("GET /favicon.ico", s.handleFaviconICO)
 
-	// The user guide: public documentation, readable logged out and served to a
-	// coding agent as raw Markdown and as one concatenated file. It is static
-	// content independent of the parsed projection, so it carries neither the auth
-	// gate nor the reparse gate. handleGuideRoute splits the .md suffix itself, so
-	// /guide/<slug> (the React shell) and /guide/<slug>.md (raw Markdown) share
-	// one route.
-	mux.HandleFunc("GET /guide", s.handleAppShell)
-	mux.HandleFunc("GET /guide/{slug}", s.handleGuideRoute)
-	mux.HandleFunc("GET /llms.txt", s.handleLLMsTxt)
-	mux.HandleFunc("GET /llms-full.txt", s.handleLLMsFullTxt)
+	// The public homepage and user guide live on GitHub Pages. Preserve the old
+	// instance URLs as permanent redirects so bookmarks and agent links migrate.
+	mux.HandleFunc("GET /guide", s.handleProductSiteRedirect)
+	mux.HandleFunc("GET /guide/{slug}", s.handleProductSiteRedirect)
+	mux.HandleFunc("GET /llms.txt", s.handleProductSiteRedirect)
+	mux.HandleFunc("GET /llms-full.txt", s.handleProductSiteRedirect)
 
 	// CAS blob serving, gated by the referencing session. Raw blob bytes stay
 	// available during a reparse (they are content-addressed and not part of the
@@ -212,8 +208,6 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/app/account/connections/{client_id}", s.requireFull(s.handleAPIRevokeConnection))
 	mux.HandleFunc("DELETE /api/v1/app/account/invites/{id}", s.requireAdmin(s.handleAPIRevokeInvite))
 	mux.HandleFunc("POST /api/v1/app/reparse", s.requireAdmin(s.handleAPIReparse))
-	mux.HandleFunc("GET /api/v1/app/guide/{$}", s.handleAPIGuide)
-	mux.HandleFunc("GET /api/v1/app/guide/{slug}", s.handleAPIGuide)
 	mux.HandleFunc("GET /api/v1/app/public/users/{username}", s.handleAPIPublicOverview)
 	mux.HandleFunc("GET /api/v1/app/public/projects/{id}", s.handleAPIPublicProject)
 	mux.HandleFunc("GET /api/v1/app/public/sessions/{public_id}", s.handleAPIPublicSession)
@@ -244,17 +238,14 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /u/{username}/og.png", s.handlePublicOverviewOGImage)
 	mux.HandleFunc("GET /p/{id}/og.png", s.handlePublicProjectOGImage)
 	mux.HandleFunc("GET /s/{public_id}/og.png", s.handlePublicSessionOGImage)
-	// The Open Graph preview card for the instance root ("/"). It serves static PNG
-	// bytes memoized per binary (see handleLandingOGImage), so like the overview
-	// card route it needs no auth and no reparse gate.
-	mux.HandleFunc("GET /og.png", s.handleLandingOGImage)
+	mux.HandleFunc("GET /og.png", s.handleProductSiteRedirect)
 	mux.HandleFunc("GET /login", s.handleAppShell)
 	mux.HandleFunc("GET /register", s.handleAppShell)
 	mux.HandleFunc("GET /api/docs", s.handleAppShell)
 
 	// Private React routes require a full-scope browser session. Parsed-data API
 	// requests return a retryable service-unavailable response during a rebuild.
-	mux.HandleFunc("GET /{$}", s.handleRoot)
+	mux.HandleFunc("GET /{$}", s.handleProductSiteRedirect)
 	mux.HandleFunc("GET /overview", s.requireAppShell(s.handleAppShell))
 	mux.HandleFunc("GET /insights", s.requireAppShell(s.handleAppShell))
 	mux.HandleFunc("GET /projects", s.requireAppShell(s.handleAppShell))

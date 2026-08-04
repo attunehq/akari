@@ -53,8 +53,6 @@ var browserContracts = []browserContract{
 	{"/api/v1/app/public/projects/{id}", "get", "200", "PublicProjectResponse", publicProjectResponse{}},
 	{"/api/v1/app/public/sessions/{public_id}", "get", "200", "PublicSessionResponse", publicSessionResponse{}},
 	{"/api/v1/app/public/sessions/{public_id}/transcript", "get", "200", "PublicSessionResponse", publicSessionResponse{}},
-	{"/api/v1/app/guide/", "get", "200", "GuideResponse", guideResponse{}},
-	{"/api/v1/app/guide/{slug}", "get", "200", "GuideResponse", guideResponse{}},
 }
 
 type contractDocument struct {
@@ -219,7 +217,6 @@ func browserContractSchemas(t *testing.T) map[string]any {
 		reflect.TypeOf(sessionResponse{}):            "SessionResponse",
 		reflect.TypeOf(transcriptResponse{}):         "TranscriptResponse",
 		reflect.TypeOf(accountResponse{}):            "AccountResponse",
-		reflect.TypeOf(guideResponse{}):              "GuideResponse",
 		reflect.TypeOf(publicOverviewResponse{}):     "PublicOverviewResponse",
 		reflect.TypeOf(publicProjectResponse{}):      "PublicProjectResponse",
 		reflect.TypeOf(publicSessionResponse{}):      "PublicSessionResponse",

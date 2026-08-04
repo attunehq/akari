@@ -475,31 +475,6 @@
         ],
         "type": "object"
       },
-      "Chapter": {
-        "additionalProperties": false,
-        "properties": {
-          "Order": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "Slug": {
-            "type": "string"
-          },
-          "Summary": {
-            "type": "string"
-          },
-          "Title": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "Order",
-          "Slug",
-          "Summary",
-          "Title"
-        ],
-        "type": "object"
-      },
       "ChurnFile": {
         "additionalProperties": false,
         "properties": {
@@ -1177,73 +1152,6 @@
           "Machines",
           "Projects",
           "Users"
-        ],
-        "type": "object"
-      },
-      "GuideResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "chapters": {
-            "items": {
-              "$ref": "#/components/schemas/Chapter"
-            },
-            "type": "array"
-          },
-          "github_url": {
-            "type": "string"
-          },
-          "headings": {
-            "items": {
-              "$ref": "#/components/schemas/Heading"
-            },
-            "type": "array"
-          },
-          "raw_markdown": {
-            "type": "string"
-          },
-          "raw_path": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          },
-          "summary": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "chapters",
-          "github_url",
-          "headings",
-          "raw_markdown",
-          "raw_path",
-          "slug",
-          "summary",
-          "title"
-        ],
-        "type": "object"
-      },
-      "Heading": {
-        "additionalProperties": false,
-        "properties": {
-          "ID": {
-            "type": "string"
-          },
-          "Level": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "Text": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "ID",
-          "Level",
-          "Text"
         ],
         "type": "object"
       },
@@ -4503,61 +4411,6 @@
         "summary": "Resolve the current application viewer",
         "tags": [
           "Application"
-        ]
-      }
-    },
-    "/api/v1/app/guide/": {
-      "get": {
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GuideResponse"
-                }
-              }
-            },
-            "description": "Guide chapter and chapter index"
-          }
-        },
-        "security": [],
-        "summary": "Read the user guide index",
-        "tags": [
-          "Public"
-        ]
-      }
-    },
-    "/api/v1/app/guide/{slug}": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "slug",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GuideResponse"
-                }
-              }
-            },
-            "description": "Guide chapter and chapter index"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          }
-        },
-        "security": [],
-        "summary": "Read a user guide chapter",
-        "tags": [
-          "Public"
         ]
       }
     },

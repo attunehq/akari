@@ -65,7 +65,7 @@ jobs:
       - name: Verify committed frontend artifact
         run: git diff --exit-code -- internal/server/frontend/dist
 
-      - name: Generate homepage template
+      - name: Generate server templates
         run: go generate ./...
 
       - name: Check formatting

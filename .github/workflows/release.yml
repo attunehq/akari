@@ -147,9 +147,9 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Generate homepage template
+      - name: Generate server templates
         # The committed React artifact is already available to go:embed. Generate
-        # the remaining templ homepage on the host before cross-compilation.
+        # the remaining templ error pages on the host before cross-compilation.
         run: go generate ./...
 
       - name: Build and package

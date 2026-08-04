@@ -9,7 +9,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 # The committed React build is already present for go:embed. Generate the
-# remaining templ homepage before compiling.
+# remaining templ error pages before compiling.
 RUN go generate ./...
 # VERSION stamps the binary's reported version. Build with
 # `--build-arg VERSION=v1.2.3` (release CI passes the tag); it falls back to

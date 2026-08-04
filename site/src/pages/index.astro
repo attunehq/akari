@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>akari: know what your agents actually did</title>
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="akari" />
+    <meta
+      property="og:title"
+      content="akari · know what your agents actually did"
+    />
+    <meta
+      name="twitter:title"
+      content="akari · know what your agents actually did"
+    />
+    <meta
+      property="og:description"
+      content="Every Claude Code, Codex, and pi session in one searchable, priced history."
+    />
+    <meta
+      name="twitter:description"
+      content="Every Claude Code, Codex, and pi session in one searchable, priced history."
+    />
+    <meta property="og:url" content="https://akari.attune.inc/" />
+    <meta property="og:image" content="https://akari.attune.inc/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:image" content="https://akari.attune.inc/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link
+      rel="preload"
+      href="/static/fonts/Geist-Regular.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/static/fonts/GeistMono-Regular.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="stylesheet" href="/static/css/base.css" />
+    <link rel="stylesheet" href="/static/css/layout.css" />
+    <link rel="stylesheet" href="/static/css/landing.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/"
+        ><span class="brandmark"
+          ><svg
+            viewBox="0 0 16 16"
+            width="16"
+            height="16"
+            aria-hidden="true"
+            class="brandglyph"
+          >
+            <circle
+              cx="8"
+              cy="8"
+              r="6.2"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.4"
+            ></circle>
+            <circle cx="8" cy="8" r="2.2" fill="currentColor"></circle>
+          </svg>
+          <span>akari</span></span
+        ></a
+      >
+      <span class="spacer"></span>
+      <nav aria-label="Site">
+        <a href="/guide">Docs</a>
+        <a
+          class="gh-link"
+          href="https://github.com/jssblck/akari"
+          aria-label="akari on GitHub"
+          rel="noopener"
+          target="_blank"
+          ><svg
+            viewBox="0 0 16 16"
+            width="16"
+            height="16"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+            ></path></svg
+        ></a>
+        <a href="https://akari.jessica.black/login">Log in</a>
+      </nav>
+    </header>
+    <main>
+      <div class="landing">
+        <section class="landing-hero">
+          <span class="landing-glyph"
+            ><svg viewBox="0 0 16 16" width="48" height="48" aria-hidden="true">
+              <circle
+                cx="8"
+                cy="8"
+                r="6.2"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.2"
+              ></circle>
+              <circle cx="8" cy="8" r="2.2" fill="currentColor"></circle></svg
+          ></span>
+          <h1>Know what your agents actually did.</h1>
+          <p class="landing-lede">
+            Claude Code, Codex, and pi leave a transcript on every machine they
+            run on. akari is a self-hosted instrument that collects those
+            sessions into one searchable history: every run readable end to end,
+            every token priced, every project's spend on one screen.
+          </p>
+          <div class="landing-cta">
+            <a class="btn" href="/guide">Read the guide</a>
+            <a
+              class="btn secondary"
+              href="https://github.com/jssblck/akari"
+              rel="noopener"
+              target="_blank"
+              >View on GitHub</a
+            >
+          </div>
+          <!-- The hero demo: a framed session fragment, the way a developer-tool
+				     landing leads with a real surface rather than a screenshot. -->
+          <div class="landing-hero-demo">
+            <div class="mock-frame">
+              <div class="mock-bar">
+                <span class="mock-crumb"
+                  >jssblck/akari <span class="sep">/</span> session</span
+                >
+                <span class="spacer"></span>
+                <span class="tag agent">claude</span>
+                <span class="tag mk-grade mk-grade-b">B</span>
+              </div>
+              <div class="mock-body">
+                <div class="mk-msg mk-msg-user">
+                  <span class="mk-role">User</span>
+                  <p class="mk-text">
+                    the tests in internal/store are flaky under -race, find out
+                    why
+                  </p>
+                </div>
+                <div class="mk-msg mk-msg-assistant">
+                  <span class="mk-role">Assistant</span>
+                  <p class="mk-text">
+                    Reproducing under -race, then bisecting the shared state.
+                  </p>
+                  <div class="mk-tools">
+                    <span class="mk-chip"
+                      ><span class="mk-tn">Read</span>
+                      <span class="mk-file">internal/store/store_test.go</span>
+                      <span class="mk-stamp">out: 4.2 KB</span>
+                      <span class="mk-st ok">ok</span></span
+                    >
+                    <span class="mk-chip"
+                      ><span class="mk-tn">Bash</span>
+                      <span class="mk-file"
+                        >go test -race -count=20 ./internal/store</span
+                      >
+                      <span class="mk-stamp">out: 1.8 KB</span>
+                      <span class="mk-st err">err</span></span
+                    >
+                    <span class="mk-chip"
+                      ><span class="mk-tn">Edit</span>
+                      <span class="mk-file">internal/store/pool.go</span>
+                      <span class="mk-stamp">in: 612 B diff</span>
+                      <span class="mk-st ok">ok</span></span
+                    >
+                  </div>
+                  <p class="mk-text mk-text-final">
+                    The pool test shares a fixture across parallel runs; pinned
+                    it per test.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <p class="landing-caption muted">
+              A session as akari shows it, from the prompt to the fix.
+            </p>
+          </div>
+        </section>
+        <!-- Section 1: the transcript. Copy left, drill-in mock right on wide screens. -->
+        <section class="landing-row">
+          <div class="landing-copy">
+            <h2>When a run goes sideways, read the evidence</h2>
+            <p>
+              Open any session and see what the agent did: the prompts, the
+              thinking, and every tool call with its input and result, timed and
+              in order. Errored tools are flagged on a timeline rail, so the
+              turn where things went wrong is one glance away. Live sessions
+              stream in as they run.
+            </p>
+          </div>
+          <div class="landing-mock">
+            <div class="mock-frame mk-tight">
+              <div class="mk-detail">
+                <span class="mk-chip mk-chip-open"
+                  ><span class="mk-tn">Bash</span>
+                  <span class="mk-file"
+                    >go test -race -count=20 ./internal/store</span
+                  >
+                  <span class="mk-stamp">out: 1.8 KB</span>
+                  <span class="mk-st err">err</span></span
+                >
+                <pre
+                  class="mk-body mk-body-err"
+                ><span class="mk-bl">==================</span><span class="mk-bl">WARNING: DATA RACE</span><span class="mk-bl">Read at 0x00c0002a4130 by goroutine 41:</span><span class="mk-bl ind1">store.(*Pool).acquire()</span><span class="mk-bl ind2">internal/store/pool.go:88 +0x64</span><span class="mk-bl">FAIL github.com/jssblck/akari/internal/store 2.104s</span></pre>
+                <span class="mk-chip"
+                  ><span class="mk-tn">Edit</span>
+                  <span class="mk-file">internal/store/pool.go</span>
+                  <span class="mk-stamp">in: 612 B diff</span>
+                  <span class="mk-st ok">ok</span></span
+                >
+                <div class="mk-diff">
+                  <div class="mk-diff-file">internal/store/pool.go</div>
+                  <pre
+                    class="mk-diff-body"
+                  ><span class="mk-dl mk-del">fixture := sharedFixture</span><span class="mk-dl mk-add">fixture := newFixture(t)</span></pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <!-- Section 2: cost. Mock left, copy right on wide screens. -->
+        <section class="landing-row reverse">
+          <div class="landing-copy">
+            <h2>See what it costs, per project and per model</h2>
+            <p>
+              Every session carries its token usage and what it cost. Usage
+              rolls up by project, model, agent, and machine over a trailing
+              window you choose, so the answer to where the month's spend went
+              is a lookup, not a spreadsheet.
+            </p>
+          </div>
+          <div class="landing-mock">
+            <div class="mock-strip">
+              <div class="mk-stat">
+                <span class="label">Cost</span>
+                <span class="mk-val">$412.87</span>
+              </div>
+              <div class="mk-stat">
+                <span class="label">Tokens</span>
+                <span class="mk-val"
+                  ><span class="tok-cell" tabindex="0"
+                    ><span class="tok-total">96.4M</span
+                    ><span class="tok-tip" role="tooltip"
+                      ><span class="tt-total">96,400,000 tokens</span>
+                      <dl class="tt-grid">
+                        <dt>In</dt>
+                        <dd>24,000,000</dd>
+                        <dt>Out</dt>
+                        <dd>9,200,000</dd>
+                        <dt>Cache read</dt>
+                        <dd>58,800,000</dd>
+                        <dt>Cache write</dt>
+                        <dd>4,400,000</dd>
+                      </dl>
+                      <span class="tt-cost">$412.87</span></span
+                    ></span
+                  ></span
+                >
+              </div>
+              <div class="mk-stat">
+                <span class="label">Sessions</span>
+                <span class="mk-val">1,284</span>
+              </div>
+              <div class="mk-stat">
+                <span class="label">Cache hit</span>
+                <span class="mk-val">71%</span>
+              </div>
+            </div>
+            <div class="mock-frame mk-tight table-scroll">
+              <table class="grid mk-grid">
+                <thead>
+                  <tr>
+                    <th>Project</th>
+                    <th class="num">Sessions</th>
+                    <th class="num">Tokens</th>
+                    <th class="num">Trend</th>
+                    <th class="num">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>jssblck/akari</td>
+                    <td class="num">412</td>
+                    <td class="num">
+                      <span class="tok-cell" tabindex="0"
+                        ><span class="tok-total">31.2M</span
+                        ><span class="tok-tip" role="tooltip"
+                          ><span class="tt-total">31,200,000 tokens</span>
+                          <dl class="tt-grid">
+                            <dt>In</dt>
+                            <dd>7,400,000</dd>
+                            <dt>Out</dt>
+                            <dd>3,100,000</dd>
+                            <dt>Cache read</dt>
+                            <dd>19,300,000</dd>
+                            <dt>Cache write</dt>
+                            <dd>1,400,000</dd>
+                          </dl>
+                          <span class="tt-cost">$148.11</span></span
+                        ></span
+                      >
+                    </td>
+                    <td class="num">
+                      <svg
+                        class="mk-spark"
+                        viewBox="0 0 64 16"
+                        width="64"
+                        height="16"
+                        preserveAspectRatio="none"
+                        aria-hidden="true"
+                      >
+                        <polyline
+                          points="0,12 12,10 24,11 36,6 48,7 64,3"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.3"
+                        ></polyline>
+                      </svg>
+                    </td>
+                    <td class="num">$148.11</td>
+                  </tr>
+                  <tr>
+                    <td>jssblck/tapestry</td>
+                    <td class="num">188</td>
+                    <td class="num">
+                      <span class="tok-cell" tabindex="0"
+                        ><span class="tok-total">12.9M</span
+                        ><span class="tok-tip" role="tooltip"
+                          ><span class="tt-total">12,900,000 tokens</span>
+                          <dl class="tt-grid">
+                            <dt>In</dt>
+                            <dd>3,200,000</dd>
+                            <dt>Out</dt>
+                            <dd>1,300,000</dd>
+                            <dt>Cache read</dt>
+                            <dd>7,900,000</dd>
+                            <dt>Cache write</dt>
+                            <dd>500,000</dd>
+                          </dl>
+                          <span class="tt-cost">$61.40</span></span
+                        ></span
+                      >
+                    </td>
+                    <td class="num">
+                      <svg
+                        class="mk-spark"
+                        viewBox="0 0 64 16"
+                        width="64"
+                        height="16"
+                        preserveAspectRatio="none"
+                        aria-hidden="true"
+                      >
+                        <polyline
+                          points="0,6 12,8 24,7 36,9 48,8 64,10"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.3"
+                        ></polyline>
+                      </svg>
+                    </td>
+                    <td class="num">$61.40</td>
+                  </tr>
+                  <tr>
+                    <td>hopper/subroutines</td>
+                    <td class="num">97</td>
+                    <td class="num">
+                      <span class="tok-cell" tabindex="0"
+                        ><span class="tok-total">8.3M</span
+                        ><span class="tok-tip" role="tooltip"
+                          ><span class="tt-total">8,300,000 tokens</span>
+                          <dl class="tt-grid">
+                            <dt>In</dt>
+                            <dd>2,100,000</dd>
+                            <dt>Out</dt>
+                            <dd>800,000</dd>
+                            <dt>Cache read</dt>
+                            <dd>5,000,000</dd>
+                            <dt>Cache write</dt>
+                            <dd>400,000</dd>
+                          </dl>
+                          <span class="tt-cost">$37.92</span></span
+                        ></span
+                      >
+                    </td>
+                    <td class="num">
+                      <svg
+                        class="mk-spark"
+                        viewBox="0 0 64 16"
+                        width="64"
+                        height="16"
+                        preserveAspectRatio="none"
+                        aria-hidden="true"
+                      >
+                        <polyline
+                          points="0,9 12,7 24,8 36,7 48,5 64,6"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.3"
+                        ></polyline>
+                      </svg>
+                    </td>
+                    <td class="num">$37.92</td>
+                  </tr>
+                </tbody>
+                <tfoot>
+                  <tr class="remainder">
+                    <td>all other projects</td>
+                    <td class="num">587</td>
+                    <td class="num">
+                      <span class="tok-cell" tabindex="0"
+                        ><span class="tok-total">44.0M</span
+                        ><span class="tok-tip" role="tooltip"
+                          ><span class="tt-total">44,000,000 tokens</span>
+                          <dl class="tt-grid">
+                            <dt>In</dt>
+                            <dd>11,300,000</dd>
+                            <dt>Out</dt>
+                            <dd>4,000,000</dd>
+                            <dt>Cache read</dt>
+                            <dd>26,600,000</dd>
+                            <dt>Cache write</dt>
+                            <dd>2,100,000</dd>
+                          </dl>
+                          <span class="tt-cost">$165.44</span></span
+                        ></span
+                      >
+                    </td>
+                    <td class="num"></td>
+                    <td class="num">$165.44</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </section>
+        <!-- Section 3: one history. Copy left, mock right. -->
+        <section class="landing-row">
+          <div class="landing-copy">
+            <h2>Every machine, one history</h2>
+            <p>
+              A small client on each laptop and workstation uploads new sessions
+              to one server. Projects are keyed by git remote, so the same repo
+              across clones, worktrees, and machines collapses into one project.
+              Full-text search across every transcript recovers the run you half
+              remember.
+            </p>
+          </div>
+          <div class="landing-mock">
+            <div class="mock-frame mk-list">
+              <div class="mk-facets">
+                <div class="mk-facet">
+                  <span class="label">Agent</span>
+                  <span class="mk-frow"
+                    ><span>claude</span><span class="mk-fc">812</span></span
+                  ><span class="mk-frow"
+                    ><span>codex</span><span class="mk-fc">341</span></span
+                  ><span class="mk-frow"
+                    ><span>pi</span><span class="mk-fc">131</span></span
+                  >
+                </div>
+                <div class="mk-facet">
+                  <span class="label">Machine</span>
+                  <span class="mk-frow"
+                    ><span>framework</span><span class="mk-fc">623</span></span
+                  ><span class="mk-frow"
+                    ><span>mac-studio</span><span class="mk-fc">512</span></span
+                  ><span class="mk-frow"
+                    ><span>thinkpad</span><span class="mk-fc">149</span></span
+                  >
+                </div>
+                <div class="mk-facet">
+                  <span class="label">User</span>
+                  <span class="mk-frow"
+                    ><span>grace</span><span class="mk-fc">704</span></span
+                  ><span class="mk-frow"
+                    ><span>ada</span><span class="mk-fc">391</span></span
+                  ><span class="mk-frow"
+                    ><span>katherine</span><span class="mk-fc">189</span></span
+                  >
+                </div>
+              </div>
+              <div class="mk-rows">
+                <div class="mk-srow">
+                  <span class="mk-sproj">jssblck/akari</span>
+                  <span class="mk-ssnip"
+                    >wire the settle pass into cmd/akari-server</span
+                  >
+                  <span class="tag agent">claude</span>
+                  <span class="mk-stime">2h ago</span>
+                  <span class="mk-scost">$3.11</span>
+                </div>
+                <div class="mk-srow">
+                  <span class="mk-sproj">jssblck/tapestry</span>
+                  <span class="mk-ssnip"
+                    >why does the loom render twice on first paint</span
+                  >
+                  <span class="tag agent">codex</span>
+                  <span class="mk-stime">5h ago</span>
+                  <span class="mk-scost">$0.94</span>
+                </div>
+                <div class="mk-srow">
+                  <span class="mk-sproj">hopper/subroutines</span>
+                  <span class="mk-ssnip"
+                    >port the A-0 compiler notes into the readme</span
+                  >
+                  <span class="tag agent">pi</span>
+                  <span class="mk-stime">yesterday</span>
+                  <span class="mk-scost">$1.27</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <!-- Section 4: quality signals. Mock left, copy right. -->
+        <section class="landing-row reverse">
+          <div class="landing-copy">
+            <h2>Every settled run gets a grade</h2>
+            <p>
+              Once a run is over, akari grades it from the transcript itself,
+              never from the agent's own report: an outcome with a confidence,
+              an A to F grade from tool failures, retries, and edit churn, and
+              measures of prompt hygiene and context health. Insights aggregates
+              the signals across the fleet, so you can see which projects burn
+              retries and which prompts set the agent up well.
+            </p>
+          </div>
+          <div class="landing-mock">
+            <div class="mock-frame mk-tight">
+              <div class="mk-qrows">
+                <div class="mk-qrow">
+                  <span class="tag mk-grade mk-grade-a">A</span>
+                  <span class="mk-qout ok">completed</span>
+                  <span class="mk-qnote">clean tool record</span>
+                </div>
+                <div class="mk-qrow">
+                  <span class="tag mk-grade mk-grade-c">C</span>
+                  <span class="mk-qout warn">completed</span>
+                  <span class="mk-qnote">9 retries on Bash</span>
+                </div>
+                <div class="mk-qrow">
+                  <span class="tag mk-grade mk-grade-f">F</span>
+                  <span class="mk-qout err">abandoned</span>
+                  <span class="mk-qnote"
+                    >failure streak of 6, context reset x3</span
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <!-- Section 5: capabilities band. A two-column definition list, not cards. -->
+        <section class="landing-band">
+          <dl class="landing-defs">
+            <div class="landing-def">
+              <dt>Share a run</dt>
+              <dd>
+                Publishing a session mints an unguessable link anyone can view
+                without an account. Your usage overview can go public at a
+                stable address too; both revoke instantly.
+              </dd>
+            </div>
+            <div class="landing-def">
+              <dt>Read it from your agent</dt>
+              <dd>
+                A read-only MCP endpoint exposes everything the UI shows:
+                overview, projects, sessions, and full transcripts. One command
+                connects Claude Code.
+              </dd>
+            </div>
+            <div class="landing-def">
+              <dt>Old sessions get better</dt>
+              <dd>
+                When akari's parsing improves, the server reprocesses what it
+                already stored, and old sessions gain the new fields with
+                nothing re-uploaded.
+              </dd>
+            </div>
+            <div class="landing-def">
+              <dt>Own every byte</dt>
+              <dd>
+                One server binary with an embedded UI, backed by Postgres. No
+                telemetry, open source under the AGPL. Run it with the bundled
+                Docker Compose file.
+              </dd>
+            </div>
+          </dl>
+        </section>
+        <!-- Section 6: quickstart. A standalone framed panel closing the page,
+			     rather than another copy/mock fold. -->
+        <section class="landing-quickstart">
+          <h2>Start with the history you already have</h2>
+          <p>
+            Point a client at your server and the backlog starts uploading.
+            Agents already left months of sessions on your disk; the first sync
+            brings them in.
+          </p>
+          <div class="mock-term">
+            <div class="mock-term-bar">
+              <span class="mk-dot"></span> <span class="mk-dot"></span>
+              <span class="mk-dot"></span> <span class="mk-term-label">sh</span>
+            </div>
+            <pre
+              class="mock-term-body"
+            ><span class="mk-ln"><span class="mk-prompt">$</span> curl -fsSL https://raw.githubusercontent.com/jssblck/akari/main/scripts/install.sh | sh</span> <span class="mk-ln"><span class="mk-prompt">$</span> akari login --server https://akari.example.com --token YOUR_INGEST_TOKEN</span> <span class="mk-ln"><span class="mk-prompt">$</span> akari sync</span> <span class="mk-ln mk-comment"># or: akari daemon start, to keep uploading as you work</span></pre>
+          </div>
+        </section>
+        <section class="landing-foot">
+          <p class="muted">
+            New to akari? Read the <a href="/guide">user guide</a>. Already have
+            an account? <a href="https://akari.jessica.black/login">Log in</a>.
+          </p>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>
