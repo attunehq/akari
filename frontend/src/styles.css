@@ -930,70 +930,6 @@ select:focus {
   gap: 8px;
 }
 
-.guide-layout {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 780px) 190px;
-  gap: 36px;
-  width: min(1320px, 100%);
-  margin: 0 auto;
-  padding: 30px 28px 70px;
-}
-.guide-nav,
-.guide-toc {
-  position: sticky;
-  top: 24px;
-  align-self: start;
-  display: grid;
-  gap: 4px;
-}
-.guide-nav > .label,
-.guide-toc > .label {
-  margin: 0 8px 8px;
-}
-.guide-nav nav {
-  display: grid;
-}
-.guide-nav a {
-  display: grid;
-  grid-template-columns: 24px 1fr;
-  gap: 6px;
-  padding: 6px 8px;
-  color: var(--muted);
-  border-radius: 3px;
-  font-size: 12px;
-}
-.guide-nav a span {
-  font-family: "Geist Mono", monospace;
-  color: var(--border-strong);
-}
-.guide-nav a:is(:hover, .active) {
-  color: var(--text);
-  background: var(--surface);
-}
-.guide-nav a.active span {
-  color: var(--lilac);
-}
-.guide-article {
-  min-width: 0;
-}
-.guide-article > header {
-  padding-bottom: 22px;
-  border-bottom: 1px solid var(--border);
-}
-.guide-article > header h1 {
-  margin: 0;
-  font-size: 30px;
-}
-.guide-article > header p {
-  max-width: 65ch;
-  color: var(--muted);
-}
-.guide-actions {
-  display: flex;
-  gap: 7px;
-  flex-wrap: wrap;
-  margin-top: 16px;
-}
 .prose {
   max-width: 75ch;
   color: var(--subtext);
@@ -1050,31 +986,6 @@ select:focus {
   color: var(--muted);
   border-left: 1px solid var(--border-strong);
 }
-.guide-toc a {
-  padding: 4px 8px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.guide-toc a.nested {
-  padding-left: 18px;
-}
-.guide-toc a:hover {
-  color: var(--text);
-}
-.guide-pager {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 40px;
-  padding-top: 18px;
-  border-top: 1px solid var(--border);
-}
-.guide-pager a {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .account-sections {
   border-top: 1px solid var(--border);
 }
@@ -1316,12 +1227,6 @@ select:focus {
   :root {
     --sidebar: 190px;
   }
-  .guide-layout {
-    grid-template-columns: 190px minmax(0, 1fr);
-  }
-  .guide-toc {
-    display: none;
-  }
   .feed-row {
     grid-template-columns: minmax(0, 1fr) 140px;
   }
@@ -1436,20 +1341,6 @@ select:focus {
   .settings-section {
     grid-template-columns: 1fr;
     gap: 14px;
-  }
-  .guide-layout {
-    grid-template-columns: 1fr;
-    padding: 20px 16px 50px;
-  }
-  .guide-nav {
-    position: static;
-    overflow-x: auto;
-  }
-  .guide-nav nav {
-    display: flex;
-  }
-  .guide-nav a {
-    min-width: max-content;
   }
   .public-topbar {
     padding: 0 14px;

@@ -10,7 +10,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/jssblck/akari/internal/guide"
 	"github.com/jssblck/akari/internal/server/auth"
 	"github.com/jssblck/akari/internal/server/ogimage"
 	"github.com/jssblck/akari/internal/server/store"
@@ -416,34 +415,6 @@ func (s *Server) handleAPIAccount(w http.ResponseWriter, r *http.Request) {
 		Projects: accountProjectDTOs(projects), Tokens: accountTokenDTOs(tokens),
 		Connections: oauthGrantDTOs(grants), Invites: accountInviteDTOs(invites),
 		Reparse: s.worker.FleetStatus(r.Context()),
-	})
-}
-
-func (s *Server) handleAPIGuide(w http.ResponseWriter, r *http.Request) {
-	slug := r.PathValue("slug")
-	if slug == "" {
-		slug = "index"
-	}
-	chapter, ok := guide.Lookup(slug)
-	if !ok {
-		writeError(w, http.StatusNotFound, "guide page not found")
-		return
-	}
-	rendered, err := chapter.Render()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "render guide")
-		return
-	}
-	raw, err := chapter.Raw()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "load guide")
-		return
-	}
-	chapters := guide.Chapters()
-	writeJSON(w, http.StatusOK, guideResponse{
-		Slug: chapter.Slug, Title: chapter.Title, Summary: chapter.Summary,
-		RawMarkdown: raw, Headings: rendered.Headings,
-		RawPath: chapter.RawRoute(), GitHubURL: chapter.GitHubURL(), Chapters: chapters,
 	})
 }
 

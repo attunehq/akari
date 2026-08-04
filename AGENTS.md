@@ -4,24 +4,25 @@ Short orientation for coding agents. The full story lives in
 [docs/development.md](docs/development.md) and [DESIGN.md](DESIGN.md); this file
 just front-loads the three things that bite if you skip them.
 
-## Build both frontend layers
+## Build both browser surfaces
 
 The application UI lives in `frontend/` and builds into
-`internal/server/frontend/dist/`, which Go embeds in the server binary. The root
-homepage remains templated under `internal/server/web/`. Rebuild both layers
-through the Makefile so the committed React artifact and generated Go stay in
-step:
+`internal/server/frontend/dist/`, which Go embeds in the server binary. The
+public homepage and user guide live in `site/` and deploy to GitHub Pages.
+The guide Markdown is single-sourced under `docs/user-guide/`.
 
 ```sh
 make build          # build React, generate templ, then compile Go
 make test           # check React, rebuild it, then run Go tests under -race
 make frontend-check # OpenAPI contract, Biome, and TypeScript
-go generate ./...   # regenerate the templated homepage only
+make site            # build the public homepage and guide
+go generate ./...   # regenerate the templated server error pages
 ```
 
 The production frontend artifact is committed so release cross-compilation and
 downstream source builds still require only Go. Run `make frontend` after any
 file under `frontend/` and commit the resulting `dist/` changes.
+Run `make site` after changing `site/` or `docs/user-guide/`.
 
 ## Keep the browser API contract synchronized
 

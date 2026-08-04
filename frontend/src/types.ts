@@ -56,8 +56,6 @@ export type Trends = Schema["Trends"];
 export type Token = Schema["AccountToken"];
 export type Connection = Schema["OAuthGrant"];
 export type Invite = Schema["AccountInvite"];
-export type Chapter = Schema["Chapter"];
-export type Heading = Schema["Heading"];
 export type FacetCount = Schema["FacetCount"];
 export type ProjectFacet = Schema["ProjectFacet"];
 
@@ -73,7 +71,6 @@ export type TranscriptResponse = Schema["TranscriptResponse"];
 export type PublicOverviewResponse = Schema["PublicOverviewResponse"];
 export type PublicProjectResponse = Schema["PublicProjectResponse"];
 export type PublicSessionResponse = Schema["PublicSessionResponse"];
-export type GuideResponse = Schema["GuideResponse"];
 export type OAuthConsentResponse = Schema["OAuthConsentResponse"];
 export type CreatedTokenResponse = Schema["CreatedTokenResponse"];
 export type CreatedInviteResponse = Schema["CreatedInviteResponse"];

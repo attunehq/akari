@@ -4,27 +4,14 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/jssblck/akari/internal/server/frontend"
 	"github.com/jssblck/akari/internal/server/store"
 	"github.com/jssblck/akari/internal/server/web"
 )
 
-func (s *Server) handleGuideRoute(w http.ResponseWriter, r *http.Request) {
-	// The .md suffix is split here rather than routed separately, since both the
-	// HTML chapter (the React shell) and its raw Markdown live under the one
-	// {slug} path segment.
-	if raw := strings.TrimSuffix(r.PathValue("slug"), ".md"); raw != r.PathValue("slug") {
-		s.serveGuideRaw(w, r, raw)
-		return
-	}
-	s.handleAppShell(w, r)
-}
-
 // handleAppShell serves the same embedded React entry document for every client-side
-// route. The homepage deliberately remains outside this path and continues to render
-// from landing.templ.
+// route. The public homepage and guide live on the separate GitHub Pages site.
 func (s *Server) handleAppShell(w http.ResponseWriter, r *http.Request) {
 	index, err := frontend.Index(requestPrefix(r))
 	if err != nil {

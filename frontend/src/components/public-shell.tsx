@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { useAPI } from "../api";
 import { withBase } from "../base";
+import { guideURL, productSiteURL } from "../links";
 import type { Viewer } from "../types";
 import { NoticeHost } from "./notices";
 import "./public-shell.css";
@@ -24,7 +25,7 @@ export function PublicShell({
   return (
     <div className={compact ? "public-frame compact" : "public-frame"}>
       <header className="public-topbar">
-        <a href={withBase("/")} className="brand">
+        <a href={productSiteURL} className="brand">
           <img
             className="brand-mark"
             src={withBase("/static/favicon.svg")}
@@ -36,11 +37,7 @@ export function PublicShell({
           {version ? <span className="brandver">{version}</span> : null}
         </a>
         <nav>
-          <a
-            href={withBase("/guide")}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a href={guideURL} target="_blank" rel="noopener noreferrer">
             Guide
           </a>
           <a

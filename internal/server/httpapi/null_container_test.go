@@ -21,7 +21,7 @@ import (
 // It runs at the endpoint rather than at the store because the invariant is about the
 // wire, and because a hand-maintained list of store reads is exactly what under-covered
 // it before: the six reads that list happened to name were clean while the transcript,
-// audit, session-feed, and guide reads were not. Driving it from browserContracts means
+// audit and session-feed reads were not. Driving it from browserContracts means
 // a new endpoint is covered the moment it is added, which the contract test already
 // requires of every endpoint.
 //
@@ -159,8 +159,6 @@ var emptyScopeEndpoints = []struct{ path, schema string }{
 	{"/api/v1/app/account", "AccountResponse"},
 	{"/api/v1/tokens", "TokensResponse"},
 	{"/api/v1/reparse/status", "ReparseStatusResponse"},
-	{"/api/v1/app/guide/", "GuideResponse"},
-	{"/api/v1/app/guide/introduction", "GuideResponse"},
 }
 
 // TestEveryBrowserGETIsWalkedForNullContainers keeps the walk honest: a new browser GET

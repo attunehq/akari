@@ -22,9 +22,6 @@ const ApiDocsPage = lazy(() =>
 const AuthPage = lazy(() =>
   import("./pages/auth").then((module) => ({ default: module.AuthPage })),
 );
-const GuidePage = lazy(() =>
-  import("./pages/guide").then((module) => ({ default: module.GuidePage })),
-);
 const InsightsPage = lazy(() =>
   import("./pages/insights").then((module) => ({
     default: module.InsightsPage,
@@ -104,22 +101,6 @@ const router = createBrowserRouter(
       element: (
         <TitledRoute title="Register">
           <AuthPage mode="register" />
-        </TitledRoute>
-      ),
-    },
-    {
-      path: "/guide",
-      element: (
-        <TitledRoute title="User guide">
-          <GuidePage />
-        </TitledRoute>
-      ),
-    },
-    {
-      path: "/guide/:slug",
-      element: (
-        <TitledRoute title="User guide">
-          <GuidePage />
         </TitledRoute>
       ),
     },

@@ -3,7 +3,6 @@ package httpapi
 import (
 	"time"
 
-	"github.com/jssblck/akari/internal/guide"
 	"github.com/jssblck/akari/internal/server/parse"
 	"github.com/jssblck/akari/internal/server/store"
 	"github.com/jssblck/akari/internal/server/web"
@@ -120,17 +119,6 @@ type accountInviteDTO struct {
 	ExpiresAt  *time.Time `json:"ExpiresAt"`
 	RedeemedBy *string    `json:"RedeemedBy"`
 	RedeemedAt *time.Time `json:"RedeemedAt"`
-}
-
-type guideResponse struct {
-	Slug        string          `json:"slug"`
-	Title       string          `json:"title"`
-	Summary     string          `json:"summary"`
-	RawMarkdown string          `json:"raw_markdown"`
-	Headings    []guide.Heading `json:"headings"`
-	RawPath     string          `json:"raw_path"`
-	GitHubURL   string          `json:"github_url"`
-	Chapters    []guide.Chapter `json:"chapters"`
 }
 
 type publicOverviewResponse struct {

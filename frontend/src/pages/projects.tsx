@@ -25,6 +25,7 @@ import {
 } from "../format";
 import "../projects.css";
 import { withBase } from "../base";
+import { guideURL } from "../links";
 import type {
   Project,
   ProjectResponse,
@@ -418,7 +419,7 @@ export function ProjectsPage() {
                   Run an akari client sync to create the first project and
                   session.
                 </p>
-                <a className="button" href={withBase("/guide")}>
+                <a className="button" href={guideURL}>
                   Read the setup guide
                 </a>
               </section>

@@ -13,13 +13,10 @@ templ faviconLinks() {
 	<link rel="apple-touch-icon" href={ Href(ctx, "/static/apple-touch-icon.png") }/>
 }
 
-// landingStylesheets is the homepage's deliberately small static cascade. The
-// React application owns every other browser route, so the templated homepage no
-// longer ships the retired app shell or page-specific styles.
-templ landingStylesheets() {
+// publicStylesheets is the small static cascade for browser-facing error pages.
+templ publicStylesheets() {
 	<link rel="stylesheet" href={ StaticURL(ctx, "css/base.css") }/>
 	<link rel="stylesheet" href={ StaticURL(ctx, "css/layout.css") }/>
-	<link rel="stylesheet" href={ StaticURL(ctx, "css/landing.css") }/>
 }
 
 // brandMark is the wordmark: a small lilac aperture glyph beside the name, a nod
@@ -56,14 +53,14 @@ templ publicLayout(title string, og OGMeta, loggedIn bool) {
 			@ogTags(title, og)
 			<link rel="preload" href={ StaticURL(ctx, "fonts/Geist-Regular.woff2") } as="font" type="font/woff2" crossorigin/>
 			<link rel="preload" href={ StaticURL(ctx, "fonts/GeistMono-Regular.woff2") } as="font" type="font/woff2" crossorigin/>
-			@landingStylesheets()
+			@publicStylesheets()
 		</head>
 		<body>
 			<header class="topbar">
-				<a class="brand" href={ Href(ctx, "/") }>@brandMark()</a>
+				<a class="brand" href={ ProductSiteURL }>@brandMark()</a>
 				<span class="spacer"></span>
 				<nav aria-label="Site">
-					<a href={ Href(ctx, "/guide") }>Docs</a>
+					<a href={ ProductSiteURL + "/guide" }>Docs</a>
 					<a class="gh-link" href="https://github.com/jssblck/akari" aria-label="akari on GitHub" rel="noopener" target="_blank">@githubGlyph()</a>
 					if loggedIn {
 						<a href={ Href(ctx, "/overview") }>Overview</a>

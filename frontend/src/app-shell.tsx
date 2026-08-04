@@ -18,6 +18,7 @@ import { request, setCSRFToken, useAPI } from "./api";
 import { withBase } from "./base";
 import { AsyncView } from "./components/async-view";
 import { attempt, NoticeHost } from "./components/notices";
+import { guideURL, productSiteURL } from "./links";
 import type { Viewer } from "./types";
 
 const nav = [
@@ -125,11 +126,7 @@ export function AppShell() {
                 >
                   <CirclesThreePlusIcon size={17} /> API
                 </a>
-                <a
-                  href={withBase("/guide")}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <a href={guideURL} target="_blank" rel="noopener noreferrer">
                   <BookOpenTextIcon size={17} /> Guide
                 </a>
                 <NavLink to="/account" onClick={() => setMobileNavOpen(false)}>
@@ -162,7 +159,7 @@ export function AppShell() {
 
 function AppBrand({ version }: { version: string }) {
   return (
-    <a href={withBase("/")} className="brand" aria-label="Akari homepage">
+    <a href={productSiteURL} className="brand" aria-label="Akari homepage">
       <img
         className="brand-mark"
         src={withBase("/static/favicon.svg")}
