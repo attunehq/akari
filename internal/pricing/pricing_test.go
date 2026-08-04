@@ -22,11 +22,12 @@ func TestRateAtDatedSnapshotsAndAliases(t *testing.T) {
 		{"claude-opus-4-0", 15, 75},
 		{"claude-opus-4-1-20250805", 15, 75},
 		{"claude-opus-4-1", 15, 75},
-		// Current Opus (4.5+) at $5/$25.
+		// Current Opus (4.5+) at $5/$25, which Opus 5 holds.
 		{"claude-opus-4-5-20251101", 5, 25},
 		{"claude-opus-4-6", 5, 25},
 		{"claude-opus-4-7", 5, 25},
 		{"claude-opus-4-8", 5, 25},
+		{"claude-opus-5", 5, 25},
 		// Sonnet at $3/$15 from 3.5 through 4.6. Sonnet 5 is dated and tested apart.
 		{"claude-sonnet-4-20250514", 3, 15},
 		{"claude-sonnet-4-0", 3, 15},
@@ -189,7 +190,7 @@ func TestUnlistedModelsAreUnknown(t *testing.T) {
 	// variants too (gpt-5.4-turbo no longer collapses onto gpt-5.4), which prefix
 	// matching could not guard.
 	for _, model := range []string{
-		"claude-opus-4-9", "claude-opus-5", "claude-opus-5-0",
+		"claude-opus-4-9", "claude-opus-5-0", "claude-opus-5-1",
 		"claude-sonnet-4-7",
 		"claude-haiku-4-9", "claude-haiku-5",
 		"claude-fable-6", "claude-mythos-6",

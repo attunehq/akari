@@ -96,7 +96,7 @@ func TestSubagentsCarryVerdicts(t *testing.T) {
 
 // TestSubagentVerdictIgnoresStaleSignals pins the freshness gate: a child whose
 // projection moved after its grade (signals_stale set) reads as unmeasured here, the
-// same signalsCurrent() rule every fleet read applies, so the fold summary never counts
+// same signalsCurrent rule every fleet read applies, so the fold summary never counts
 // a failure the child's own page would not show.
 func TestSubagentVerdictIgnoresStaleSignals(t *testing.T) {
 	t.Parallel()
@@ -217,14 +217,17 @@ func TestSessionSnapshotByID(t *testing.T) {
 	if len(snap.Page.Msgs) != 30 {
 		t.Fatalf("snapshot window = %d rows, want all 30", len(snap.Page.Msgs))
 	}
-	if len(snap.Outline) != 30 {
-		t.Fatalf("snapshot outline = %d rows, want 30", len(snap.Outline))
+	if snap.Shape == nil {
+		t.Fatal("snapshot carried no shape; the full read always fills it")
 	}
-	if len(snap.Tools) != 2 || snap.Tools[0].MessageOrdinal != 3 {
-		t.Fatalf("snapshot tools = %+v, want the ordinal-3 and ordinal-5 calls", snap.Tools)
+	if len(snap.Shape.Outline) != 30 {
+		t.Fatalf("snapshot outline = %d rows, want 30", len(snap.Shape.Outline))
 	}
-	if snap.DupIDs != 1 {
-		t.Fatalf("snapshot DupIDs = %d, want 1 repeated call id", snap.DupIDs)
+	if len(snap.Shape.Tools) != 2 || snap.Shape.Tools[0].MessageOrdinal != 3 {
+		t.Fatalf("snapshot tools = %+v, want the ordinal-3 and ordinal-5 calls", snap.Shape.Tools)
+	}
+	if snap.Shape.DupIDs != 1 {
+		t.Fatalf("snapshot DupIDs = %d, want 1 repeated call id", snap.Shape.DupIDs)
 	}
 
 	if _, err := st.SessionSnapshotByID(ctx, 99999999); !errors.Is(err, store.ErrNotFound) {
@@ -250,17 +253,20 @@ func TestSessionAppendByID(t *testing.T) {
 	if len(snap.Page.Msgs) != 2 || snap.Page.Msgs[0].Ordinal != 28 {
 		t.Fatalf("append rows = %v, want [28 29]", ordinals(snap.Page.Msgs))
 	}
-	if len(snap.Outline) != total {
-		t.Fatalf("append shape outline = %d rows, want %d", len(snap.Outline), total)
+	if snap.Shape == nil {
+		t.Fatal("append with rows carried no shape; a landed row swaps the shape")
+	}
+	if len(snap.Shape.Outline) != total {
+		t.Fatalf("append shape outline = %d rows, want %d", len(snap.Shape.Outline), total)
 	}
 
 	quiet, err := st.SessionAppendByID(ctx, sid, total-1)
 	if err != nil {
 		t.Fatalf("quiet append: %v", err)
 	}
-	if len(quiet.Page.Msgs) != 0 || quiet.Outline != nil || quiet.Tools != nil {
-		t.Fatalf("quiet tick should carry no rows and no shape, got %d rows, outline %d",
-			len(quiet.Page.Msgs), len(quiet.Outline))
+	if len(quiet.Page.Msgs) != 0 || quiet.Shape != nil {
+		t.Fatalf("quiet tick should carry no rows and no shape, got %d rows, shape %+v",
+			len(quiet.Page.Msgs), quiet.Shape)
 	}
 
 	// A cursor over an emptied projection (a rebuild removed every message) yields an

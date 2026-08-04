@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"slices"
 
 	"github.com/jssblck/akari/internal/casenc"
 	"github.com/jssblck/akari/internal/parser"
@@ -253,39 +254,88 @@ func (t *transformer) handleSmallLine(ctx context.Context, line []byte, origOff,
 	return nil
 }
 
-// handleBigLine transforms a line past bigLineThreshold. It locates each tool body's
-// raw span by streaming the line, streams each body to the CAS (so the body itself
-// is never resident), and assembles the rewritten line from the literal regions
-// between bodies plus the sentinels. When the line carries liftable bodies its
-// rewritten form is small (its bulk lifted to the CAS). When it carries none (or
-// keeps non-body bulk between bodies) the remainder rides inline, copied through a
-// bounded window and capped at hardCap: a large-but-bodyless line is buffered and
-// sent like any other message rather than refused, and only a line that truly
-// exceeds hardCap errors.
-func (t *transformer) handleBigLine(ctx context.Context, origOff, origLen int64) error {
+// rewriteBigLine assembles the transformed form of a line past bigLineThreshold: the
+// literal regions between tool bodies, with each body replaced by its sentinel. It
+// locates the bodies by streaming the line and copies the literal regions through a
+// bounded window, so neither a body nor the whole line is ever resident, and it
+// enforces hardCap as the rewritten line grows.
+//
+// body runs once per located body in source order and returns that body's sentinel.
+// This is the seam between the two callers: uploading a body and hashing one to
+// recover its key are the only things they do differently, so everything that decides
+// which bytes the line becomes lives here, once. A byte of divergence between upload
+// and verification would make every cold-cache prefix check miss and re-upload whole
+// sessions.
+//
+// When the line carries liftable bodies its rewritten form is small (its bulk lifted
+// to the CAS). When it carries none, or keeps non-body bulk between bodies, the
+// remainder rides inline: a large-but-bodyless line is buffered and sent like any
+// other message rather than refused, and only a line that truly exceeds hardCap
+// errors.
+func rewriteBigLine(ctx context.Context, f *os.File, agent string, origOff, origLen int64, body func(parser.BodyLocation) ([]byte, error)) ([]byte, error) {
 	// The line spans [origOff, origOff+origLen) in the file, trailing newline
 	// included. Locate bodies over the content without the newline so a span never
 	// includes it.
-	contentLen, hasNL, err := lineContentLen(t.f, origOff, origLen)
+	contentLen, hasNL, err := lineContentLen(f, origOff, origLen)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Build the rewritten line incrementally as each body is located, so the parser
-	// never holds a slice of all body locations and the bodies upload one at a time.
-	// The emit callback runs once per body in source order: copy the literal gap up to
-	// the body, upload the body, append its sentinel, and advance the cursor.
+	// never holds a slice of all body locations and the bodies are handled one at a
+	// time. The emit callback runs once per body in source order: copy the literal gap
+	// up to the body, take its sentinel, and advance the cursor.
 	var rewritten []byte
 	cursor := int64(0)
 	emit := func(loc parser.BodyLocation) error {
 		// Honor cancellation between bodies: a big line can hold many bodies, each a
-		// streamed upload, so a shutdown must not have to wait for the whole line.
+		// streamed read of its own, so a shutdown must not have to wait for the whole
+		// line.
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if loc.Span.Start < cursor || loc.Span.End > contentLen {
 			return nil // a span out of order or past the line: skip defensively
 		}
+		sentinel, err := body(loc)
+		if err != nil {
+			return err
+		}
+		rewritten, err = appendFileSpan(rewritten, f, agent, origOff+cursor, loc.Span.Start-cursor)
+		if err != nil {
+			return err
+		}
+		rewritten = append(rewritten, sentinel...)
+		cursor = loc.Span.End
+		if int64(len(rewritten)) > hardCap {
+			return errMessageTooBig(agent)
+		}
+		return nil
+	}
+	if err := parser.LocateToolBodies(ctx, parser.Agent(agent), f, origOff, contentLen, emit); err != nil {
+		return nil, err
+	}
+
+	// Whatever follows the last lifted body (or the whole line, when there was none)
+	// rides inline through the same bounded window, so a merely-large bodyless line is
+	// still sent rather than rejected.
+	rewritten, err = appendFileSpan(rewritten, f, agent, origOff+cursor, contentLen-cursor)
+	if err != nil {
+		return nil, err
+	}
+	if hasNL {
+		rewritten = append(rewritten, '\n')
+	}
+	if int64(len(rewritten)) > hardCap {
+		return nil, errMessageTooBig(agent)
+	}
+	return rewritten, nil
+}
+
+// handleBigLine transforms a line past bigLineThreshold, streaming each tool body to
+// the CAS as it is located so the body itself is never resident.
+func (t *transformer) handleBigLine(ctx context.Context, origOff, origLen int64) error {
+	rewritten, err := rewriteBigLine(ctx, t.f, t.agent, origOff, origLen, func(loc parser.BodyLocation) ([]byte, error) {
 		body, err := t.sink.emitBody(ctx, bodyRef{
 			media:    loc.Media,
 			kind:     "", // big-line kind is not surfaced; diagnostics use the small path
@@ -295,40 +345,12 @@ func (t *transformer) handleBigLine(ctx context.Context, origOff, origLen int64)
 			bodyKind: loc.Kind,
 		})
 		if err != nil {
-			return err
+			return nil, err
 		}
-		rewritten, err = appendFileSpan(rewritten, t.f, t.agent, origOff+cursor, loc.Span.Start-cursor)
-		if err != nil {
-			return err
-		}
-		rewritten = append(rewritten, sentinelFor(body, loc.FilePath, loc.Detail)...)
-		cursor = loc.Span.End
-		if int64(len(rewritten)) > hardCap {
-			return errMessageTooBig(t.agent)
-		}
-		return nil
-	}
-	if err := parser.LocateToolBodies(ctx, parser.Agent(t.agent), t.f, origOff, contentLen, emit); err != nil {
-		return err
-	}
-
-	// A big line with no liftable body (or one whose tail follows the last lifted
-	// body) rides inline: appendFileSpan copies the remaining content into the
-	// rewritten line through a bounded window, enforcing hardCap as it goes. Only a
-	// line that genuinely exceeds hardCap is refused; a merely-large bodyless line
-	// (an image-progress event, a compacted history, anything past bigLineThreshold
-	// but under the cap) is buffered and sent like any other message. This keeps the
-	// memory-bounded streaming for liftable bodies while never rejecting a line the
-	// server could store.
-	rewritten, err = appendFileSpan(rewritten, t.f, t.agent, origOff+cursor, contentLen-cursor)
+		return sentinelFor(body, loc.FilePath, loc.Detail), nil
+	})
 	if err != nil {
 		return err
-	}
-	if hasNL {
-		rewritten = append(rewritten, '\n')
-	}
-	if int64(len(rewritten)) > hardCap {
-		return errMessageTooBig(t.agent)
 	}
 	t.asm.add(rewritten, origOff, origLen)
 	return nil
@@ -371,7 +393,10 @@ func appendFileSpan(dst []byte, f *os.File, agent string, off, n int64) ([]byte,
 	if n <= 0 {
 		return dst, nil
 	}
-	buf := make([]byte, appendFileSpanBuf)
+	// Size the window to the gap: it is normally a few bytes of JSON structure, and
+	// this runs once per lifted body, so allocating the full 256 KiB every time would
+	// churn megabytes to copy kilobytes. The cap still bounds the pathological case.
+	buf := make([]byte, min(n, appendFileSpanBuf))
 	remaining := n
 	at := off
 	for remaining > 0 {
@@ -472,51 +497,22 @@ func transformPrefixDigest(ctx context.Context, f *os.File, agent string, size, 
 }
 
 // rewriteForDigest produces the transformed bytes of one line for prefix
-// verification, matching the bytes the transform uploaded. A big line is rewritten
-// by streaming, identical to handleBigLine, but the body is only hashed (through the
-// same encoder, so the key matches) rather than uploaded.
+// verification, matching the bytes the transform uploaded. A big line goes through
+// the same rewriteBigLine as the upload path, but the body is only hashed (through
+// the same encoder, so the key matches) rather than uploaded.
 func rewriteForDigest(ctx context.Context, f *os.File, agent string, line []byte, origOff, origLen int64, isBig bool, enc *casenc.Encoder) ([]byte, error) {
 	if !isBig {
 		rewritten, _ := parser.RewriteLine(parser.Agent(agent), line, enc)
 		return rewritten, nil
 	}
-	contentLen, hasNL, err := lineContentLen(f, origOff, origLen)
-	if err != nil {
-		return nil, err
-	}
-	var rewritten []byte
-	cursor := int64(0)
-	emit := func(loc parser.BodyLocation) error {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if loc.Span.Start < cursor || loc.Span.End > contentLen {
-			return nil
-		}
+	return rewriteBigLine(ctx, f, agent, origOff, origLen, func(loc parser.BodyLocation) ([]byte, error) {
 		reader := parser.CanonicalBodyReader(ctx, f, origOff, loc.Span, loc.Kind)
 		sha, _, rawLen, err := enc.HashStream(ctx, reader)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		rewritten, err = appendFileSpan(rewritten, f, agent, origOff+cursor, loc.Span.Start-cursor)
-		if err != nil {
-			return err
-		}
-		rewritten = append(rewritten, parser.SentinelBytes(sha, rawLen, loc.Media, loc.FilePath, loc.Detail)...)
-		cursor = loc.Span.End
-		return nil
-	}
-	if err := parser.LocateToolBodies(ctx, parser.Agent(agent), f, origOff, contentLen, emit); err != nil {
-		return nil, err
-	}
-	rewritten, err = appendFileSpan(rewritten, f, agent, origOff+cursor, contentLen-cursor)
-	if err != nil {
-		return nil, err
-	}
-	if hasNL {
-		rewritten = append(rewritten, '\n')
-	}
-	return rewritten, nil
+		return parser.SentinelBytes(sha, rawLen, loc.Media, loc.FilePath, loc.Detail), nil
+	})
 }
 
 // origLineScanner yields complete JSONL lines from the original file starting at a
@@ -708,14 +704,15 @@ func (s *origLineScanner) advancePast(off int64) {
 	s.done = false
 }
 
-// consume drops the first n bytes of the buffer (a returned small line), compacting
-// the remaining tail to the front of the backing array so the buffer never drifts
-// rightward and stays bounded by one read window plus a partial line regardless of
-// file length. next() returns a copy of the line, so overwriting the backing array
-// here is safe.
+// consume drops the first n bytes of the buffer (a returned small line) by advancing
+// the slice head rather than compacting the tail to the front. Compacting per line
+// would memmove the whole remaining window on every line, which at a 1 MiB window and
+// typical transcript lines costs hundreds of times the bytes actually scanned. fill
+// reclaims the abandoned head when it grows the buffer, so memory stays bounded by a
+// window plus a partial line. next() returns a copy of the line, so the bytes left
+// behind here are referenced by nobody.
 func (s *origLineScanner) consume(n int) {
-	rest := s.buf[n:]
-	s.buf = append(s.buf[:0], rest...)
+	s.buf = s.buf[n:]
 	s.bufBase += int64(n)
 	s.scanned = 0
 }
@@ -726,15 +723,18 @@ func (s *origLineScanner) fill() error {
 		s.done = true
 		return nil
 	}
-	end := s.pos + scanWindow
-	if end > s.size {
-		end = s.size
-	}
-	chunk := make([]byte, end-s.pos)
-	if err := readAt(s.f, chunk, s.pos); err != nil {
+	end := min(s.pos+scanWindow, s.size)
+	want := int(end - s.pos)
+	// Read straight onto the buffer tail. Growing first and reslicing avoids the
+	// window-sized temporary a read-then-append would allocate and copy per window,
+	// and Grow is also what reclaims the head that consume walked past: when the
+	// remaining capacity runs out it moves only the live bytes to a fresh array.
+	have := len(s.buf)
+	s.buf = slices.Grow(s.buf, want)[:have+want]
+	if err := readAt(s.f, s.buf[have:], s.pos); err != nil {
+		s.buf = s.buf[:have]
 		return err
 	}
-	s.buf = append(s.buf, chunk...)
 	s.pos = end
 	if s.pos >= s.size {
 		s.done = true

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/jssblck/akari/internal/casenc"
 	"github.com/jssblck/akari/internal/parser"
 	"github.com/jssblck/akari/internal/server/store"
 )
@@ -38,7 +39,7 @@ func (s *Server) handleBlobCheck(w http.ResponseWriter, r *http.Request) {
 	clean := make([]string, 0, len(req.SHA256))
 	for _, sha := range req.SHA256 {
 		sha = strings.ToLower(strings.TrimSpace(sha))
-		if isHexSHA256(sha) {
+		if casenc.ValidKey(sha) {
 			clean = append(clean, sha)
 		}
 	}
@@ -58,7 +59,7 @@ func (s *Server) handleBlobCheck(w http.ResponseWriter, r *http.Request) {
 // mislabeled upload is rejected rather than poisoning the content-addressed store.
 func (s *Server) handleBlobUpload(w http.ResponseWriter, r *http.Request) {
 	sha := strings.ToLower(r.PathValue("sha256"))
-	if !isHexSHA256(sha) {
+	if !casenc.ValidKey(sha) {
 		writeError(w, http.StatusBadRequest, "invalid blob hash")
 		return
 	}

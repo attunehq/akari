@@ -98,6 +98,10 @@ const scanChunk = 64 << 10
 // LocateValues pass.
 func (s *lineSource) reader() func() ([]byte, error) {
 	pos := int64(0)
+	// One window, reused across calls: the scan consumes each chunk byte by byte and
+	// retains none of it, so a fresh allocation per 64 KiB would churn once per window
+	// for every pass over a line that can run to hundreds of MiB.
+	buf := make([]byte, scanChunk)
 	return func() ([]byte, error) {
 		if pos >= s.size {
 			return nil, io.EOF
@@ -106,10 +110,10 @@ func (s *lineSource) reader() func() ([]byte, error) {
 		if n > scanChunk {
 			n = scanChunk
 		}
-		buf := make([]byte, n)
+		win := buf[:n]
 		// The window lies wholly within the declared line, so a short read here means
 		// the file is shorter than the line claims: a truncation, not a clean EOF.
-		if err := readFull(s.f, buf, s.base+pos); err != nil {
+		if err := readFull(s.f, win, s.base+pos); err != nil {
 			return nil, err
 		}
 		pos += n
@@ -117,7 +121,7 @@ func (s *lineSource) reader() func() ([]byte, error) {
 		if pos >= s.size {
 			perr = io.EOF
 		}
-		return buf, perr
+		return win, perr
 	}
 }
 
@@ -583,8 +587,10 @@ func (s *lineSource) readStringSpan(sp ValueSpan, kind BodyKind, v ValueSpan, ma
 // readerWindows adapts an io.Reader to the chunked next() a streaming scan
 // consumes, pulling one bounded window per call.
 func readerWindows(r io.Reader) func() ([]byte, error) {
+	// Reused across calls; the scan consumes each window fully before asking for the
+	// next and retains none of its bytes.
+	buf := make([]byte, scanChunk)
 	return func() ([]byte, error) {
-		buf := make([]byte, scanChunk)
 		n, err := r.Read(buf)
 		if err != nil && err != io.EOF {
 			return nil, err
@@ -646,40 +652,13 @@ func (s *lineSource) locateBlocks(arr []Step, wantType string, bodyKey Step, kin
 	})
 }
 
-// locateResultBlocks walks claude tool_result blocks in a single streaming pass,
-// classifying each result body from its first byte and emitting it as it is found.
-// Like locateBlocks it relies on WalkArrayElements so the line is streamed once
-// regardless of block count and no per-block slice accumulates.
-func (s *lineSource) locateResultBlocks(arr []Step, wantType string, bodyKey Step, emit func(BodyLocation) error) error {
-	return s.walkBlocks(arr, bodyKey, func(typeSpan, bodySpan ValueSpan, hasBody bool) error {
-		bt, err := s.unquoted(typeSpan)
-		if err != nil {
-			return err
-		}
-		if bt != wantType {
-			return nil
-		}
-		if !hasBody || bodySpan.End <= bodySpan.Start {
-			return nil
-		}
-		loc, ok, err := s.classifyResult(bodySpan)
-		if err != nil {
-			return err
-		}
-		if ok {
-			return emit(loc)
-		}
-		return nil
-	})
-}
-
 // walkBlocks runs one WalkArrayElements pass over the content array, invoking
-// onBlock for each element that carries a `type` discriminator. It is the shared
-// single-pass spine of locateBlocks and locateResultBlocks: both need each block's
-// type span (to decide whether it is the wanted kind) and its body span (the value
-// at bodyKey), and both must preserve source order, which the walker guarantees.
-// An element without a `type` (a bare string element of a result array) is skipped
-// here because both callers key off the discriminator.
+// onBlock for each element that carries a `type` discriminator. It is the
+// single-pass spine of locateBlocks: the caller needs each block's type span (to
+// decide whether it is the wanted kind) and its body span (the value at bodyKey),
+// and must preserve source order, which the walker guarantees. An element without
+// a `type` (a bare string element of a result array) is skipped here because the
+// caller keys off the discriminator.
 func (s *lineSource) walkBlocks(arr []Step, bodyKey Step, onBlock func(typeSpan, bodySpan ValueSpan, hasBody bool) error) error {
 	subKeys := []Step{Key("type"), bodyKey}
 	return WalkArrayElements(s.ctx, arr, subKeys, s.reader(), func(_ int, _ ValueSpan, subs map[Step]ValueSpan) error {
@@ -717,45 +696,14 @@ func (s *lineSource) readHead(sp ValueSpan) (byte, error) {
 	return b[0], nil
 }
 
-// jsonUnquote decodes a small JSON string literal (a block `type`), resolving the
-// simple escapes a discriminator could contain. Bodies never go through here; they
-// stream through CanonicalBodyReader.
+// jsonUnquote decodes a small JSON string literal (a block `type`), falling back to
+// the raw text when it is not a well-formed string. Bodies never go through here;
+// they stream through CanonicalBodyReader, so decoding into memory is bounded to a
+// discriminator's length.
 func jsonUnquote(raw string) string {
-	if len(raw) < 2 || raw[0] != '"' || raw[len(raw)-1] != '"' {
+	var s string
+	if json.Unmarshal([]byte(raw), &s) != nil {
 		return raw
 	}
-	inner := raw[1 : len(raw)-1]
-	if !hasByte(inner, '\\') {
-		return inner
-	}
-	out := make([]byte, 0, len(inner))
-	for i := 0; i < len(inner); i++ {
-		if inner[i] != '\\' || i+1 >= len(inner) {
-			out = append(out, inner[i])
-			continue
-		}
-		i++
-		switch inner[i] {
-		case 'n':
-			out = append(out, '\n')
-		case 't':
-			out = append(out, '\t')
-		case 'r':
-			out = append(out, '\r')
-		case '"', '\\', '/':
-			out = append(out, inner[i])
-		default:
-			out = append(out, '\\', inner[i])
-		}
-	}
-	return string(out)
-}
-
-func hasByte(s string, b byte) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] == b {
-			return true
-		}
-	}
-	return false
+	return s
 }

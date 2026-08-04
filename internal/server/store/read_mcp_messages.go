@@ -91,7 +91,7 @@ func (s *Store) MCPMessagesAfter(ctx context.Context, sessionID int64, after *in
 	}
 	defer rows.Close()
 
-	var out []MCPMessage
+	out := []MCPMessage{}
 	var candidateCount int
 	fieldTruncated := false
 	for rows.Next() {

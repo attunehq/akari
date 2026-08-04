@@ -257,4 +257,12 @@ package parse
 // re-derives the corpus, including signals, at the running scoring. Bodies the
 // old client transform never lifted (Claude images, toolUseResult) fill only as
 // sessions re-sync, exactly like Epoch 17's surrogate fix.
-const Epoch = 20
+// Epoch 20 -> 21: price claude-opus-5 (Opus 5 at the current $5/$25 Opus rate;
+// see internal/pricing). Opus 5 usage was unknown to the pricing table before, so
+// its usage_events rows carry a zero per-row cost and its sessions read as
+// unpriced. This bump rebuilds the corpus so every Opus 5 usage row re-prices
+// through pricing.Cost in one pass. It is a pricing change, not a reducer-shape
+// change, and no golden fixture uses Opus 5, so the projection delta for the
+// fixtures is byte-for-byte identical and the golden snapshots do not move; the
+// bump is the reprice signal and stands on its own.
+const Epoch = 21

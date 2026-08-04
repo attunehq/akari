@@ -401,8 +401,9 @@ func codexBodyFields(e gjson.Result) []bodyField {
 		// tool item is keyed by payload.type, a conversational turn by payload.role (a
 		// Codex message carries no payload.type, so keying it on role is what keeps the
 		// extractor and the reducer agreeing on which user-pasted images to lift).
+		itemType := p.Get("type").String()
 		switch {
-		case p.Get("type").String() == "function_call":
+		case itemType == "function_call":
 			args := p.Get("arguments")
 			// Codex stores arguments as a JSON-encoded string; the body the reducer
 			// records is the unquoted string value, so the canonical content is
@@ -410,21 +411,21 @@ func codexBodyFields(e gjson.Result) []bodyField {
 			if f, ok := rawField(args, args.String(), "application/json", bodyKindInput); ok {
 				return []bodyField{f}
 			}
-		case p.Get("type").String() == "custom_tool_call":
+		case itemType == "custom_tool_call":
 			// A custom tool call (for example apply_patch) carries its input as a plain
 			// string, which can be a large patch; lift it like any other tool input.
 			in := p.Get("input")
 			if f, ok := rawField(in, in.String(), "text/plain", bodyKindInput); ok {
 				return []bodyField{f}
 			}
-		case p.Get("type").String() == "function_call_output",
-			p.Get("type").String() == "custom_tool_call_output":
+		case itemType == "function_call_output",
+			itemType == "custom_tool_call_output":
 			out := p.Get("output")
 			c, media := bodyContent(out)
 			if f, ok := rawField(out, c, media, bodyKindResult); ok {
 				return []bodyField{f}
 			}
-		case p.Get("type").String() == "image_generation_call":
+		case itemType == "image_generation_call":
 			// The generated image rides inline as a base64 result; lift it as a binary
 			// attachment so the transcript stays small and the image is stored decoded.
 			if f, ok := imageField(p.Get("result")); ok {

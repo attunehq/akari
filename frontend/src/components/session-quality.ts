@@ -3,11 +3,7 @@
 // their source because there is no shared definition across the language boundary.
 
 import { formatTokens } from "../format";
-import type {
-  ModelFallback,
-  SessionSignals,
-  TurnUsageFull,
-} from "./session-types";
+import type { ModelFallback, SessionSignals, TurnUsage } from "../types";
 
 // gradeBand maps a stored grade to the CSS tier used only by the frontend.
 export function gradeBand(
@@ -52,14 +48,6 @@ export function outcomeLabel(outcome: string): string {
     default:
       return "Unknown";
   }
-}
-
-// web.RowOutcomeNote: a short outcome word worth flagging on a feed row, empty for
-// the outcomes that need no glance (completed, unknown).
-export function rowOutcomeNote(outcome: string): string {
-  if (outcome === "abandoned") return "abandoned";
-  if (outcome === "errored") return "errored";
-  return "";
 }
 
 // quality.ScoreBreakdown: the penalty lines behind a scored session's grade, in the
@@ -192,18 +180,18 @@ export function isContextReset(prev: number, cur: number): boolean {
 }
 
 // web.TurnTokenTotal / web.TurnCostLabel / web.FmtContextStamp / web.ShedLabel
-export function turnTokenTotal(u: TurnUsageFull): number {
+export function turnTokenTotal(u: TurnUsage): number {
   return u.Input + u.Output + u.CacheRead + u.CacheWrite;
 }
 
 export function turnCostLabel(
-  u: TurnUsageFull,
+  u: TurnUsage,
   formatCost: (v: number) => string,
 ): string {
   return formatCost(u.CostUSD);
 }
 
-export function contextStamp(u: TurnUsageFull): string {
+export function contextStamp(u: TurnUsage): string {
   return `ctx ${formatTokens(u.ContextTokens)}`;
 }
 

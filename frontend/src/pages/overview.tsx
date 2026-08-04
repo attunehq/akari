@@ -71,7 +71,22 @@ export function AnalyticsPanel({
   return (
     <>
       <StatStrip>
-        <Stat label="Cost" value={formatCost(analytics.TotalCost)} />
+        <Stat
+          label="Cost"
+          value={
+            <HoverTip summary={formatCost(analytics.TotalCost)}>
+              <dl className="tt-grid">
+                <dt>Without cache</dt>
+                <dd>
+                  {formatCost(analytics.TotalCost + analytics.Cache.SavingsUSD)}
+                </dd>
+              </dl>
+              <div className="tt-cost">
+                {formatSavings(analytics.Cache.SavingsUSD)}
+              </div>
+            </HoverTip>
+          }
+        />
         <Stat
           label="Tokens"
           value={
@@ -114,10 +129,10 @@ export function AnalyticsPanel({
         mobileActivity={mobileActivity}
       />
       <div className="usage-breakdowns">
-        <BreakdownTable title="Models" rows={analytics.Models ?? []} />
-        <BreakdownTable title="Agents" rows={analytics.Agents ?? []} />
+        <BreakdownTable title="Models" rows={analytics.Models} />
+        <BreakdownTable title="Agents" rows={analytics.Agents} />
         {showUsers && (analytics.Users?.length ?? 0) > 1 ? (
-          <BreakdownTable title="Users" rows={analytics.Users ?? []} />
+          <BreakdownTable title="Users" rows={analytics.Users} />
         ) : null}
       </div>
     </>
@@ -184,18 +199,13 @@ function BreakdownTable({ title, rows }: { title: string; rows: Breakdown[] }) {
               row.Input + row.Output + row.CacheRead + row.CacheWrite;
             return (
               <div className="breakdown-row" key={row.Label}>
-                <span
-                  className="breakdown-fill"
-                  style={{
-                    width: `${Math.max((row.CostUSD / max) * 100, 1)}%`,
-                    background: `var(--viz-${(index % 8) + 1})`,
-                  }}
-                />
                 <div className="breakdown-head">
                   <span className="breakdown-label">
                     {row.Label || "unknown"}
                   </span>
-                  <span className="data">{formatCost(row.CostUSD)}</span>
+                  <span className={row.CostUSD === 0 ? "data muted" : "data"}>
+                    {row.CostUSD === 0 ? "not priced" : formatCost(row.CostUSD)}
+                  </span>
                 </div>
                 <div className="breakdown-sub">
                   <HoverTip summary={formatTokens(tokens)} className="tok-cell">
@@ -205,7 +215,7 @@ function BreakdownTable({ title, rows }: { title: string; rows: Breakdown[] }) {
                       cacheRead={row.CacheRead}
                       cacheWrite={row.CacheWrite}
                       reasoning={row.Reasoning}
-                      costUSD={row.CostUSD}
+                      {...(row.CostUSD === 0 ? {} : { costUSD: row.CostUSD })}
                     />
                   </HoverTip>
                   <span>
@@ -213,6 +223,15 @@ function BreakdownTable({ title, rows }: { title: string; rows: Breakdown[] }) {
                     tok · {row.Sessions} session{row.Sessions === 1 ? "" : "s"}
                   </span>
                 </div>
+                <span className="breakdown-track">
+                  <span
+                    className="breakdown-fill"
+                    style={{
+                      width: `${Math.max((row.CostUSD / max) * 100, 1)}%`,
+                      background: `var(--viz-${(index % 8) + 1})`,
+                    }}
+                  />
+                </span>
               </div>
             );
           })}
@@ -275,10 +294,10 @@ export function OverviewPage() {
             mobileActivity="range-only"
             activityControls={
               <>
-                {(data.users ?? []).length > 1 ? (
-                  <AccountFilter users={data.users ?? []} />
+                {data.users.length > 1 ? (
+                  <AccountFilter users={data.users} />
                 ) : null}
-                <RangeTabs ranges={data.ranges ?? []} active={data.range} />
+                <RangeTabs ranges={data.ranges} active={data.range} />
               </>
             }
           />

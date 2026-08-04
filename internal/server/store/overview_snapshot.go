@@ -47,7 +47,7 @@ func (s *Store) ProjectOverviewSnapshot(ctx context.Context, f AnalyticsFilter) 
 			}
 			wantTrends = true
 		}
-		insights.Trends = &Trends{Unit: grid.Unit, BucketStarts: grid.Starts, Labels: grid.labels()}
+		insights.Trends = newTrends(grid)
 	}
 	for _, read := range s.insightsReads(insightsFilter, QualityBandPanels, grid, wantTrends, &insights) {
 		if err := read(ctx, tx); err != nil {

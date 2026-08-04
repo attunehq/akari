@@ -13,7 +13,6 @@ import {
   relativeTime,
   sessionTokens,
 } from "../format";
-import { normalizeInsights } from "../normalize-insights";
 import type {
   PublicOverviewResponse,
   PublicProjectResponse,
@@ -23,9 +22,9 @@ import "./public.css";
 import { withBase } from "../base";
 import { ToolsInstrument } from "../components/insights/tools";
 import { TooltipHost } from "../components/insights/tooltip";
+import { Transcript } from "../components/transcript";
 import { InsightsPanel } from "./insights";
 import { AnalyticsPanel } from "./overview";
-import { Transcript } from "./sessions";
 
 // PublicPage wraps every logged-out surface with the shared shell, the page
 // container, and a swap of AsyncView's generic error card for one that fits
@@ -72,7 +71,7 @@ export function PublicOverviewPage() {
                 <h1>{data.username} / usage</h1>
                 <p>AI coding-agent activity shared from akari.</p>
               </div>
-              <RangeTabs ranges={data.ranges ?? []} active={data.range} />
+              <RangeTabs ranges={data.ranges} active={data.range} />
             </header>
             <AnalyticsPanel analytics={data.analytics} />
           </>
@@ -95,7 +94,7 @@ export function PublicProjectPage() {
         renderError={(error) => <PublicErrorState error={error} />}
       >
         {(data) => {
-          const insights = normalizeInsights(data.insights);
+          const insights = data.insights;
           return (
             <>
               <header className="page-head">
@@ -106,7 +105,7 @@ export function PublicProjectPage() {
                   </h1>
                   <p>{data.project.RemoteKey}</p>
                 </div>
-                <RangeTabs ranges={data.ranges ?? []} active={data.range} />
+                <RangeTabs ranges={data.ranges} active={data.range} />
               </header>
               <AnalyticsPanel analytics={data.analytics} />
               <div className="project-insights">
@@ -140,7 +139,7 @@ export function PublicSessionPage() {
       >
         {(data) => {
           const detail = data.snapshot.Audit.Detail;
-          const subagents = data.snapshot.Audit.Subagents ?? [];
+          const subagents = data.snapshot.Audit.Subagents;
           return (
             <>
               <header className="page-head">

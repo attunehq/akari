@@ -306,32 +306,6 @@ func (s *Server) serveOGCard(
 	}
 }
 
-// landingOGCacheMaxAge is the Cache-Control window for the homepage card at
-// /og.png. The card is static per binary (it reads no parsed data), so it only
-// changes on deploy: a full day of crawler caching is safe, and mirrors the
-// "changes only on deploy" lifetime the overview card gets through its TTL.
-const landingOGCacheMaxAge = 86400
-
-// handleLandingOGImage serves the Open Graph preview card for the instance root
-// ("/") at /og.png. Unlike the per-user overview card, it carries no account data
-// (just the wordmark, the product headline, and a decorative band), so it is
-// static per binary: ogimage.Landing renders it once and memoizes the bytes, and
-// there is nothing to gate on a reparse or scope to a user. A render failure is a
-// missing font asset in the binary, an internal error, not a 404.
-func (s *Server) handleLandingOGImage(w http.ResponseWriter, r *http.Request) {
-	png, err := ogimage.Landing()
-	if err != nil {
-		log.Printf("landing og: render failed: %v", err)
-		http.Error(w, "Could not load preview image.", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "image/png")
-	w.Header().Set("Content-Length", strconv.Itoa(len(png)))
-	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", landingOGCacheMaxAge))
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(png)
-}
-
 // ogRenderTimeout bounds a single on-demand card render (its analytics snapshot, the
 // raster, and the cache write). The render is detached from the request that triggers
 // it so a dropped crawler connection cannot cancel it for the other waiters, so it

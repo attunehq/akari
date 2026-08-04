@@ -258,7 +258,7 @@ func (s *Store) ListOAuthGrants(ctx context.Context, userID int64) ([]OAuthGrant
 		return nil, err
 	}
 	defer rows.Close()
-	var out []OAuthGrant
+	out := []OAuthGrant{}
 	for rows.Next() {
 		var g OAuthGrant
 		if err := rows.Scan(&g.ClientID, &g.ClientName, &g.Scope, &g.ConnectedAt, &g.LastUsedAt); err != nil {

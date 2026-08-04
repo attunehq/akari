@@ -46,7 +46,7 @@ func (s *Store) SessionAuditByID(ctx context.Context, sessionID int64) (SessionA
 // snapshot reads can pin the audit rows to the same MVCC snapshot as the transcript
 // window and shape beside them.
 func (s *Store) sessionAudit(ctx context.Context, tx pgx.Tx, sessionID int64) (SessionAudit, error) {
-	var a SessionAudit
+	a := SessionAudit{Fallbacks: []ModelFallback{}}
 	var err error
 	if a.Detail, err = s.scanDetail(ctx, tx, "s.id = $1", sessionID); err != nil {
 		return a, err
@@ -104,7 +104,7 @@ func (s *Store) subagents(ctx context.Context, q querier, parentID int64) ([]Sub
 		       coalesce(title.content, '')
 		  FROM sessions s
 		  JOIN users u ON u.id = s.user_id
-		  LEFT JOIN session_signals sig ON sig.session_id = s.id AND `+signalsCurrent()+`
+		  LEFT JOIN session_signals sig ON sig.session_id = s.id AND `+signalsCurrent+`
 		  `+titleLateralSQL+`
 		 WHERE s.parent_session_id = $1
 		 ORDER BY s.id`, parentID)
@@ -112,7 +112,7 @@ func (s *Store) subagents(ctx context.Context, q querier, parentID int64) ([]Sub
 		return nil, fmt.Errorf("query subagents of session %d: %w", parentID, err)
 	}
 	defer rows.Close()
-	var out []SubagentRow
+	out := []SubagentRow{}
 	for rows.Next() {
 		var r SubagentRow
 		var outcome *string

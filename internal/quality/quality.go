@@ -7,10 +7,7 @@
 // retries, churn, an errored ending), then map the remainder to a letter.
 package quality
 
-import (
-	"strconv"
-	"strings"
-)
+import ()
 
 // Outcome is how a session ended, inferred from its projection. It is a best effort:
 // without a terminal marker in the transcript the ending is a heuristic, so every
@@ -181,63 +178,6 @@ func Score(s Signals) (score int, grade string, scored bool) {
 	return score, GradeFor(score), true
 }
 
-// ScoreBreakdownItem is one line of the score arithmetic: a human-readable label for a
-// penalty and the positive number of points it subtracted. The UI stacks these to show a
-// reader why a session scored what it did, so a low grade is explained rather than
-// asserted.
-type ScoreBreakdownItem struct {
-	Label  string // e.g. "errored ending", "3 tool failures"
-	Points int    // the penalty subtracted, always > 0
-}
-
-// ScoreBreakdown returns the penalty lines behind Score for the same Signals, in the same
-// order Score applies them (outcome, failures, retries, churn, streak) and with the same
-// caps, so the sum of the returned Points equals 100 minus the score (before the clamp at
-// zero). It returns nil for an unscored session (the same gating as Score: an unknown
-// outcome with no tool signal), since there is no arithmetic to explain. A scored session
-// with no penalties (a clean completed run) also returns nil: there is nothing subtracted,
-// so there is nothing to list.
-func ScoreBreakdown(s Signals) []ScoreBreakdownItem {
-	if s.Outcome == OutcomeUnknown && !s.hasToolSignal() {
-		return nil
-	}
-	var items []ScoreBreakdownItem
-	switch s.Outcome {
-	case OutcomeErrored:
-		items = append(items, ScoreBreakdownItem{Label: "errored ending", Points: penErrored})
-	case OutcomeAbandoned:
-		items = append(items, ScoreBreakdownItem{Label: "abandoned", Points: penAbandoned})
-	}
-	if p := min(s.ToolFailures*penPerFailure, capFailures); p > 0 {
-		items = append(items, ScoreBreakdownItem{Label: plural(s.ToolFailures, "tool failure"), Points: p})
-	}
-	if p := min(s.ToolRetries*penPerRetry, capRetries); p > 0 {
-		items = append(items, ScoreBreakdownItem{Label: plural(s.ToolRetries, "retry"), Points: p})
-	}
-	if p := min(s.EditChurn*penPerChurn, capChurn); p > 0 {
-		items = append(items, ScoreBreakdownItem{Label: plural(s.EditChurn, "churned edit"), Points: p})
-	}
-	if s.LongestFailureStreak >= failureStreakFloor {
-		items = append(items, ScoreBreakdownItem{Label: "failure streak", Points: penFailureStreak})
-	}
-	return items
-}
-
-// plural renders a count with a noun, pluralized by a trailing "s" (or "ies" when the
-// singular ends in "y", so "retry" becomes "2 retries"), so a breakdown label reads
-// grammatically for the handful of nouns Score uses.
-func plural(n int, singular string) string {
-	noun := singular
-	if n != 1 {
-		if strings.HasSuffix(singular, "y") {
-			noun = strings.TrimSuffix(singular, "y") + "ies"
-		} else {
-			noun = singular + "s"
-		}
-	}
-	return strconv.Itoa(n) + " " + noun
-}
-
 // Archetype is a coarse shape-of-session label, the kind agentsview surfaces to let a
 // reader see at a glance whether their fleet is mostly quick lookups, standard work, or
 // long marathons. It is inferred from cheap session facts (how many human turns, how
@@ -271,34 +211,6 @@ const (
 	StandardMinutes  = 5
 	StandardMessages = 15
 )
-
-// ArchetypeFacts are the cheap session facts archetype classification reads: the human
-// turn count (zero means automation), the total message count, and the wall-clock
-// duration in minutes (0 when the session carries no start/end span).
-type ArchetypeFacts struct {
-	UserMessages int
-	Messages     int
-	DurationMin  float64
-}
-
-// ClassifyArchetype buckets a session by its shape. Automation wins first (no human
-// turn). Otherwise the session takes the heaviest band whose duration or message count
-// it reaches, so neither a long idle session nor a short burst is undersold.
-func ClassifyArchetype(f ArchetypeFacts) Archetype {
-	if f.UserMessages == 0 {
-		return ArchetypeAutomation
-	}
-	switch {
-	case f.DurationMin >= MarathonMinutes || f.Messages >= MarathonMessages:
-		return ArchetypeMarathon
-	case f.DurationMin >= DeepMinutes || f.Messages >= DeepMessages:
-		return ArchetypeDeep
-	case f.DurationMin >= StandardMinutes || f.Messages >= StandardMessages:
-		return ArchetypeStandard
-	default:
-		return ArchetypeQuick
-	}
-}
 
 // GradeFor maps a 0-100 score to its letter on the standard banding. It is the one
 // place the score-to-letter thresholds live, so a per-session grade and a figure

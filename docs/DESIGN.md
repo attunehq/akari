@@ -251,8 +251,8 @@ rebuild them from the stored raw bytes whenever the parser improves.
 4. Compute token stats and cost.
 5. Accept content-addressed uploads of tool input/result bodies (and store binary
    attachments) in the large-object store, deduped by hash.
-6. Serve the embedded React application, its JSON/OpenAPI surface, and the
-   templated root homepage.
+6. Serve the embedded React application and its JSON/OpenAPI surface. Redirect
+   the root and legacy guide routes to the GitHub Pages product site.
 7. Authenticate users and tokens; enforce the internal/public boundary.
 
 ### Expensive request admission
@@ -1078,16 +1078,17 @@ client) decompresses it transparently while the server spends no CPU decoding it
 
 ### Web UI and application API
 
-Every browser route except `/` is an embedded React application backed by JSON
+Application browser routes are an embedded React application backed by JSON
 under `/api/v1/app`. Recharts renders charts as React-owned SVG. In-progress
 sessions update through the existing SSE stream, then refetch a projection
 snapshot. Public transcript pagination uses the same bounded snapshot reads and
-revocable capability URLs as the authenticated view. The root homepage stays a
-static templ render with no application JavaScript. Vite's production output is
-committed under `internal/server/frontend/dist` and embedded with `go:embed`, so
-the distributed server remains one self-contained binary. The OpenAPI 3.1
-contract is available at `/api/openapi.json`, with embedded Swagger UI at
-`/api/docs`.
+revocable capability URLs as the authenticated view. Vite's production output
+is committed under `internal/server/frontend/dist` and embedded with `go:embed`,
+so the distributed server remains one self-contained binary. The public homepage
+and user guide are an Astro site deployed through GitHub Pages. The server
+permanently redirects `/`, `/guide`, `/llms.txt`, and their related static routes
+to that site. The OpenAPI 3.1 contract is available at `/api/openapi.json`, with
+embedded Swagger UI at `/api/docs`.
 
 Pages:
 
@@ -1570,7 +1571,6 @@ internal/
   casenc/           # client-side CAS body encoder (zstd policy, deterministic)
   gitremote/        # remote URL canonicalization
   pricing/          # compiled-in rate table + cost computation
-  guide/            # embedded user-guide chapters + Markdown rendering
   devseed/          # dev-seed roster and ingest driver
   selfupdate/       # client self-update against GitHub releases
   shutdown/         # signal-driven shutdown context
@@ -1580,7 +1580,7 @@ internal/
     mcpserver/      # MCP tools over the read surface
     ogimage/        # Open Graph preview card rendering
     frontend/       # embedded React production artifact
-    web/            # templated root homepage and its static assets
+    web/            # shared presentation helpers and templated error pages
     store/          # postgres queries, CAS (large objects), migration runner
     storetest/      # per-test database provisioning
     auth/           # password, tokens, cookies
@@ -1597,12 +1597,15 @@ migrations/         # forward-only SQL, embedded into the server
 docker-compose.yml
 Dockerfile
 frontend/            # React, Recharts, and Vite source
+site/                # Astro homepage and user-guide renderer
+docs/user-guide/     # user-guide Markdown published by the site
 ```
 
 ## Tooling
 
 - Go (current toolchain pinned in `go.mod`).
-- React and Recharts for the application; templ for the root homepage.
+- React and Recharts for the application; Astro for the public site; templ for
+  server-rendered error pages.
 - OpenAPI 3.1 with embedded Swagger UI.
 - `pgx` for Postgres (large-object support, batching).
 - `fsnotify` for file watching. The client keeps no on-disk state.

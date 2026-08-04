@@ -242,13 +242,6 @@ button {
   font-family: "Geist Mono", monospace;
   font-size: 12px;
 }
-.head-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
 .section-head {
   display: flex;
   justify-content: space-between;
@@ -698,13 +691,6 @@ code {
 .data-table tr:last-child td {
   border-bottom: 0;
 }
-.data-table .remainder-row td {
-  color: var(--muted);
-  background: var(--surface-2);
-  border-top: 1px solid var(--border);
-  border-bottom: 0;
-  font-size: 12px;
-}
 .data-table tbody tr:hover td {
   background: color-mix(in srgb, var(--surface-2) 55%, transparent);
 }
@@ -826,19 +812,6 @@ select:focus {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.feed-project,
-.feed-meta {
-  display: block;
-  color: var(--muted);
-  font-size: 11px;
-}
-.feed-project {
-  margin-bottom: 3px;
-  font-family: "Geist Mono", monospace;
-}
-.feed-meta {
-  margin-top: 4px;
-}
 .feed-signals {
   display: flex;
   gap: 6px;
@@ -856,139 +829,22 @@ select:focus {
   color: var(--text);
   font-size: 13px;
 }
-.load-more {
-  margin: 14px;
-}
 
 .transcript {
   margin-top: 24px;
-}
-.earlier {
-  width: 100%;
-  padding: 9px;
-  color: var(--muted);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-}
-.earlier:hover {
-  color: var(--text);
-  background: var(--surface-2);
-}
-.message-list {
-  min-width: 0;
-  display: grid;
-  gap: 12px;
-  margin-top: 12px;
-}
-.message {
-  min-width: 0;
-  width: min(1100px, 100%);
-  padding: 13px 15px;
-  background: #1b1b1f;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-.message.role-user {
-  background: #201e26;
-}
-.message.role-context,
-.message.role-system {
-  background: transparent;
-  border-style: dashed;
-}
-.message > header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-  color: var(--muted);
-  font-family: "Geist Mono", monospace;
-  font-size: 11px;
-}
-.message-role {
-  color: var(--subtext);
-  font-family: Geist, sans-serif;
-  font-weight: 600;
-  text-transform: capitalize;
-}
-.message > header time {
-  margin-left: auto;
-}
-.message-usage {
-  color: var(--subtext);
-}
-.message-content {
-  max-width: 75ch;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 .thinking {
   margin: 8px 0;
   color: var(--muted);
 }
-.thinking summary,
-.tool-call summary {
+.thinking summary {
   display: flex;
   align-items: center;
   gap: 7px;
   list-style: none;
 }
-.thinking summary::-webkit-details-marker,
-.tool-call summary::-webkit-details-marker {
+.thinking summary::-webkit-details-marker {
   display: none;
-}
-.thinking pre {
-  max-height: 380px;
-  padding: 10px;
-  overflow: auto;
-  color: var(--subtext);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  white-space: pre-wrap;
-}
-.tool-list {
-  min-width: 0;
-  display: grid;
-  gap: 6px;
-  margin-top: 10px;
-}
-.tool-call {
-  min-width: 0;
-  max-width: 100%;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-}
-.tool-call.error {
-  border-color: color-mix(in srgb, var(--err) 55%, var(--border));
-}
-.tool-call summary {
-  min-width: 0;
-  min-height: 34px;
-  padding: 6px 9px;
-}
-.tool-name {
-  color: var(--lilac);
-  font-family: "Geist Mono", monospace;
-  font-size: 12px;
-}
-.tool-detail {
-  flex: 1;
-  overflow: hidden;
-  color: var(--subtext);
-  font-family: "Geist Mono", monospace;
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tool-body-links {
-  display: flex;
-  gap: 14px;
-  padding: 9px;
-  border-top: 1px solid var(--border);
-  font-size: 12px;
 }
 
 .public-frame {
@@ -1074,70 +930,6 @@ select:focus {
   gap: 8px;
 }
 
-.guide-layout {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 780px) 190px;
-  gap: 36px;
-  width: min(1320px, 100%);
-  margin: 0 auto;
-  padding: 30px 28px 70px;
-}
-.guide-nav,
-.guide-toc {
-  position: sticky;
-  top: 24px;
-  align-self: start;
-  display: grid;
-  gap: 4px;
-}
-.guide-nav > .label,
-.guide-toc > .label {
-  margin: 0 8px 8px;
-}
-.guide-nav nav {
-  display: grid;
-}
-.guide-nav a {
-  display: grid;
-  grid-template-columns: 24px 1fr;
-  gap: 6px;
-  padding: 6px 8px;
-  color: var(--muted);
-  border-radius: 3px;
-  font-size: 12px;
-}
-.guide-nav a span {
-  font-family: "Geist Mono", monospace;
-  color: var(--border-strong);
-}
-.guide-nav a:is(:hover, .active) {
-  color: var(--text);
-  background: var(--surface);
-}
-.guide-nav a.active span {
-  color: var(--lilac);
-}
-.guide-article {
-  min-width: 0;
-}
-.guide-article > header {
-  padding-bottom: 22px;
-  border-bottom: 1px solid var(--border);
-}
-.guide-article > header h1 {
-  margin: 0;
-  font-size: 30px;
-}
-.guide-article > header p {
-  max-width: 65ch;
-  color: var(--muted);
-}
-.guide-actions {
-  display: flex;
-  gap: 7px;
-  flex-wrap: wrap;
-  margin-top: 16px;
-}
 .prose {
   max-width: 75ch;
   color: var(--subtext);
@@ -1194,31 +986,6 @@ select:focus {
   color: var(--muted);
   border-left: 1px solid var(--border-strong);
 }
-.guide-toc a {
-  padding: 4px 8px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.guide-toc a.nested {
-  padding-left: 18px;
-}
-.guide-toc a:hover {
-  color: var(--text);
-}
-.guide-pager {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 40px;
-  padding-top: 18px;
-  border-top: 1px solid var(--border);
-}
-.guide-pager a {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .account-sections {
   border-top: 1px solid var(--border);
 }
@@ -1460,12 +1227,6 @@ select:focus {
   :root {
     --sidebar: 190px;
   }
-  .guide-layout {
-    grid-template-columns: 190px minmax(0, 1fr);
-  }
-  .guide-toc {
-    display: none;
-  }
   .feed-row {
     grid-template-columns: minmax(0, 1fr) 140px;
   }
@@ -1548,12 +1309,9 @@ select:focus {
   .sidebar nav {
     flex-direction: column;
   }
-  .sidebar nav a.mobile-nav-hidden {
-    display: none;
-  }
   .sidebar-foot {
     flex-direction: column;
-    margin: auto 0 0;
+    margin: 18px 0 0;
     padding: 14px 0 0;
     border-top: 1px solid var(--border);
   }
@@ -1571,9 +1329,6 @@ select:focus {
   .page-head {
     flex-direction: column;
   }
-  .head-actions {
-    justify-content: flex-start;
-  }
   .split-panels {
     grid-template-columns: 1fr;
   }
@@ -1587,20 +1342,6 @@ select:focus {
     grid-template-columns: 1fr;
     gap: 14px;
   }
-  .guide-layout {
-    grid-template-columns: 1fr;
-    padding: 20px 16px 50px;
-  }
-  .guide-nav {
-    position: static;
-    overflow-x: auto;
-  }
-  .guide-nav nav {
-    display: flex;
-  }
-  .guide-nav a {
-    min-width: max-content;
-  }
   .public-topbar {
     padding: 0 14px;
   }
@@ -1609,26 +1350,6 @@ select:focus {
   }
   .stat {
     border-bottom: 1px solid var(--border);
-  }
-}
-@media (max-width: 520px) {
-  .message > header {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: start;
-  }
-  .message-model {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .message > header time {
-    grid-column: 1 / -1;
-    margin-left: 0;
-  }
-  .message-usage {
-    grid-column: 1 / -1;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1670,6 +1391,7 @@ select:focus {
 }
 .hover-tip-summary {
   display: inline-flex;
+  gap: 8px;
   text-decoration: underline dotted var(--faint);
   text-underline-offset: 4px;
 }

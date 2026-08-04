@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -41,10 +42,10 @@ func (s *Store) ListSessions(ctx context.Context, f SessionFilter) ([]SessionSum
 		limit = 100
 	}
 	args = append(args, limit)
-	q += " LIMIT $" + itoa(len(args))
+	q += " LIMIT $" + strconv.Itoa(len(args))
 	if f.Offset > 0 {
 		args = append(args, f.Offset)
-		q += " OFFSET $" + itoa(len(args))
+		q += " OFFSET $" + strconv.Itoa(len(args))
 	}
 
 	rows, err := s.Pool.Query(ctx, q, args...)
@@ -52,7 +53,7 @@ func (s *Store) ListSessions(ctx context.Context, f SessionFilter) ([]SessionSum
 		return nil, err
 	}
 	defer rows.Close()
-	var out []SessionSummary
+	out := []SessionSummary{}
 	for rows.Next() {
 		sm, err := scanSession(rows)
 		if err != nil {
@@ -163,12 +164,12 @@ func (s *Store) windowSessionPage(ctx context.Context, query querier, f SessionF
 		  FROM usage_events ue
 		  JOIN sessions s ON s.id = ue.session_id
 		  JOIN users u ON u.id = s.user_id
-		  LEFT JOIN session_signals sig ON sig.session_id = s.id AND ` + signalsCurrent() + `
+		  LEFT JOIN session_signals sig ON sig.session_id = s.id AND ` + signalsCurrent + `
 		  ` + titleLateralSQL + `
 		 WHERE ` + where + `
 		 GROUP BY s.id, u.username, title.content, sig.grade, sig.outcome
 		 ORDER BY s.last_active_at DESC, s.id DESC
-		 LIMIT $` + itoa(len(args)+1)
+		 LIMIT $` + strconv.Itoa(len(args)+1)
 	rowArgs := append(append([]any{}, args...), windowSessionLimit)
 
 	rows, err := query.Query(ctx, q, rowArgs...)
@@ -176,7 +177,7 @@ func (s *Store) windowSessionPage(ctx context.Context, query querier, f SessionF
 		return SessionPage{}, fmt.Errorf("query window sessions: %w", err)
 	}
 	defer rows.Close()
-	var out []ProjectSessionSummary
+	out := []ProjectSessionSummary{}
 	for rows.Next() {
 		var sm ProjectSessionSummary
 		if err := rows.Scan(&sm.ID, &sm.Agent, &sm.Machine, &sm.GitBranch, &sm.Username,
@@ -233,7 +234,7 @@ func (s *Store) windowSessionRemainder(ctx context.Context, query querier, where
 		        WHERE ` + where + `
 		        GROUP BY s.id
 		        ORDER BY s.last_active_at DESC, s.id DESC
-		        OFFSET $` + itoa(len(args)+1) + `
+		        OFFSET $` + strconv.Itoa(len(args)+1) + `
 		  ) t`
 	remArgs := append(append([]any{}, args...), windowSessionLimit)
 	var r SessionRemainder
@@ -277,7 +278,7 @@ func globalSessionSelect(matchLateral, matchCol, matchCutCol string) string {
 	  FROM sessions s
 	  JOIN users u ON u.id = s.user_id
 	  JOIN projects p ON p.id = s.project_id
-	  LEFT JOIN session_signals sig ON sig.session_id = s.id AND ` + signalsCurrent() + `
+	  LEFT JOIN session_signals sig ON sig.session_id = s.id AND ` + signalsCurrent + `
 	  ` + titleLateralSQL + matchLateral
 }
 
@@ -368,11 +369,11 @@ func (s *Store) ListAllSessions(ctx context.Context, f SessionFilter) (rows []Se
 	matchLateral, matchCol, matchCutCol := "", "NULL", "false"
 	searching := f.Query != ""
 	if searching {
-		patternPlaceholder := "$" + itoa(len(args))
+		patternPlaceholder := "$" + strconv.Itoa(len(args))
 		args = append(args, f.Query)
-		rawPlaceholder := "$" + itoa(len(args))
-		radius := itoa(snippetSQLWindowRadius)
-		length := itoa(snippetSQLWindowLen)
+		rawPlaceholder := "$" + strconv.Itoa(len(args))
+		radius := strconv.Itoa(snippetSQLWindowRadius)
+		length := strconv.Itoa(snippetSQLWindowLen)
 		// pos is the 1-based match offset (0 when the fold disagrees); the window starts
 		// radius bytes before it, floored at 1. front_cut reports whether the window
 		// dropped leading content, so Go prepends an ellipsis and does not read the
@@ -380,7 +381,7 @@ func (s *Store) ListAllSessions(ctx context.Context, f SessionFilter) (rows []Se
 		matchLateral = `
 	  LEFT JOIN LATERAL (
 	         SELECT substring(m.content from greatest(1, strpos(lower(m.content), lower(` + rawPlaceholder + `)) - ` + radius + `) for ` + length + `) AS content,
-	                strpos(lower(m.content), lower(` + rawPlaceholder + `)) > ` + itoa(snippetSQLWindowRadius+1) + ` AS front_cut
+	                strpos(lower(m.content), lower(` + rawPlaceholder + `)) > ` + strconv.Itoa(snippetSQLWindowRadius+1) + ` AS front_cut
 	           FROM messages m
 	          WHERE m.session_id = s.id AND m.content ILIKE ` + patternPlaceholder + `
 	          ORDER BY m.ordinal LIMIT 1
@@ -411,10 +412,10 @@ func (s *Store) ListAllSessions(ctx context.Context, f SessionFilter) (rows []Se
 	// Ask for one row past the page so a full extra row means "more match" without a
 	// separate count over the history. The extra row is trimmed before returning.
 	args = append(args, limit+1)
-	q += " LIMIT $" + itoa(len(args))
+	q += " LIMIT $" + strconv.Itoa(len(args))
 	if f.Offset > 0 {
 		args = append(args, f.Offset)
-		q += " OFFSET $" + itoa(len(args))
+		q += " OFFSET $" + strconv.Itoa(len(args))
 	}
 
 	// Read the page and its fan-out rollups in one read-only repeatable-read snapshot. The row
@@ -463,6 +464,9 @@ func (s *Store) ListAllSessions(ctx context.Context, f SessionFilter) (rows []Se
 				return terr
 			}
 			rows = page
+			if rows == nil {
+				rows = []SessionRow{}
+			}
 			return nil
 		})
 	if err != nil {
@@ -589,7 +593,7 @@ func (s *Store) SessionFeed(ctx context.Context, f SessionFilter, limit int, cur
 		// than sorting or skipping, and the bound is on an immutable column so no row can
 		// slip past it between pages.
 		args = append(args, cursor.ID)
-		conds = append(conds, "s.id < $"+itoa(len(args)))
+		conds = append(conds, "s.id < $"+strconv.Itoa(len(args)))
 	}
 
 	// The keyset feed does not carry a content search, so no match lateral: the
@@ -605,14 +609,14 @@ func (s *Store) SessionFeed(ctx context.Context, f SessionFilter, limit int, cur
 	}
 	// Fetch one extra row to learn whether a further page exists without a COUNT.
 	args = append(args, limit+1)
-	q += " LIMIT $" + itoa(len(args))
+	q += " LIMIT $" + strconv.Itoa(len(args))
 
 	rows, err := s.Pool.Query(ctx, q, args...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("query session feed: %w", err)
 	}
 	defer rows.Close()
-	var out []SessionRow
+	out := []SessionRow{}
 	for rows.Next() {
 		r, _, _, err := scanSessionRow(rows, false)
 		if err != nil {
@@ -679,7 +683,12 @@ type GlobalFacetValues struct {
 // (facet_count == IncludeEmpty feed count >= default feed count) is pinned by
 // TestGlobalFacetsReconcileEmptyHidden so it cannot drift silently.
 func (s *Store) GlobalFacets(ctx context.Context) (GlobalFacetValues, error) {
-	var f GlobalFacetValues
+	f := GlobalFacetValues{
+		Agents:   []FacetCount{},
+		Machines: []FacetCount{},
+		Users:    []FacetCount{},
+		Projects: []ProjectFacet{},
+	}
 
 	// Agent and machine values are stored verbatim, so they read straight from
 	// the rollup. Each kind is its own bounded subquery off the (kind, n DESC)
@@ -791,7 +800,7 @@ type FacetValues struct {
 // SessionFacets returns the distinct agents, machines, and usernames present in a
 // project's sessions, each sorted, for the project view's filter controls.
 func (s *Store) SessionFacets(ctx context.Context, projectID int64) (FacetValues, error) {
-	var f FacetValues
+	f := FacetValues{Agents: []string{}, Machines: []string{}, Users: []string{}}
 	rows, err := s.Pool.Query(ctx,
 		`SELECT DISTINCT 'agent' AS kind, s.agent AS val FROM sessions s WHERE s.project_id = $1 AND s.agent <> ''
 		 UNION

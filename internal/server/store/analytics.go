@@ -197,6 +197,30 @@ type querier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
+// eachRow runs one query and hands each row to scan, owning the cursor's lifetime and
+// the three error wrappings the read layer would otherwise spell out per query. It
+// exists because a read function here runs several sequential queries, so a plain
+// `defer rows.Close()` would hold every cursor open until the function returned; the
+// hand-written alternative is a manual Close on each early return, which had already
+// drifted into two spellings across this package. what names the read for the error
+// chain ("response time trend"), so the messages stay per-site.
+func eachRow(ctx context.Context, q querier, what, sql string, args []any, scan func(pgx.Rows) error) error {
+	rows, err := q.Query(ctx, sql, args...)
+	if err != nil {
+		return fmt.Errorf("%s: %w", what, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		if err := scan(rows); err != nil {
+			return fmt.Errorf("scan %s: %w", what, err)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate %s: %w", what, err)
+	}
+	return nil
+}
+
 // analyticsFrom assembles the Analytics from one querier, so a pooled read and a
 // single-transaction snapshot share the same three grouped queries and the same
 // headline arithmetic.
@@ -221,10 +245,14 @@ func (s *Store) analyticsFrom(ctx context.Context, q querier, f AnalyticsFilter)
 	}
 	a.Agents = agents
 
-	// The by-user split is skipped when the caller will not render it (OmitUsers), so a
+	// The by-user split is skipped when the caller will not render it (OmitUsers), so
 	// callers that need no user rows do not build an aggregate proportional to the
 	// scope's user count only to discard it. It sits outside the headline arithmetic
-	// below (that sums the by-agent split), so leaving Users nil changes no total.
+	// below (that sums the by-agent split), so an empty Users changes no total. The
+	// public project response shares this DTO with the signed-in one and blanks the
+	// split for privacy, so it stays an empty list rather than a null: a reader sees
+	// "no rows to show you" either way, and the published contract stays true.
+	a.Users = []Breakdown{}
 	if !f.OmitUsers {
 		users, err := s.analyticsByUser(ctx, q, f)
 		if err != nil {
@@ -461,7 +489,7 @@ func (s *Store) analyticsSeries(ctx context.Context, q querier, f AnalyticsFilte
 		return nil, fmt.Errorf("query analytics daily series: %w", err)
 	}
 	defer rows.Close()
-	var out []DayPoint
+	out := []DayPoint{}
 	for rows.Next() {
 		var p DayPoint
 		if err := rows.Scan(&p.Day, &p.CostUSD, &p.Input, &p.Output, &p.CacheRead, &p.CacheWrite); err != nil {
@@ -575,7 +603,7 @@ func (s *Store) analyticsByUser(ctx context.Context, q querier, f AnalyticsFilte
 }
 
 func scanBreakdowns(rows pgx.Rows) ([]Breakdown, error) {
-	var out []Breakdown
+	out := []Breakdown{}
 	for rows.Next() {
 		var b Breakdown
 		if err := rows.Scan(&b.Label, &b.CostUSD, &b.Input, &b.Output, &b.CacheRead, &b.CacheWrite, &b.Reasoning, &b.Sessions); err != nil {

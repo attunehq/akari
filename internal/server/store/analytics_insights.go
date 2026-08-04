@@ -219,7 +219,7 @@ func (s *Store) InsightsRanges(ctx context.Context, filters []AnalyticsFilter, p
 			// concurrently (the same distinct-field discipline the distribution panels rely on). An
 			// empty grid still yields a non-nil Trends whose HasData reports false, matching the old
 			// behaviour where a bucketed call with no buckets returned an empty grid rather than nil.
-			out.Trends = &Trends{Unit: grid.Unit, BucketStarts: grid.Starts, Labels: grid.labels()}
+			out.Trends = newTrends(grid)
 		}
 
 		reads = append(reads, s.insightsReads(f, panels, grid, wantTrends, out)...)

@@ -83,8 +83,10 @@ var table = map[string][]DatedRate{
 	"claude-mythos-5":       flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1.00}),
 	"claude-mythos-preview": flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1.00}),
 
-	// Opus: 4.0/4.1 at $15/$75, 4.5 onward at $5/$25. "claude-opus-4" is Opus
-	// 4.0's dateless ID (claude-opus-4-20250514 normalizes to it).
+	// Opus: 4.0/4.1 at $15/$75, 4.5 onward at $5/$25, which Opus 5 holds (it is a
+	// drop-in upgrade at Opus 4.8's rate). "claude-opus-4" is Opus 4.0's dateless
+	// ID (claude-opus-4-20250514 normalizes to it); "claude-opus-5" carries no date
+	// snapshot at all.
 	"claude-opus-4":   flat(Rate{Input: 15, Output: 75, CacheWrite: 18.75, CacheRead: 1.50}),
 	"claude-opus-4-0": flat(Rate{Input: 15, Output: 75, CacheWrite: 18.75, CacheRead: 1.50}),
 	"claude-opus-4-1": flat(Rate{Input: 15, Output: 75, CacheWrite: 18.75, CacheRead: 1.50}),
@@ -92,6 +94,7 @@ var table = map[string][]DatedRate{
 	"claude-opus-4-6": flat(Rate{Input: 5, Output: 25, CacheWrite: 6.25, CacheRead: 0.50}),
 	"claude-opus-4-7": flat(Rate{Input: 5, Output: 25, CacheWrite: 6.25, CacheRead: 0.50}),
 	"claude-opus-4-8": flat(Rate{Input: 5, Output: 25, CacheWrite: 6.25, CacheRead: 0.50}),
+	"claude-opus-5":   flat(Rate{Input: 5, Output: 25, CacheWrite: 6.25, CacheRead: 0.50}),
 
 	// Sonnet: $3/$15 from 3.5 through 5, except Sonnet 5's launch promo. Sonnet 5
 	// launched at an introductory $2/$10 per MTok through 2026-08-31 and reverts to

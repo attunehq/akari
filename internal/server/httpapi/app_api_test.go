@@ -48,18 +48,16 @@ func doJSON(t *testing.T, client *http.Client, method, url string, body any) (*h
 
 func errorsIsEOF(err error) bool { return err == io.EOF }
 
-func TestHomepageStaysTemplatedWhileApplicationRoutesServeReact(t *testing.T) {
+func TestHomepageRedirectsWhileApplicationRoutesServeReact(t *testing.T) {
 	t.Parallel()
 	server, _ := newTestServer(t)
 
-	home := readBody(t, mustGet(t, http.DefaultClient, server.URL+"/"))
-	if !strings.Contains(home, "Know what your agents actually did") {
-		t.Fatal("root no longer renders the templated homepage")
-	}
-	for _, unwanted := range []string{"/app-assets/", "htmx", "charts.js", "app.js"} {
-		if strings.Contains(home, unwanted) {
-			t.Fatalf("templated homepage ships application runtime %q", unwanted)
-		}
+	client := newClient(t)
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	home := mustGet(t, client, server.URL+"/")
+	home.Body.Close()
+	if home.StatusCode != http.StatusPermanentRedirect || home.Header.Get("Location") != web.ProductSiteURL+"/" {
+		t.Fatalf("GET / = %d Location %q, want 308 to product site", home.StatusCode, home.Header.Get("Location"))
 	}
 
 	login := readBody(t, mustGet(t, http.DefaultClient, server.URL+"/login"))

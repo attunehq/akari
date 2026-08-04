@@ -566,16 +566,14 @@ func TestPrefixDigestRecomputesBigBodyKeysWithDetail(t *testing.T) {
 	}
 }
 
-// TestRewindResetsBothCursors confirms rewind drops the transformed and original
-// cursors together so a re-upload starts from zero.
-func TestRewindResetsBothCursors(t *testing.T) {
-	fs := &fileSync{base: 50, origBase: 80, prefixSize: 100}
-	fs.rewind(150)
+// TestClearDerivedResetsBothCursors confirms clearDerived drops the transformed and
+// original cursors together so a re-upload starts from zero. Resetting only one would
+// resume the transform at an offset the server's byte count does not correspond to.
+func TestClearDerivedResetsBothCursors(t *testing.T) {
+	fs := &fileSync{base: 50, origBase: 80}
+	fs.clearDerived()
 	if fs.base != 0 || fs.origBase != 0 {
-		t.Fatalf("after rewind base=%d origBase=%d, want 0/0", fs.base, fs.origBase)
-	}
-	if fs.prefixSize != 150 {
-		t.Fatalf("prefixSize = %d, want 150", fs.prefixSize)
+		t.Fatalf("after clearDerived base=%d origBase=%d, want 0/0", fs.base, fs.origBase)
 	}
 }
 

@@ -6,6 +6,8 @@ import (
 	"path"
 	"sort"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // VelocityTrends is the per-bucket cadence: how much hands-on time the fleet logged against
@@ -29,14 +31,6 @@ type ToolPoint struct {
 	Failures int
 	Sessions int
 	Category string
-}
-
-// ErrorRate is the tool's failure share as a percent, 0 when it never ran.
-func (t ToolPoint) ErrorRate() float64 {
-	if t.Calls == 0 {
-		return 0
-	}
-	return float64(t.Failures) / float64(t.Calls) * 100
 }
 
 // ToolFailSeries is one tool's error rate across the bucket grid, for the failure-trend
@@ -116,6 +110,12 @@ type Gallery struct {
 	LongestCostUSD         float64
 }
 
+// rhythmDays and rhythmHours are the fixed dimensions of the hour-of-week heatmap.
+const (
+	rhythmDays  = 7
+	rhythmHours = 24
+)
+
 // RhythmGrid is the hour-of-week activity heatmap: Cells[dow][hour] is the message-plus-tool
 // volume, dow 0 = Monday through 6 = Sunday, hour 0..23 in UTC.
 type RhythmGrid struct {
@@ -173,7 +173,7 @@ func (s *Store) velocityTrendsFrom(ctx context.Context, q querier, f AnalyticsFi
 
 	// Response-time percentiles per bucket, bucketed on the turn's prompt instant.
 	filter, args := f.clauseFor("s.started_at")
-	rows, err := q.Query(ctx, fmt.Sprintf(
+	if err := eachRow(ctx, q, "response time trend", fmt.Sprintf(
 		`SELECT %s AS b,
 		        coalesce(percentile_cont(0.5)  WITHIN GROUP (ORDER BY st.response_secs), 0),
 		        coalesce(percentile_cont(0.9)  WITHIN GROUP (ORDER BY st.response_secs), 0),
@@ -181,31 +181,25 @@ func (s *Store) velocityTrendsFrom(ctx context.Context, q querier, f AnalyticsFi
 		   FROM session_turns st
 		   JOIN sessions s ON s.id = st.session_id
 		  WHERE TRUE%s
-		  GROUP BY b`, g.sqlBucket("st.prompt_at"), filter), args...)
-	if err != nil {
-		return VelocityTrends{}, fmt.Errorf("response time trend: %w", err)
-	}
-	for rows.Next() {
+		  GROUP BY b`, g.sqlBucket("st.prompt_at"), filter), args, func(rows pgx.Rows) error {
 		var b time.Time
 		var p50, p90, p99 float64
 		if err := rows.Scan(&b, &p50, &p90, &p99); err != nil {
-			rows.Close()
-			return VelocityTrends{}, fmt.Errorf("scan response time trend: %w", err)
+			return err
 		}
 		if i := g.index(b); i >= 0 {
 			out.ResponseP50[i], out.ResponseP90[i], out.ResponseP99[i] = p50, p90, p99
 		}
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return VelocityTrends{}, fmt.Errorf("iterate response time trend: %w", err)
+		return nil
+	}); err != nil {
+		return VelocityTrends{}, err
 	}
 
 	// Active time and message and tool volume per bucket, one sum over the activity rollup.
 	// The rollup attributed each kept gap to the later message's hour, so re-bucketing its
 	// UTC days reproduces the old later-message bucketing.
 	filter, args = f.clauseFor("s.started_at")
-	arows, err := q.Query(ctx, fmt.Sprintf(
+	if err := eachRow(ctx, q, "active time trend", fmt.Sprintf(
 		`SELECT %s AS b,
 		        coalesce(sum(ah.active_seconds), 0),
 		        coalesce(sum(ah.messages), 0)::bigint,
@@ -213,17 +207,12 @@ func (s *Store) velocityTrendsFrom(ctx context.Context, q querier, f AnalyticsFi
 		   FROM session_activity_hourly ah
 		   JOIN sessions s ON s.id = ah.session_id
 		  WHERE TRUE%s
-		  GROUP BY b`, g.sqlBucketDay("ah.day"), filter), args...)
-	if err != nil {
-		return VelocityTrends{}, fmt.Errorf("active time trend: %w", err)
-	}
-	for arows.Next() {
+		  GROUP BY b`, g.sqlBucketDay("ah.day"), filter), args, func(arows pgx.Rows) error {
 		var b time.Time
 		var secs float64
 		var nMsgs, nTools int
 		if err := arows.Scan(&b, &secs, &nMsgs, &nTools); err != nil {
-			arows.Close()
-			return VelocityTrends{}, fmt.Errorf("scan active time trend: %w", err)
+			return err
 		}
 		if i := g.index(b); i >= 0 {
 			out.ActiveHours[i] = secs / 3600
@@ -233,36 +222,29 @@ func (s *Store) velocityTrendsFrom(ctx context.Context, q querier, f AnalyticsFi
 				out.ToolsPerMin[i] = float64(nTools) / mins
 			}
 		}
-	}
-	arows.Close()
-	if err := arows.Err(); err != nil {
-		return VelocityTrends{}, fmt.Errorf("iterate active time trend: %w", err)
+		return nil
+	}); err != nil {
+		return VelocityTrends{}, err
 	}
 
 	// Wall-clock session span per bucket, on the session's start.
 	filter, args = f.clauseFor("s.started_at")
-	wrows, err := q.Query(ctx, fmt.Sprintf(
+	if err := eachRow(ctx, q, "wall span trend", fmt.Sprintf(
 		`SELECT %s AS b, coalesce(sum(extract(epoch FROM (s.ended_at - s.started_at))), 0)
 		   FROM sessions s
-		  WHERE s.started_at IS NOT NULL AND s.ended_at IS NOT NULL AND s.ended_at >= s.started_at%s
-		  GROUP BY b`, g.sqlBucket("s.started_at"), filter), args...)
-	if err != nil {
-		return VelocityTrends{}, fmt.Errorf("wall span trend: %w", err)
-	}
-	for wrows.Next() {
+		  WHERE `+spanFilter+`%s
+		  GROUP BY b`, g.sqlBucket("s.started_at"), filter), args, func(wrows pgx.Rows) error {
 		var b time.Time
 		var secs float64
 		if err := wrows.Scan(&b, &secs); err != nil {
-			wrows.Close()
-			return VelocityTrends{}, fmt.Errorf("scan wall span trend: %w", err)
+			return err
 		}
 		if i := g.index(b); i >= 0 {
 			out.WallHours[i] = secs / 3600
 		}
-	}
-	wrows.Close()
-	if err := wrows.Err(); err != nil {
-		return VelocityTrends{}, fmt.Errorf("iterate wall span trend: %w", err)
+		return nil
+	}); err != nil {
+		return VelocityTrends{}, err
 	}
 	return out, nil
 }
@@ -280,7 +262,7 @@ const maxMixCategories = 6
 // started_at-windowed sessions (the rollup deduped replays at write time, the same way the
 // headline tool stats read), bucketing on the session's start.
 func (s *Store) toolTrendsFrom(ctx context.Context, q querier, f AnalyticsFilter, g trendGrid) (ToolTrends, error) {
-	var out ToolTrends
+	out := ToolTrends{Reliability: []ToolPoint{}, FailWorst: []ToolFailSeries{}}
 
 	// Reliability: every tool's calls / failures / sessions / category over the window.
 	filter, args := f.clauseFor("s.started_at")
@@ -512,7 +494,7 @@ const maxChurnTreeFiles = 150
 // only files edited more than once, so the headline re-edit total reconciles with the file
 // breakdown the tree renders.
 func (s *Store) churnTrendFrom(ctx context.Context, q querier, f AnalyticsFilter, g trendGrid) (ChurnTrend, error) {
-	out := ChurnTrend{ReEdits: make([]int, g.n()), Files: make([]int, g.n())}
+	out := ChurnTrend{ReEdits: make([]int, g.n()), Files: make([]int, g.n()), Tree: []ChurnNode{}}
 
 	// Per-bucket re-edit volume and hot-file count. A file is hot when it is edited more than once
 	// across the whole window (the same definition the tree and TotalHotFiles use), and it counts
@@ -524,7 +506,7 @@ func (s *Store) churnTrendFrom(ctx context.Context, q querier, f AnalyticsFilter
 	// re-edited files and reconcile with the tree the treemap renders (whose files are the same
 	// HAVING sum(edits) > 1 set); a one-off edit to a unique file lands in neither.
 	filter, args := f.clauseFor("s.started_at")
-	rows, err := q.Query(ctx, fmt.Sprintf(
+	if err := eachRow(ctx, q, "churn trend", fmt.Sprintf(
 		`WITH perfile AS (
 		   SELECT %s AS b, s.project_id, fc.churn_path, sum(fc.edits) AS edits_in_bucket
 		     FROM session_file_churn fc
@@ -540,26 +522,20 @@ func (s *Store) churnTrendFrom(ctx context.Context, q querier, f AnalyticsFilter
 		        coalesce(sum(p.edits_in_bucket) FILTER (WHERE t.edits_total > 1), 0)::bigint,
 		        count(*) FILTER (WHERE t.edits_total > 1)
 		   FROM perfile p JOIN totals t USING (project_id, churn_path)
-		  GROUP BY p.b`, g.sqlBucket("s.started_at"), filter), args...)
-	if err != nil {
-		return ChurnTrend{}, fmt.Errorf("churn trend: %w", err)
-	}
-	for rows.Next() {
+		  GROUP BY p.b`, g.sqlBucket("s.started_at"), filter), args, func(rows pgx.Rows) error {
 		var b time.Time
 		var edits, files int
 		if err := rows.Scan(&b, &edits, &files); err != nil {
-			rows.Close()
-			return ChurnTrend{}, fmt.Errorf("scan churn trend: %w", err)
+			return err
 		}
 		if i := g.index(b); i >= 0 {
 			out.ReEdits[i] = edits
 			out.Files[i] = files
 			out.TotalReEdits += edits
 		}
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return ChurnTrend{}, fmt.Errorf("iterate churn trend: %w", err)
+		return nil
+	}); err != nil {
+		return ChurnTrend{}, err
 	}
 
 	// The tree: the busiest churned files with project label and folder.
@@ -625,9 +601,9 @@ func churnFolder(p string) string {
 // archetype, and gated grade and outcome. The scatter intentionally represents the full
 // selected cohort so its visible distribution matches the window-wide analytics.
 func (s *Store) galleryFrom(ctx context.Context, q querier, f AnalyticsFilter) (Gallery, error) {
-	var out Gallery
+	out := Gallery{Rows: []GallerySession{}}
 	filter, args := f.clauseFor("s.started_at")
-	rows, err := q.Query(ctx, fmt.Sprintf(
+	if err := eachRow(ctx, q, "session gallery", fmt.Sprintf(
 		`SELECT extract(epoch FROM (s.ended_at - s.started_at)) AS dur,
 		        s.total_cost_usd,
 		        %s AS archetype,
@@ -636,24 +612,19 @@ func (s *Store) galleryFrom(ctx context.Context, q querier, f AnalyticsFilter) (
 		        count(*) OVER () AS total
 		   FROM sessions s
 		   LEFT JOIN session_signals sig
-		     ON sig.session_id = s.id AND `+signalsCurrent()+`
-		  WHERE s.started_at IS NOT NULL AND s.ended_at IS NOT NULL AND s.ended_at >= s.started_at%s
-		  ORDER BY s.started_at DESC`, archetypeCaseExpr, filter), args...)
-	if err != nil {
-		return Gallery{}, fmt.Errorf("session gallery: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
+		     ON sig.session_id = s.id AND `+signalsCurrent+`
+		  WHERE `+spanFilter+`%s
+		  ORDER BY s.started_at DESC`, archetypeCaseExpr, filter), args, func(rows pgx.Rows) error {
 		var gs GallerySession
 		var total int
 		if err := rows.Scan(&gs.DurationS, &gs.CostUSD, &gs.Archetype, &gs.Grade, &gs.Outcome, &total); err != nil {
-			return Gallery{}, fmt.Errorf("scan session gallery: %w", err)
+			return err
 		}
 		out.Rows = append(out.Rows, gs)
 		out.Total = total
-	}
-	if err := rows.Err(); err != nil {
-		return Gallery{}, fmt.Errorf("iterate session gallery: %w", err)
+		return nil
+	}); err != nil {
+		return Gallery{}, err
 	}
 
 	// Window-wide summaries over the full cohort. The two
@@ -670,8 +641,8 @@ func (s *Store) galleryFrom(ctx context.Context, q querier, f AnalyticsFilter) (
 		          coalesce(sig.outcome, 'unknown') AS outcome
 		     FROM sessions s
 		     LEFT JOIN session_signals sig
-		       ON sig.session_id = s.id AND `+signalsCurrent()+`
-		    WHERE s.started_at IS NOT NULL AND s.ended_at IS NOT NULL AND s.ended_at >= s.started_at%s
+		       ON sig.session_id = s.id AND `+signalsCurrent+`
+		    WHERE `+spanFilter+`%s
 		 )
 		 SELECT coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY dur), 0),
 		        coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY cost), 0),
@@ -698,10 +669,7 @@ func (s *Store) galleryFrom(ctx context.Context, q querier, f AnalyticsFilter) (
 // week, hour), in UTC, over the scoped sessions. Rows are Monday-first to match the concept's
 // punchcard.
 func (s *Store) rhythmFrom(ctx context.Context, q querier, f AnalyticsFilter) (RhythmGrid, error) {
-	cells := make([][]int, 7)
-	for i := range cells {
-		cells[i] = make([]int, 24)
-	}
+	cells := emptyRows(rhythmDays, rhythmHours)
 	add := func(dow, hour, n int) {
 		if dow >= 1 && dow <= 7 && hour >= 0 && hour <= 23 {
 			cells[dow-1][hour] += n // isodow: 1=Mon..7=Sun -> index 0..6
@@ -758,7 +726,8 @@ func (s *Store) subagentTrendsFrom(ctx context.Context, q querier, f AnalyticsFi
 	// window of its own, so a child that ran outside the window still counts toward its root's
 	// fan-out.
 	filter, args := f.clauseFor("s.started_at")
-	rows, err := q.Query(ctx, fmt.Sprintf(
+	var totalRoots, totalDelegating int
+	if err := eachRow(ctx, q, "subagent delegation trend", fmt.Sprintf(
 		`WITH roots AS (
 		   SELECT s.id, %s AS b
 		     FROM sessions s
@@ -779,17 +748,11 @@ func (s *Store) subagentTrendsFrom(ctx context.Context, q querier, f AnalyticsFi
 		        count(*) FILTER (WHERE n BETWEEN 4 AND 7) AS f47,
 		        count(*) FILTER (WHERE n >= 8) AS f8
 		   FROM kids
-		  GROUP BY b`, g.sqlBucket("s.started_at"), filter), args...)
-	if err != nil {
-		return SubagentStats{}, fmt.Errorf("subagent delegation trend: %w", err)
-	}
-	var totalRoots, totalDelegating int
-	for rows.Next() {
+		  GROUP BY b`, g.sqlBucket("s.started_at"), filter), args, func(rows pgx.Rows) error {
 		var b time.Time
 		var roots, delegating, f1, f23, f47, f8 int
 		if err := rows.Scan(&b, &roots, &delegating, &f1, &f23, &f47, &f8); err != nil {
-			rows.Close()
-			return SubagentStats{}, fmt.Errorf("scan subagent delegation trend: %w", err)
+			return err
 		}
 		totalRoots += roots
 		totalDelegating += delegating
@@ -799,10 +762,9 @@ func (s *Store) subagentTrendsFrom(ctx context.Context, q querier, f AnalyticsFi
 			}
 			out.FanoutRows[i] = map[string]int{"one": f1, "twoThree": f23, "fourSeven": f47, "eightPlus": f8}
 		}
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return SubagentStats{}, fmt.Errorf("iterate subagent delegation trend: %w", err)
+		return nil
+	}); err != nil {
+		return SubagentStats{}, err
 	}
 	if totalRoots > 0 {
 		out.SessionsThatDelegatePct = float64(totalDelegating) / float64(totalRoots) * 100
@@ -811,33 +773,27 @@ func (s *Store) subagentTrendsFrom(ctx context.Context, q querier, f AnalyticsFi
 	// Cost share per bucket: subagent spend over total spend, on the usage rollup's UTC day.
 	filter, args = f.clauseForRollupDay("sud.day")
 	var totalCost, subCost float64
-	crows, err := q.Query(ctx, fmt.Sprintf(
+	if err := eachRow(ctx, q, "subagent cost trend", fmt.Sprintf(
 		`SELECT %s AS b,
 		        coalesce(sum(sud.cost_usd), 0),
 		        coalesce(sum(sud.cost_usd) FILTER (WHERE s.relationship_type = 'subagent'), 0)
 		   FROM session_usage_daily sud
 		   JOIN sessions s ON s.id = sud.session_id
 		  WHERE sud.day IS NOT NULL%s
-		  GROUP BY b`, g.sqlBucketDay("sud.day"), filter), args...)
-	if err != nil {
-		return SubagentStats{}, fmt.Errorf("subagent cost trend: %w", err)
-	}
-	for crows.Next() {
+		  GROUP BY b`, g.sqlBucketDay("sud.day"), filter), args, func(crows pgx.Rows) error {
 		var b time.Time
 		var total, sub float64
 		if err := crows.Scan(&b, &total, &sub); err != nil {
-			crows.Close()
-			return SubagentStats{}, fmt.Errorf("scan subagent cost trend: %w", err)
+			return err
 		}
 		totalCost += total
 		subCost += sub
 		if i := g.index(b); i >= 0 && total > 0 {
 			out.CostShare[i] = sub / total * 100
 		}
-	}
-	crows.Close()
-	if err := crows.Err(); err != nil {
-		return SubagentStats{}, fmt.Errorf("iterate subagent cost trend: %w", err)
+		return nil
+	}); err != nil {
+		return SubagentStats{}, err
 	}
 	if totalCost > 0 {
 		out.CostThroughSubagentsPct = subCost / totalCost * 100

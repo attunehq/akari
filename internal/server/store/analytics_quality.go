@@ -116,7 +116,7 @@ func (s *Store) scopedSignalCounts(ctx context.Context, q querier, f AnalyticsFi
 		`SELECT coalesce(sig.%s, '%s'), count(*)
 		   FROM sessions s
 		   LEFT JOIN session_signals sig
-		     ON sig.session_id = s.id AND `+signalsCurrent()+`
+		     ON sig.session_id = s.id AND `+signalsCurrent+`
 		  WHERE TRUE`+filter+`
 		  GROUP BY 1`, col, missing), args...)
 	if err != nil {
@@ -185,7 +185,7 @@ func (s *Store) avgQualityScoreFrom(ctx context.Context, q querier, f AnalyticsF
 		`SELECT avg(sig.score)::float8
 		   FROM sessions s
 		   JOIN session_signals sig
-		     ON sig.session_id = s.id AND `+signalsCurrent()+`
+		     ON sig.session_id = s.id AND `+signalsCurrent+`
 		  WHERE sig.grade IS NOT NULL`+filter, args...).Scan(&avg)
 	if err != nil {
 		return nil, fmt.Errorf("avg quality score: %w", err)

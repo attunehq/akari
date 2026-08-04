@@ -219,13 +219,6 @@
   .grid-2x2 {
     grid-template-columns: 1fr;
   }
-  .range-control-full {
-    display: flex;
-    width: 100%;
-  }
-  .range-control-full button {
-    flex: 1 1 auto;
-  }
 }
 
 .mini-multiple {

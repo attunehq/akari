@@ -6,10 +6,8 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/a-h/templ"
-	"github.com/jssblck/akari/internal/server/ogimage"
 	"github.com/jssblck/akari/internal/server/web"
 )
 
@@ -51,38 +49,20 @@ func render(w http.ResponseWriter, r *http.Request, status int, c templ.Componen
 	_ = c.Render(r.Context(), w)
 }
 
-// renderPublicError writes the logged-out error page used by public share links and
-// the guide, where no viewer chrome exists to wrap the message.
+// renderPublicError writes the logged-out error page used by public share links,
+// where no viewer chrome exists to wrap the message.
 func renderPublicError(w http.ResponseWriter, r *http.Request, status int, msg string) {
 	render(w, r, status, web.PublicErrorPage(status, msg))
 }
 
-// handleRoot serves the site root at /: the marketing landing page explaining
-// what akari is, shown to every visitor regardless of sign-in state. A signed-in
-// reader gets the same page with a topbar that points back into the app (an
-// Overview link in place of "Log in"), so the homepage stays reachable while
-// logged in; the app itself lives at /overview. The page is never gated during a
-// reparse, since it renders no parsed data.
-func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
-	// The meta copy derives from the ogimage package's canonical landing
-	// constants (the same strings the /og.png card draws), so a copy edit
-	// cannot leave the page's tags and its preview image saying different
-	// things. The title lowercases the headline into the product register the
-	// overview card's title uses ("<subject> · <what it is>").
-	og := web.OGMeta{
-		Title:       "akari · " + strings.ToLower(strings.TrimSuffix(ogimage.LandingHeadline, ".")),
-		Description: ogimage.LandingSubline,
-		URL:         s.absURL(r, "/"),
-		Image:       s.absURL(r, "/og.png"),
+// handleProductSiteRedirect keeps old instance-hosted homepage and guide URLs
+// working after those static surfaces moved to GitHub Pages.
+func (s *Server) handleProductSiteRedirect(w http.ResponseWriter, r *http.Request) {
+	target := web.ProductSiteURL + r.URL.EscapedPath()
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery
 	}
-	// A full-scope reader gets a route back into the application. The landing page
-	// does not need the account record itself.
-	loggedIn := false
-	if p, ok := s.resolve(r); ok && p.Scope == scopeFull {
-		setPrivateNoStore(w)
-		loggedIn = true
-	}
-	render(w, r, http.StatusOK, web.LandingPage(og, loggedIn))
+	http.Redirect(w, r, target, http.StatusPermanentRedirect)
 }
 
 // dashboardCacheMaxAge lets a browser reuse a dashboard response for a few seconds,
@@ -103,6 +83,8 @@ func setDashboardCache(w http.ResponseWriter) {
 func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
 	render(w, r, http.StatusNotFound, web.PublicErrorPage(http.StatusNotFound, "That page does not exist."))
 }
+
+const staticAssetCacheMaxAge = 86400
 
 // handleSessionEvents is the SSE endpoint that signals a watching browser to
 // re-fetch the session body when the session gains newly parsed bytes.
@@ -149,11 +131,11 @@ var faviconICO = func() []byte {
 
 // handleFaviconICO serves the legacy .ico at the root path browsers probe for a
 // tab icon. The bytes are static per binary, so the response is aggressively
-// cacheable like the landing card.
+// cacheable because a release fixes them for the binary's lifetime.
 func (s *Server) handleFaviconICO(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/x-icon")
 	w.Header().Set("Content-Length", strconv.Itoa(len(faviconICO)))
-	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", landingOGCacheMaxAge))
+	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", staticAssetCacheMaxAge))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(faviconICO)
 }

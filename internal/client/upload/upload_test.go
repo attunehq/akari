@@ -534,8 +534,9 @@ func TestVerifyPrefixReDerivesWarmState(t *testing.T) {
 	}
 	defer f.Close()
 
-	fs := &fileSync{base: 4, origBase: 4, prefixSize: 4, prefixHasher: sha256.New()}
-	fs.prefixHasher.Write([]byte("BBB\n"))
+	// Warm cursors that still line up with the server's byte count, over a file whose
+	// bytes have since been rewritten in place.
+	fs := &fileSync{base: 4, origBase: 4}
 
 	ok, err := c.verifyPrefix(context.Background(), f, fs, "claude", 4, 4, hexSHA("BBB\n"))
 	if err != nil {

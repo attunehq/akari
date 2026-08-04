@@ -41,7 +41,7 @@ func TestSignalsContextHealth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read signals: %v", err)
 	}
-	if !sig.HasContextHealth() {
+	if sig.PeakContextTokens == nil {
 		t.Fatal("session with usage should have measured context health")
 	}
 	if *sig.PeakContextTokens != 200000 {
@@ -76,9 +76,6 @@ func TestSignalsContextHealthUnmeasured(t *testing.T) {
 	sig, err := st.SessionSignalsByID(ctx, sid)
 	if err != nil {
 		t.Fatalf("read signals: %v", err)
-	}
-	if sig.HasContextHealth() {
-		t.Errorf("session with no usage should have no measured context, got peak %v", sig.PeakContextTokens)
 	}
 	if sig.PeakContextTokens != nil || sig.ContextResetCount != nil {
 		t.Errorf("unmeasured context should be NULL, got peak %v resets %v", sig.PeakContextTokens, sig.ContextResetCount)

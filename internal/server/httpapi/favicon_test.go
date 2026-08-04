@@ -28,7 +28,7 @@ func TestFaviconICOHandler(t *testing.T) {
 	if got, want := resp.Header.Get("Content-Type"), "image/x-icon"; got != want {
 		t.Errorf("Content-Type = %q, want %q", got, want)
 	}
-	if got, want := resp.Header.Get("Cache-Control"), fmt.Sprintf("public, max-age=%d", landingOGCacheMaxAge); got != want {
+	if got, want := resp.Header.Get("Cache-Control"), fmt.Sprintf("public, max-age=%d", staticAssetCacheMaxAge); got != want {
 		t.Errorf("Cache-Control = %q, want %q", got, want)
 	}
 	if got, want := resp.Header.Get("Content-Length"), strconv.Itoa(len(faviconICO)); got != want {

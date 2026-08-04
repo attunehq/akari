@@ -89,7 +89,7 @@ func (s *Store) scanSessionEvents(ctx context.Context, q querier, sessionID int6
 		return nil, fmt.Errorf("query events for session %d: %w", sessionID, err)
 	}
 	defer rows.Close()
-	var out []SessionEvent
+	out := []SessionEvent{}
 	for rows.Next() {
 		var event SessionEvent
 		var attrs []byte
@@ -125,7 +125,7 @@ func (s *Store) snapshotTx(ctx context.Context, fn func(tx pgx.Tx) error) error 
 // boundary (a user message) whenever one exists within the cap; a session with fewer
 // turns than the window simply starts at its beginning.
 func (s *Store) TranscriptTail(ctx context.Context, sessionID int64, before *int) (TranscriptPage, error) {
-	var page TranscriptPage
+	page := newTranscriptPage()
 	err := s.snapshotTx(ctx, func(tx pgx.Tx) error {
 		var err error
 		page, err = s.transcriptTail(ctx, tx, sessionID, before)
@@ -141,7 +141,7 @@ func (s *Store) TranscriptTail(ctx context.Context, sessionID int64, before *int
 // snapshot reads can pin the window to the same MVCC snapshot as the audit and shape
 // rows beside it.
 func (s *Store) transcriptTail(ctx context.Context, tx pgx.Tx, sessionID int64, before *int) (TranscriptPage, error) {
-	var page TranscriptPage
+	page := newTranscriptPage()
 	// The window's start: the TranscriptTailTurns-th user message counting back from
 	// the window's end. Walks the (session_id, ordinal) primary key backward; no row
 	// means the session has fewer turns than the window, so start at the beginning.
@@ -182,7 +182,7 @@ func (s *Store) transcriptTail(ctx context.Context, tx pgx.Tx, sessionID int64, 
 // the cap, More is set and the caller should fall back to a whole-window re-render
 // rather than append a fragment with a gap after it.
 func (s *Store) TranscriptAfter(ctx context.Context, sessionID int64, after int) (TranscriptPage, error) {
-	var page TranscriptPage
+	page := newTranscriptPage()
 	err := s.snapshotTx(ctx, func(tx pgx.Tx) error {
 		var err error
 		page, err = s.transcriptAfter(ctx, tx, sessionID, after)
@@ -197,7 +197,7 @@ func (s *Store) TranscriptAfter(ctx context.Context, sessionID int64, after int)
 // transcriptAfter is TranscriptAfter inside a caller-owned transaction (see
 // transcriptTail).
 func (s *Store) transcriptAfter(ctx context.Context, tx pgx.Tx, sessionID int64, after int) (TranscriptPage, error) {
-	var page TranscriptPage
+	page := newTranscriptPage()
 	msgs, err := s.scanMessages(ctx, tx, sessionID,
 		messagesFullSelect+` AND m.ordinal > $2 ORDER BY m.ordinal LIMIT $3`,
 		sessionID, after, transcriptPageMessageCap+1)
@@ -227,6 +227,24 @@ func (s *Store) transcriptAfter(ctx context.Context, tx pgx.Tx, sessionID int64,
 	slices.Reverse(seed)
 	page.Seed = seed
 	return page, nil
+}
+
+// newTranscriptPage returns a page whose every collection is already empty.
+//
+// Both readers below take early returns that skip a fill: an empty window has no tool
+// calls to look for, and a quiet append tick has no rows at all. Starting from empty
+// means those paths cannot leave a nil behind for the encoder to render as null, which
+// the browser contract declares impossible. Putting it here rather than in each fill is
+// what makes a future early return safe by construction.
+func newTranscriptPage() TranscriptPage {
+	return TranscriptPage{
+		Msgs:        []Message{},
+		Seed:        []Message{},
+		Tools:       []ToolCallView{},
+		Attachments: []AttachmentView{},
+		Fallbacks:   []ModelFallback{},
+		Events:      []SessionEvent{},
+	}
 }
 
 // fillWindowExtras loads the tool calls and attachments hanging on the page's window,

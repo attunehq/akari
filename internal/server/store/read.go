@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -290,7 +291,7 @@ type SessionFilter struct {
 func (f SessionFilter) conds(sinceCol string) (conds []string, args []any) {
 	add := func(cond string, val any) {
 		args = append(args, val)
-		conds = append(conds, cond+" $"+itoa(len(args)))
+		conds = append(conds, cond+" $"+strconv.Itoa(len(args)))
 	}
 	if f.ProjectID != 0 {
 		add("s.project_id =", f.ProjectID)
@@ -312,17 +313,16 @@ func (f SessionFilter) conds(sinceCol string) (conds []string, args []any) {
 	}
 	if q := f.Query; q != "" {
 		args = append(args, likePattern(q))
-		conds = append(conds, "EXISTS (SELECT 1 FROM messages m WHERE m.session_id = s.id AND m.content ILIKE $"+itoa(len(args))+")")
+		conds = append(conds, "EXISTS (SELECT 1 FROM messages m WHERE m.session_id = s.id AND m.content ILIKE $"+strconv.Itoa(len(args))+")")
 	}
 	if !f.Since.IsZero() {
 		add(sinceCol+" >=", f.Since)
 	}
 	if f.RequireSpan {
-		// The exact predicate the concurrency sweep uses (spanFilter in
-		// analytics_concurrency.go): a parsed start and end and a non-negative duration.
-		// Kept in step by name so the busiest-user drill lists precisely the spanned
-		// cohort the panel counted. No placeholder: it is a plain column comparison.
-		conds = append(conds, "s.started_at IS NOT NULL AND s.ended_at IS NOT NULL AND s.ended_at >= s.started_at")
+		// The same predicate the concurrency sweep uses, so the busiest-user drill lists
+		// precisely the spanned cohort the panel counted. No placeholder: it is a plain
+		// column comparison.
+		conds = append(conds, spanFilter)
 	}
 	// Grade and outcome match the Insights distributions' definition exactly, so a
 	// drill-through from a panel bar opens precisely the sessions that bar counted
@@ -341,25 +341,25 @@ func (f SessionFilter) conds(sinceCol string) (conds []string, args []any) {
 	//     with a different outcome, folding the explicit 'unknown' row together with the
 	//     missing-row cases.
 	if g := f.Grade; g != "" {
-		gate := signalsCurrent()
+		gate := signalsCurrent
 		if g == "unscored" {
 			conds = append(conds, "NOT EXISTS (SELECT 1 FROM session_signals sig WHERE sig.session_id = s.id AND "+
 				gate+" AND sig.grade IS NOT NULL)")
 		} else {
 			args = append(args, g)
 			conds = append(conds, "EXISTS (SELECT 1 FROM session_signals sig WHERE sig.session_id = s.id AND "+
-				gate+" AND sig.grade = $"+itoa(len(args))+")")
+				gate+" AND sig.grade = $"+strconv.Itoa(len(args))+")")
 		}
 	}
 	if o := f.Outcome; o != "" {
-		gate := signalsCurrent()
+		gate := signalsCurrent
 		args = append(args, o)
 		if o == "unknown" {
 			conds = append(conds, "NOT EXISTS (SELECT 1 FROM session_signals sig WHERE sig.session_id = s.id AND "+
-				gate+" AND sig.outcome <> $"+itoa(len(args))+")")
+				gate+" AND sig.outcome <> $"+strconv.Itoa(len(args))+")")
 		} else {
 			conds = append(conds, "EXISTS (SELECT 1 FROM session_signals sig WHERE sig.session_id = s.id AND "+
-				gate+" AND sig.outcome = $"+itoa(len(args))+")")
+				gate+" AND sig.outcome = $"+strconv.Itoa(len(args))+")")
 		}
 	}
 	return conds, args
@@ -425,14 +425,6 @@ var sessionKeysetColumns = map[string]string{
 	"tokens":   "total_tokens",
 	"messages": "message_count",
 	"cost":     "total_cost_usd",
-}
-
-// IsSortKey reports whether key names a sortable column of the global session
-// list, so the handler can reject an unknown or tampered sort param before it
-// reaches the query builder.
-func IsSortKey(key string) bool {
-	_, ok := sessionSortColumns[key]
-	return ok
 }
 
 // resolvedSort returns the effective sort key and direction the query builder uses: the
@@ -520,7 +512,7 @@ func (f SessionFilter) keysetCond(firstArg int) (cond string, cargs []any, ok bo
 	if !desc {
 		op = ">"
 	}
-	idPH := "$" + itoa(firstArg)
+	idPH := "$" + strconv.Itoa(firstArg)
 	cargs = append(cargs, f.After)
 	// The value expression appears twice below but binds one slot, so the cursor value (or the
 	// subquery on the cursor id) is evaluated against the same boundary in both the col
@@ -528,7 +520,7 @@ func (f SessionFilter) keysetCond(firstArg int) (cond string, cargs []any, ok bo
 	valExpr := "(SELECT " + col + " FROM sessions WHERE id = " + idPH + ")"
 	if f.AfterVal != "" {
 		cargs = append(cargs, f.AfterVal)
-		valExpr = "$" + itoa(firstArg+1) + "::" + keysetColType[col]
+		valExpr = "$" + strconv.Itoa(firstArg+1) + "::" + keysetColType[col]
 	}
 	cond = fmt.Sprintf("(s.%s %s %s OR (s.%s = %s AND s.id %s %s))",
 		col, op, valExpr, col, valExpr, op, idPH)
@@ -548,7 +540,7 @@ type SessionRow struct {
 	// row, nil when the session is unscored or has not settled yet. Outcome is that
 	// row's outcome (completed / abandoned / errored / unknown), empty when no current
 	// row exists. Both come from a LEFT JOIN in globalSessionSelect gated by
-	// signalsCurrent(), so a feed row's grade and outcome match the drill filters and
+	// signalsCurrent, so a feed row's grade and outcome match the drill filters and
 	// the Insights panels rather than reading a stale verdict.
 	Grade   *string
 	Outcome string
@@ -608,7 +600,7 @@ func (s *Store) ListProjects(ctx context.Context) ([]ProjectSummary, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []ProjectSummary
+	out := []ProjectSummary{}
 	for rows.Next() {
 		var p ProjectSummary
 		if err := rows.Scan(&p.ID, &p.RemoteKey, &p.Host, &p.Owner, &p.Repo, &p.DisplayName, &p.Kind, &p.OverviewPublic,
@@ -673,7 +665,7 @@ const titleCap = 240
 // leading caveat and nothing past its close; a message without one is unchanged.
 var titleLateralSQL = `LEFT JOIN LATERAL (
 	         SELECT coalesce(nullif(s.custom_title, ''), (
-	                  SELECT left(regexp_replace(m.content, '^\s*<local-command-caveat>.*?</local-command-caveat>\s*', ''), ` + itoa(titleCap) + `)
+	                  SELECT left(regexp_replace(m.content, '^\s*<local-command-caveat>.*?</local-command-caveat>\s*', ''), ` + strconv.Itoa(titleCap) + `)
 	                    FROM messages m
 	                   WHERE m.session_id = s.id AND m.role = 'user'
 	                   ORDER BY m.ordinal LIMIT 1
@@ -782,18 +774,3 @@ const messagesWindowQuery = `
 // up a tooltip, a transcript-notice map, or an MCP payload). Callers pass this to
 // SessionModelFallbacks and lean on the count for the true total.
 const ModelFallbackListCap = 100
-
-// itoa avoids strconv noise in query building.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(b[i:])
-}

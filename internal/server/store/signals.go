@@ -25,9 +25,7 @@ const abandonedIdleMinutes = 30
 // row is never at a superseded scoring model for longer than one rebuild. It
 // carries no join key: a caller pairs it with its own sig.session_id = s.id in a
 // JOIN ON or an EXISTS, or drops it straight into a CASE.
-func signalsCurrent() string {
-	return "NOT s.signals_stale"
-}
+const signalsCurrent = "NOT s.signals_stale"
 
 // SessionSignals is a session's stored behavioral signals: its outcome, its quality
 // score and grade (nil when unscored), and the tool-health counts the score is built
@@ -81,22 +79,6 @@ type SessionSignals struct {
 // session.
 func (s SessionSignals) Scored() bool { return s.Score != nil && s.Grade != nil }
 
-// HasToolActivity reports whether the session ran any tools, so the UI can omit the
-// tool-health detail for a pure-conversation session that has none.
-func (s SessionSignals) HasToolActivity() bool { return s.ToolCalls > 0 }
-
-// HasHygieneSignal reports whether any prompt-hygiene signal fired, so the UI can omit
-// the input readout for a session whose prompts were all clean.
-func (s SessionSignals) HasHygieneSignal() bool {
-	return s.ShortPromptCount > 0 || s.DuplicatePromptCount > 0 ||
-		s.NoCodeContextCount > 0 || s.UnstructuredStart
-}
-
-// HasContextHealth reports whether the session had usage to measure, so the UI can show the
-// context readout only when there is a real figure rather than a blank stand-in. Peak and
-// reset count are populated together, so testing the peak is enough.
-func (s SessionSignals) HasContextHealth() bool { return s.PeakContextTokens != nil }
-
 // HasThinkingMeasure reports whether the session had assistant turns to measure thinking
 // over. The four thinking fields are populated together, so testing the denominator is
 // enough. A measured session with zero ThinkingTurns reads as "off"; an unmeasured one
@@ -112,15 +94,6 @@ func (s SessionSignals) ThinkingBucket() quality.ThinkingBucket {
 		return quality.ThinkingOff
 	}
 	return quality.ThinkingBucketForTokens(float64(*s.ThinkingTailTokens))
-}
-
-// ThinkingCoverage is the share of the session's assistant turns that carried a reasoning
-// block, in [0, 1]. Zero when unmeasured or when no turn reasoned.
-func (s SessionSignals) ThinkingCoverage() float64 {
-	if !s.HasThinkingMeasure() || *s.AssistantTurns == 0 {
-		return 0
-	}
-	return float64(*s.ThinkingTurns) / float64(*s.AssistantTurns)
 }
 
 // signalFacts are the raw, projection-derived inputs a refresh gathers before scoring:
@@ -826,7 +799,7 @@ func (s *Store) sessionSignals(ctx context.Context, q querier, sessionID int64) 
 		        sig.assistant_turns, sig.thinking_turns, sig.thinking_tail_tokens, sig.thinking_peak_tokens
 		   FROM session_signals sig
 		   JOIN sessions s ON s.id = sig.session_id
-		  WHERE sig.session_id = $1 AND `+signalsCurrent(), sessionID).Scan(
+		  WHERE sig.session_id = $1 AND `+signalsCurrent, sessionID).Scan(
 		&sig.SessionID, &sig.Outcome, &sig.OutcomeConfidence, &sig.Score, &sig.Grade,
 		&sig.ToolCalls, &sig.ToolFailures, &sig.ToolRetries, &sig.EditChurn, &sig.LongestFailureStreak,
 		&sig.PromptCount, &sig.ShortPromptCount, &sig.DuplicatePromptCount, &sig.NoCodeContextCount, &sig.UnstructuredStart,

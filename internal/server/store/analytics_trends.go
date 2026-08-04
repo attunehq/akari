@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jssblck/akari/internal/pricing"
 	"github.com/jssblck/akari/internal/quality"
 )
@@ -342,7 +343,7 @@ func (s *Store) fleetMixFrom(ctx context.Context, q querier, f AnalyticsFilter, 
 		return FleetMix{}, fmt.Errorf("iterate fleet mix: %w", err)
 	}
 	if len(modelTotal) == 0 {
-		return FleetMix{NewestFirst: -1}, nil
+		return FleetMix{Models: []ModelSeries{}, NewestFirst: -1}, nil
 	}
 
 	// Rank models by total tokens; keep the top N as their own bands, fold the rest into
@@ -368,7 +369,7 @@ func (s *Store) fleetMixFrom(ctx context.Context, q querier, f AnalyticsFilter, 
 		}
 	}
 
-	out := FleetMix{NewestFirst: -1}
+	out := FleetMix{Models: []ModelSeries{}, NewestFirst: -1}
 	// The arrival callout reads each model's first tokens EVER (same non-time scope,
 	// no window bound), not its first in-window bucket: an incumbent with a quiet
 	// first day is not an arrival, and the whole-history minimum is immune to the
@@ -462,6 +463,7 @@ func (s *Store) fleetMixFrom(ctx context.Context, q querier, f AnalyticsFilter, 
 // for the sessions a current signal actually covers.
 func (s *Store) signalTrendsFrom(ctx context.Context, q querier, f AnalyticsFilter, g trendGrid, ctx0 ContextHealthStats) (SignalTrends, error) {
 	out := SignalTrends{
+		ContextMarkers:      []ContextMarker{},
 		GradeShare:          make([]map[string]float64, g.n()),
 		GPA:                 make([]float64, g.n()),
 		ArchetypeShare:      make([]map[string]float64, g.n()),
@@ -486,7 +488,7 @@ func (s *Store) signalTrendsFrom(ctx context.Context, q querier, f AnalyticsFilt
 		`SELECT %s AS b, coalesce(sig.grade, '') AS grade, coalesce(sig.outcome, 'unknown') AS outcome, count(*)
 		   FROM sessions s
 		   LEFT JOIN session_signals sig
-		     ON sig.session_id = s.id AND `+signalsCurrent()+`
+		     ON sig.session_id = s.id AND `+signalsCurrent+`
 		  WHERE s.started_at IS NOT NULL%s
 		  GROUP BY 1, 2, 3`, g.sqlBucket("s.started_at"), filter), args...)
 	if err != nil {
@@ -599,7 +601,7 @@ func (s *Store) signalTrendsFrom(ctx context.Context, q querier, f AnalyticsFilt
 	// Hygiene: per-bucket sums over the gated cohort. Rates divide by the bucket's
 	// prompt total (or session total for unstructured starts).
 	filter, args = f.clauseFor("s.started_at")
-	hrows, err := q.Query(ctx, fmt.Sprintf(
+	if err := eachRow(ctx, q, "hygiene trend", fmt.Sprintf(
 		`SELECT %s AS b,
 		        coalesce(sum(sig.prompt_count), 0),
 		        coalesce(sum(sig.short_prompt_count), 0),
@@ -609,22 +611,17 @@ func (s *Store) signalTrendsFrom(ctx context.Context, q querier, f AnalyticsFilt
 		        count(*) FILTER (WHERE sig.unstructured_start)
 		   FROM sessions s
 		   LEFT JOIN session_signals sig
-		     ON sig.session_id = s.id AND `+signalsCurrent()+`
+		     ON sig.session_id = s.id AND `+signalsCurrent+`
 		  WHERE s.started_at IS NOT NULL%s
-		  GROUP BY 1`, g.sqlBucket("s.started_at"), filter), args...)
-	if err != nil {
-		return SignalTrends{}, fmt.Errorf("hygiene trend: %w", err)
-	}
-	for hrows.Next() {
+		  GROUP BY 1`, g.sqlBucket("s.started_at"), filter), args, func(hrows pgx.Rows) error {
 		var b time.Time
 		var prompts, short, dup, nocode, sessions, unstructured int
 		if err := hrows.Scan(&b, &prompts, &short, &dup, &nocode, &sessions, &unstructured); err != nil {
-			hrows.Close()
-			return SignalTrends{}, fmt.Errorf("scan hygiene trend: %w", err)
+			return err
 		}
 		i := g.index(b)
 		if i < 0 {
-			continue
+			return nil
 		}
 		if prompts > 0 {
 			out.HygieneTerse[i] = float64(short) / float64(prompts) * 100
@@ -634,38 +631,31 @@ func (s *Store) signalTrendsFrom(ctx context.Context, q querier, f AnalyticsFilt
 		if sessions > 0 {
 			out.HygieneUnstructured[i] = float64(unstructured) / float64(sessions) * 100
 		}
-	}
-	hrows.Close()
-	if err := hrows.Err(); err != nil {
-		return SignalTrends{}, fmt.Errorf("iterate hygiene trend: %w", err)
+		return nil
+	}); err != nil {
+		return SignalTrends{}, err
 	}
 
 	// Context resets per bucket, over sessions carrying a measured peak.
 	filter, args = f.clauseFor("s.started_at")
-	crows, err := q.Query(ctx, fmt.Sprintf(
+	if err := eachRow(ctx, q, "context reset trend", fmt.Sprintf(
 		`SELECT %s AS b, coalesce(sum(sig.context_reset_count), 0)
 		   FROM sessions s
 		   JOIN session_signals sig
-		     ON sig.session_id = s.id AND `+signalsCurrent()+`
+		     ON sig.session_id = s.id AND `+signalsCurrent+`
 		  WHERE s.started_at IS NOT NULL AND sig.peak_context_tokens IS NOT NULL%s
-		  GROUP BY 1`, g.sqlBucket("s.started_at"), filter), args...)
-	if err != nil {
-		return SignalTrends{}, fmt.Errorf("context reset trend: %w", err)
-	}
-	for crows.Next() {
+		  GROUP BY 1`, g.sqlBucket("s.started_at"), filter), args, func(crows pgx.Rows) error {
 		var b time.Time
 		var resets int
 		if err := crows.Scan(&b, &resets); err != nil {
-			crows.Close()
-			return SignalTrends{}, fmt.Errorf("scan context reset trend: %w", err)
+			return err
 		}
 		if i := g.index(b); i >= 0 {
 			out.ContextResets[i] = resets
 		}
-	}
-	crows.Close()
-	if err := crows.Err(); err != nil {
-		return SignalTrends{}, fmt.Errorf("iterate context reset trend: %w", err)
+		return nil
+	}); err != nil {
+		return SignalTrends{}, err
 	}
 
 	// Peak-context histogram over the whole window (not per bucket): a log-scale count of
@@ -705,7 +695,7 @@ func (s *Store) contextHistogramFrom(ctx context.Context, q querier, f Analytics
 		`SELECT sig.peak_context_tokens
 		   FROM sessions s
 		   JOIN session_signals sig
-		     ON sig.session_id = s.id AND `+signalsCurrent()+`
+		     ON sig.session_id = s.id AND `+signalsCurrent+`
 		  WHERE s.started_at IS NOT NULL AND sig.peak_context_tokens IS NOT NULL%s`,
 		filter), args...)
 	if err != nil {
@@ -756,7 +746,7 @@ func (s *Store) economicsFrom(ctx context.Context, q querier, f AnalyticsFilter,
 	}
 
 	filter, args := f.clauseForRollupDay("sud.day")
-	rows, err := q.Query(ctx, fmt.Sprintf(
+	if err := eachRow(ctx, q, "cost of quality trend", fmt.Sprintf(
 		`SELECT %s AS b,
 		        coalesce(sum(sud.cost_usd) FILTER (WHERE sig.outcome = 'completed'), 0),
 		        coalesce(sum(sud.cost_usd) FILTER (WHERE sig.outcome = 'abandoned'), 0),
@@ -767,23 +757,18 @@ func (s *Store) economicsFrom(ctx context.Context, q querier, f AnalyticsFilter,
 		   FROM session_usage_daily sud
 		   JOIN sessions s ON s.id = sud.session_id
 		   LEFT JOIN session_signals sig
-		     ON sig.session_id = s.id AND `+signalsCurrent()+`
+		     ON sig.session_id = s.id AND `+signalsCurrent+`
 		  WHERE sud.day IS NOT NULL%s
-		  GROUP BY 1`, g.sqlBucketDay("sud.day"), filter), args...)
-	if err != nil {
-		return Economics{}, fmt.Errorf("cost of quality trend: %w", err)
-	}
-	for rows.Next() {
+		  GROUP BY 1`, g.sqlBucketDay("sud.day"), filter), args, func(rows pgx.Rows) error {
 		var b time.Time
 		var comp, aband, total float64
 		var cacheRead, input, cacheWrite int64
 		if err := rows.Scan(&b, &comp, &aband, &total, &cacheRead, &input, &cacheWrite); err != nil {
-			rows.Close()
-			return Economics{}, fmt.Errorf("scan cost of quality trend: %w", err)
+			return err
 		}
 		i := g.index(b)
 		if i < 0 {
-			continue
+			return nil
 		}
 		// Completed and abandoned are the outcome projection's own buckets, so these dollars
 		// read against the outcome distribution: abandoned is outcome='abandoned' only, not
@@ -808,10 +793,9 @@ func (s *Store) economicsFrom(ctx context.Context, q querier, f AnalyticsFilter,
 			out.CacheHitRate[i] = float64(cacheRead) / float64(denom) * 100
 			out.CacheMeasured[i] = true
 		}
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return Economics{}, fmt.Errorf("iterate cost of quality trend: %w", err)
+		return nil
+	}); err != nil {
+		return Economics{}, err
 	}
 
 	if err := s.cacheSavingsTrend(ctx, q, f, g, &out); err != nil {
@@ -873,4 +857,73 @@ func (s *Store) cacheSavingsTrend(ctx context.Context, q querier, f AnalyticsFil
 		return fmt.Errorf("iterate cache savings trend: %w", err)
 	}
 	return nil
+}
+
+// newTrends returns the grid-shaped Trends every bucketed Insights call starts from,
+// with every panel already carrying empty series rather than nil ones.
+//
+// A panel the caller did not ask for (InsightsPanels gates them, so the project quality
+// band computes only Tools and Churn) is never written, and a zero-valued panel struct
+// would ship its slices as JSON null. Filling them here means "not requested" and
+// "requested, no rows" look the same on the wire, which is what the browser needs: it
+// draws an empty chart either way, and every array in the contract stays non-nullable.
+func newTrends(grid trendGrid) *Trends {
+	n := grid.n()
+	f := func() []float64 { return make([]float64, n) }
+	return &Trends{
+		Unit:         grid.Unit,
+		BucketStarts: grid.Starts,
+		Labels:       grid.labels(),
+		FleetMix:     FleetMix{Models: []ModelSeries{}, NewestFirst: -1},
+		Gallery:      Gallery{Rows: []GallerySession{}},
+		Velocity: VelocityTrends{
+			ActiveHours: f(), WallHours: f(),
+			ResponseP50: f(), ResponseP90: f(), ResponseP99: f(),
+			MsgsPerMin: f(), ToolsPerMin: f(),
+		},
+		Tools: ToolTrends{
+			Reliability: []ToolPoint{}, MixOrder: []string{},
+			Mix: emptyMaps[float64](n), FailFleet: f(), FailWorst: []ToolFailSeries{},
+		},
+		Churn: ChurnTrend{
+			ReEdits: make([]int, n), Files: make([]int, n), Tree: []ChurnNode{},
+		},
+		Signals: SignalTrends{
+			GradeShare: emptyMaps[float64](n), GPA: f(),
+			ArchetypeShare: emptyMaps[float64](n),
+			CompletedRate:  f(), AbandonedRate: f(),
+			OutcomeTotal: make([]int, n), CompletedCount: make([]int, n), AbandonedCount: make([]int, n),
+			HygieneTerse: f(), HygieneRepeated: f(), HygieneNoCode: f(), HygieneUnstructured: f(),
+			ContextResets: make([]int, n), ContextHistogram: []ContextBucket{}, ContextMarkers: []ContextMarker{},
+		},
+		Economics: Economics{
+			CostCompleted: f(), CostAbandoned: f(), CostOther: f(),
+			CacheSavings: f(), CacheHitRate: f(), CacheMeasured: make([]bool, n),
+		},
+		Subagents: SubagentStats{
+			DelegateShare: f(), CostShare: f(),
+			FanoutOrder: []string{}, FanoutRows: emptyMaps[int](n),
+		},
+		Rhythm: RhythmGrid{Cells: emptyRows(rhythmDays, rhythmHours)},
+	}
+}
+
+// emptyMaps returns n allocated maps, for the per-bucket "category to value" series. A
+// nil map encodes as null just as a nil slice does, so the rows are allocated rather
+// than left zero.
+func emptyMaps[V any](n int) []map[string]V {
+	out := make([]map[string]V, n)
+	for i := range out {
+		out[i] = map[string]V{}
+	}
+	return out
+}
+
+// emptyRows returns a rows-by-cols grid of zeroed counts, for the rhythm heatmap.
+func emptyRows(rows, cols int) [][]int {
+	out := make([][]int, rows)
+	for i := range out {
+		out[i] = make([]int, cols)
+	}
+	return out
 }

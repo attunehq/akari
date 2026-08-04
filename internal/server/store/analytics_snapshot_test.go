@@ -107,7 +107,9 @@ func TestAnalyticsOmitUsersOnlyChangesBreakdown(t *testing.T) {
 	if shared.TotalOut != omitted.TotalOut || !costsEqual(shared.TotalCost, omitted.TotalCost) || shared.Sessions != omitted.Sessions {
 		t.Fatalf("OmitUsers changed the headline: shared=%+v omitted=%+v", shared, omitted)
 	}
-	if omitted.Users != nil {
+	// Empty rather than nil: the split reaches the browser through the public project
+	// response, where the contract declares every array non-nullable.
+	if len(omitted.Users) != 0 {
 		t.Errorf("OmitUsers left a by-user split: %+v", omitted.Users)
 	}
 	if len(shared.Users) == 0 {
