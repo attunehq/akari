@@ -77,3 +77,20 @@ in the background. The golden-fixtures test fails by name when you forget.
 [docs/signals.md](docs/signals.md) has the full rules, including why a new
 signal must default to "unmeasured" and the absolute token scale observed
 thinking bands on. Read it before you touch signals, scoring, or pricing.
+
+## Cursor Cloud specific instructions
+
+The Cloud Agent environment (`.cursor/environment.json`) runs Postgres natively
+instead of through eph/Docker, so skip the `eph` commands here. `install`
+provisions Bun, PostgreSQL, and the `akari` role/database; `start` brings
+Postgres online; and the `akari-server` terminal runs the dev server on
+<http://localhost:8080> (seeding the demo accounts, password `akari-dev`). The
+`AKARI_*` variables are exported into every shell via `~/.bashrc`
+(from `.cursor/env.sh`), so the database-backed suites run with a plain:
+
+```sh
+go test ./...          # AKARI_TEST_DATABASE_URL is already set
+```
+
+Frontend work needs Bun on `PATH` (also set by `.cursor/env.sh`); use the
+`make`/`bun` targets above unchanged.

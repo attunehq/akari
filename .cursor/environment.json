@@ -1,0 +1,18 @@
+{
+  "name": "akari",
+  "install": "./.cursor/install.sh",
+  "start": "./.cursor/start.sh",
+  "terminals": [
+    {
+      "name": "akari-server",
+      "command": "./.cursor/serve.sh",
+      "description": "akari dev server on http://localhost:8080. Applies embedded migrations on boot and seeds demo accounts (password \"akari-dev\", handles grace/ada/anna/katherine) once healthy. Restart this terminal to pick up Go/templ changes."
+    }
+  ],
+  "ports": [
+    {
+      "name": "akari web",
+      "port": 8080
+    }
+  ]
+}
