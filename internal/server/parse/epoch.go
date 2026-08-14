@@ -265,4 +265,27 @@ package parse
 // change, and no golden fixture uses Opus 5, so the projection delta for the
 // fixtures is byte-for-byte identical and the golden snapshots do not move; the
 // bump is the reprice signal and stands on its own.
-const Epoch = 21
+//
+// Epoch 21 -> 22: add the Cursor CLI and Grok CLI session formats, and widen the
+// file-path projection every agent shares. Two changes to existing data ride the
+// bump:
+//   - The pricing table gains grok-4.6 and grok-4.5 (rates derived from the Grok
+//     CLI's own per-turn cost telemetry; see internal/pricing), so any usage rows
+//     already carrying those models re-price from zero.
+//   - Tool inputs now project a top-level "path" key as the call's FilePath when
+//     "file_path" is absent (Cursor's spelling; filePathKeys in the parser), in
+//     the reducers and both sentinel writers together, so lifted and inline lines
+//     keep agreeing. Sessions whose tool inputs use "path" gain a FilePath on
+//     rebuild.
+//   - Grok subagent transcripts ingest as linked child sessions. The parent's
+//     subagent_spawned updates land as subagent_activity events and as
+//     Identity.ChildSourceIDs (sessions.subagent_source_ids), which link the
+//     child (its own transcript never names its parent) and suppress the
+//     child's usage ledger in the rebuild: the parent's turn_completed usage
+//     already aggregates the child's spend, so the child's rows would count the
+//     tokens twice (see store.RebuildSession).
+//
+// New-agent parsing itself touches no existing projection; the claude and codex
+// goldens are byte-for-byte identical, and the new cursor and grok fixtures join
+// the snapshot set.
+const Epoch = 22

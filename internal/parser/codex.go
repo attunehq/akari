@@ -111,7 +111,7 @@ func (r *reducer) reduceCodex(region []byte, base int64) error {
 					args := argsVal.String()
 					tc.InputJSON = args
 					if gjson.Valid(args) {
-						tc.FilePath = gjson.Get(args, "file_path").String()
+						tc.FilePath = toolFilePath(gjson.Parse(args))
 						tc.Detail = inputDetail(args)
 					}
 				}

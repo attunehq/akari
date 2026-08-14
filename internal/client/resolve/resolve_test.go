@@ -722,3 +722,112 @@ func TestResolveCachesPerDirectory(t *testing.T) {
 		t.Errorf("git calls = %d, want 3 (cached after first)", calls)
 	}
 }
+
+// TestPeekHeaderCursor covers the path-derived Cursor header: the session id is
+// the transcript's filename, and the cwd comes from the chat store's meta.json
+// sidecar (found by session id under a sibling of the projects root). A missing
+// sidecar leaves cwd empty rather than failing.
+func TestPeekHeaderCursor(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "projects")
+	line := `{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\nhi\n</user_query>"}]}}` + "\n"
+
+	const id = "3f6b2c1a-0000-4000-8000-000000000001"
+	tdir := filepath.Join(root, "home-grace-app", "agent-transcripts", id)
+	if err := os.MkdirAll(tdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(tdir, id+".jsonl")
+	if err := os.WriteFile(path, []byte(line), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mdir := filepath.Join(base, "chats", "0123abcd", id)
+	if err := os.MkdirAll(mdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	meta := `{"schemaVersion":1,"hasConversation":true,"cwd":"/home/grace/app"}`
+	if err := os.WriteFile(filepath.Join(mdir, "meta.json"), []byte(meta), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h, err := PeekHeader(discover.File{Agent: "cursor", Root: root, Path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.Cwd != "/home/grace/app" {
+		t.Errorf("cwd = %q, want /home/grace/app", h.Cwd)
+	}
+	if want := "home-grace-app/agent-transcripts/" + id + "/" + id; h.SourceID != want {
+		t.Errorf("source id = %q, want %q", h.SourceID, want)
+	}
+
+	// Without a sidecar the session still resolves, as orphaned.
+	const id2 = "3f6b2c1a-0000-4000-8000-000000000002"
+	tdir2 := filepath.Join(root, "home-grace-app", "agent-transcripts", id2)
+	if err := os.MkdirAll(tdir2, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path2 := filepath.Join(tdir2, id2+".jsonl")
+	if err := os.WriteFile(path2, []byte(line), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h2, err := PeekHeader(discover.File{Agent: "cursor", Root: root, Path: path2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h2.Cwd != "" {
+		t.Errorf("cwd without sidecar = %q, want empty", h2.Cwd)
+	}
+}
+
+// TestPeekHeaderGrok covers the path-derived Grok header (cwd is the session
+// directory's URL-encoded name, the id is in every line) and the subagent skip
+// (a summary.json sidecar with session_kind "subagent" is not ingested, since
+// its spend is already inside its parent's turn_completed usage).
+func TestPeekHeaderGrok(t *testing.T) {
+	root := t.TempDir()
+	line := `{"timestamp":1,"method":"session/update","params":{"sessionId":"019f-1","update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"hi"}}}}` + "\n"
+
+	sdir := filepath.Join(root, "%2Fhome%2Fgrace%2Fapp", "019f-1")
+	if err := os.MkdirAll(sdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(sdir, "updates.jsonl")
+	if err := os.WriteFile(path, []byte(line), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h, err := PeekHeader(discover.File{Agent: "grok", Root: root, Path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.Cwd != "/home/grace/app" {
+		t.Errorf("cwd = %q, want /home/grace/app", h.Cwd)
+	}
+	if h.SourceID != "019f-1" {
+		t.Errorf("source id = %q, want 019f-1", h.SourceID)
+	}
+
+	// A subagent session directory resolves like any other: the transcript
+	// uploads whole, and the server links it to the parent that claims it (and
+	// suppresses its usage ledger there). The summary.json sidecar is ignored.
+	sub := filepath.Join(root, "%2Fhome%2Fgrace%2Fapp", "019f-2")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	subPath := filepath.Join(sub, "updates.jsonl")
+	subLine := strings.ReplaceAll(line, "019f-1", "019f-2")
+	if err := os.WriteFile(subPath, []byte(subLine), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	summary := `{"info":{"id":"019f-2","cwd":"/home/grace/app"},"session_kind":"subagent","agent_name":"explore"}`
+	if err := os.WriteFile(filepath.Join(sub, "summary.json"), []byte(summary), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sh, err := PeekHeader(discover.File{Agent: "grok", Root: root, Path: subPath})
+	if err != nil {
+		t.Fatalf("subagent peek: %v", err)
+	}
+	if sh.SourceID != "019f-2" || sh.Cwd != "/home/grace/app" {
+		t.Errorf("subagent header = %+v", sh)
+	}
+}

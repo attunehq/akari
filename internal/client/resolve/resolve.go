@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -530,8 +531,72 @@ func PeekHeader(f discover.File) (Header, error) {
 		return Header{}, errNotSession
 	}
 
+	switch f.Agent {
+	case "cursor":
+		cursorPathHeader(f, &h)
+	case "grok":
+		if err := grokPathHeader(f, &h); err != nil {
+			return Header{}, err
+		}
+	}
+
 	h.SourceID = sourceID(f, h.sessionID)
 	return h, nil
+}
+
+// cursorPathHeader fills the header fields Cursor's transcript does not carry.
+// The cwd comes from the session's small meta.json sidecar, which lives in the
+// chat store beside the projects tree the transcript was found under
+// (~/.cursor/chats/<cwd-hash>/<id>/meta.json, or acp-sessions/<id>/meta.json for
+// a session driven over ACP). The hash directory cannot be inverted, so the
+// sidecar is found by globbing for the session id, which is the transcript's
+// directory (and file) name. A missing or unreadable sidecar leaves cwd empty
+// and the session resolves as orphaned rather than being dropped.
+func cursorPathHeader(f discover.File, h *Header) {
+	id := strings.TrimSuffix(filepath.Base(f.Path), ".jsonl")
+	if id == "" {
+		return
+	}
+	base := filepath.Dir(f.Root)
+	patterns := []string{
+		filepath.Join(base, "chats", "*", id, "meta.json"),
+		filepath.Join(base, "acp-sessions", id, "meta.json"),
+	}
+	for _, pat := range patterns {
+		matches, err := filepath.Glob(pat)
+		if err != nil {
+			continue
+		}
+		for _, m := range matches {
+			raw, err := os.ReadFile(m)
+			if err != nil {
+				continue
+			}
+			if cwd := gjson.GetBytes(raw, "cwd").String(); cwd != "" {
+				h.Cwd = cwd
+				return
+			}
+		}
+	}
+}
+
+// grokPathHeader fills the header fields Grok's updates.jsonl does not carry.
+// The session directory is named by URL-encoding the session's cwd
+// (~/.grok/sessions/<encoded-cwd>/<session-id>/updates.jsonl), so the cwd is a
+// pure function of the path. Subagent transcripts upload like any session: the
+// child's own directory never names its parent, so the server links it from the
+// parent transcript's subagent_spawned claims and drops its usage ledger there
+// (the parent's turn_completed usage already includes every subagent's spend).
+func grokPathHeader(f discover.File, h *Header) error {
+	dir := filepath.Dir(f.Path)
+	if cwd, err := url.PathUnescape(filepath.Base(filepath.Dir(dir))); err == nil {
+		// A decoded cwd is an absolute path (Unix or Windows drive form); anything
+		// else means the layout changed and the session resolves as orphaned.
+		if strings.HasPrefix(cwd, "/") || (len(cwd) > 1 && cwd[1] == ':') {
+			h.Cwd = cwd
+		}
+	}
+	return nil
 }
 
 // openSameFile opens path and verifies the opened file is the same filesystem
@@ -594,6 +659,17 @@ func sessionSignature(agent string, e gjson.Result) bool {
 			return e.Get("message.role").Exists()
 		}
 		return false
+	case "cursor":
+		// A transcript line is a role entry carrying a message (there is no
+		// top-level type on those), or the turn_ended line that closes a turn.
+		switch e.Get("role").String() {
+		case "user", "assistant":
+			return e.Get("message").Exists()
+		}
+		return false
+	case "grok":
+		// Every updates.jsonl line is an ACP session update wrapping the session id.
+		return e.Get("params.sessionId").Exists() && e.Get("params.update.sessionUpdate").Exists()
 	}
 	return false
 }
@@ -630,6 +706,15 @@ func applyHeaderLine(agent string, e gjson.Result, h *Header) {
 		if v := e.Get("id").String(); v != "" {
 			h.sessionID = v
 		}
+	case "cursor":
+		// The transcript records neither cwd nor an id; both come from the file's
+		// location (see cursorPathHeader and sourceID's filename fallback).
+	case "grok":
+		if v := e.Get("params.sessionId").String(); v != "" {
+			h.sessionID = v
+		}
+		// cwd is not in the file; the session directory's name encodes it (see
+		// grokPathHeader).
 	}
 }
 

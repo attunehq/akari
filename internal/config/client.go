@@ -157,9 +157,9 @@ func LoadClient(path string) (Client, error) {
 			return Client{}, fmt.Errorf("config %s: extra_roots[%d] needs both agent and path", resolved, i)
 		}
 		switch r.Agent {
-		case "claude", "codex", "pi":
+		case "claude", "codex", "pi", "cursor", "grok":
 		default:
-			return Client{}, fmt.Errorf("config %s: extra_roots[%d].agent must be claude, codex, or pi", resolved, i)
+			return Client{}, fmt.Errorf("config %s: extra_roots[%d].agent must be claude, codex, pi, cursor, or grok", resolved, i)
 		}
 	}
 	return c, nil

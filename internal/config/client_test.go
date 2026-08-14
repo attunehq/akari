@@ -205,13 +205,13 @@ func TestLoadClientRejectsUnknownAgent(t *testing.T) {
 token = "secret"
 
 [[extra_roots]]
-agent = "cursor"
+agent = "copilot"
 path = "/sessions"
 `
 	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := LoadClient(path); err == nil || !strings.Contains(err.Error(), "must be claude, codex, or pi") {
+	if _, err := LoadClient(path); err == nil || !strings.Contains(err.Error(), "must be claude, codex, pi, cursor, or grok") {
 		t.Fatalf("LoadClient invalid agent error = %v", err)
 	}
 }

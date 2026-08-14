@@ -120,6 +120,16 @@ func Roots(cfg config.Client, env func(string) string, home string) []Root {
 		roots = append(roots, Root{Agent: "pi", Dir: filepath.Join(home, ".pi", "agent", "sessions"), Optional: true})
 	}
 
+	// Cursor's per-session transcript lives under projects/<slug>/agent-transcripts;
+	// the CLI documents no relocation variable.
+	roots = append(roots, Root{Agent: "cursor", Dir: filepath.Join(home, ".cursor", "projects"), Optional: true})
+
+	if dir := env("GROK_HOME"); dir != "" {
+		roots = append(roots, Root{Agent: "grok", Dir: filepath.Join(dir, "sessions")})
+	} else {
+		roots = append(roots, Root{Agent: "grok", Dir: filepath.Join(home, ".grok", "sessions"), Optional: true})
+	}
+
 	for _, r := range cfg.ExtraRoots {
 		roots = append(roots, Root{Agent: r.Agent, Dir: r.Path, FollowRootLink: r.FollowRootLink})
 	}
@@ -155,16 +165,21 @@ func ErrorCount(err error) int {
 }
 
 // Matches reports whether a filename is a session file for the given agent.
-// Codex files are named rollout-*.jsonl; Claude and pi use any *.jsonl. This is
-// only a suffix gate: every agent's files are further validated by a positive
-// session-header signature at resolve time (see resolve.sessionSignature), which
-// is what keeps unrelated *.jsonl under a custom extra_root from being ingested.
+// Codex files are named rollout-*.jsonl; Grok keeps several JSONL files per
+// session directory, of which updates.jsonl is the session record; Claude, pi,
+// and Cursor use any *.jsonl. This is only a name gate: every agent's files are
+// further validated by a positive session-header signature at resolve time (see
+// resolve.sessionSignature), which is what keeps unrelated *.jsonl under a
+// custom extra_root from being ingested.
 func Matches(agent, name string) bool {
 	if !strings.HasSuffix(name, ".jsonl") {
 		return false
 	}
-	if agent == "codex" {
+	switch agent {
+	case "codex":
 		return strings.HasPrefix(name, "rollout-")
+	case "grok":
+		return name == "updates.jsonl"
 	}
 	return true
 }

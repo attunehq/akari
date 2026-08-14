@@ -30,6 +30,8 @@ package quality
 // factor moves stored scalars and so rides a parse.Epoch bump; an edge change is applied
 // at read time and needs no bump.
 
+import "sort"
+
 // ThinkingBucket is the banded read of an observed-thinking volume.
 type ThinkingBucket string
 
@@ -61,13 +63,28 @@ const (
 // agent: Claude ships an encrypted "signature" (~10.7 bytes per plaintext token, measured
 // against the blocks that kept their plaintext), Codex an "encrypted_content" blob (~14.2
 // bytes per reasoning token, measured against the exact counts it also reports), and pi
-// keeps plaintext (~4 bytes per token, the usual English ratio). Codex's exact per-turn
-// count is used directly where present, so its factor only covers a Codex turn that
-// somehow logged a trace but no token count.
+// and Grok keep plaintext (~4 bytes per token, the usual English ratio; Grok logs summary
+// thoughts). Codex's and Grok's exact per-turn counts are used directly where present, so
+// their factors only cover a turn that somehow logged a trace but no token count. Cursor
+// has no entry on purpose: its transcript never separates reasoning from answer text, so
+// a Cursor turn records no thinking bytes for a divisor to act on.
 var thinkingBytesPerToken = map[string]float64{
 	"claude": 10.7,
 	"codex":  14.2,
 	"pi":     4.0,
+	"grok":   4.0,
+}
+
+// ThinkingCalibratedAgents returns the agents with a measured bytes-per-token
+// factor, sorted, so the store's SQL divisor CASE can enumerate exactly the
+// same set as the Go map and never drift when an agent is added.
+func ThinkingCalibratedAgents() []string {
+	agents := make([]string, 0, len(thinkingBytesPerToken))
+	for a := range thinkingBytesPerToken {
+		agents = append(agents, a)
+	}
+	sort.Strings(agents)
+	return agents
 }
 
 // ThinkingBytesPerToken returns the bytes-per-token divisor for an agent, defaulting to the

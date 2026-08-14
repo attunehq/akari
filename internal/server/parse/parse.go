@@ -87,6 +87,7 @@ func toProjectionDelta(p parser.Delta) store.ProjectionDelta {
 			PRURL:           p.Identity.PRURL,
 			PRRepo:          p.Identity.PRRepo,
 			ParentSourceID:  p.Identity.ParentSourceID,
+			ChildSourceIDs:  p.Identity.ChildSourceIDs,
 		},
 	}
 

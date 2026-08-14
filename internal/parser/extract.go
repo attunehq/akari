@@ -173,22 +173,31 @@ func sentinelBytes(sha string, n int, media, filePath, detail string) []byte {
 	return []byte(out + "}")
 }
 
+// filePathKeys are the top-level input keys that name the file a tool call
+// operates on, in priority order: "file_path" is what Claude, Codex, and pi
+// write; "path" is Cursor's spelling. Every reducer's FilePath projection and
+// both sentinel writers read them through this one list so a lifted line and a
+// raw line always project the same path.
+var filePathKeys = []string{"file_path", "path"}
+
 // sentinelFilePath decides what file_path a body's sentinel carries: the top-level
-// file_path string of a JSON tool input, or "" for everything else (results,
-// non-JSON inputs, a non-string or absurdly long value). Lifting the whole input to
-// the CAS would otherwise destroy the one input field the reducer projects onto
-// every tool call, so the sentinel keeps it. The streaming path's inputProjections
-// applies this same rule over spans; the two must stay in lockstep so a line
-// rewrites to identical bytes on either path.
+// file-path string of a JSON tool input (see filePathKeys), or "" for everything
+// else (results, non-JSON inputs, a non-string or absurdly long value). Lifting the
+// whole input to the CAS would otherwise destroy the one input field the reducer
+// projects onto every tool call, so the sentinel keeps it. The streaming path's
+// inputProjections applies this same rule over spans; the two must stay in lockstep
+// so a line rewrites to identical bytes on either path.
 func sentinelFilePath(kind, media, content string) string {
 	if kind != bodyKindInput || media != "application/json" {
 		return ""
 	}
-	v := gjson.Get(content, "file_path")
-	if v.Type != gjson.String || len(v.String()) > maxSentinelFilePath {
-		return ""
+	for _, key := range filePathKeys {
+		v := gjson.Get(content, key)
+		if v.Type == gjson.String && len(v.String()) <= maxSentinelFilePath {
+			return v.String()
+		}
 	}
-	return v.String()
+	return ""
 }
 
 // sentinelDetail decides what detail a body's sentinel carries: the derived
@@ -341,6 +350,10 @@ func toolBodyFields(agent Agent, line []byte) []bodyField {
 		return codexBodyFields(e)
 	case AgentPi:
 		return piBodyFields(e)
+	case AgentCursor:
+		return cursorBodyFields(e)
+	case AgentGrok:
+		return grokBodyFields(e)
 	default:
 		return nil
 	}
@@ -533,6 +546,52 @@ func piBodyFields(e gjson.Result) []bodyField {
 		body := msg.Get("content")
 		c, media := bodyContent(body)
 		if f, ok := rawField(body, c, media, bodyKindResult); ok {
+			return []bodyField{f}
+		}
+	}
+	return nil
+}
+
+// cursorBodyFields lifts Cursor tool inputs: the transcript's assistant lines
+// carry tool_use blocks whose input is raw JSON. The transcript records no tool
+// results, so inputs are the only bodies; the cases mirror reduceCursor's
+// assistant branch exactly.
+func cursorBodyFields(e gjson.Result) []bodyField {
+	if e.Get("role").String() != "assistant" {
+		return nil
+	}
+	var fields []bodyField
+	for _, b := range e.Get("message.content").Array() {
+		if b.Get("type").String() != "tool_use" {
+			continue
+		}
+		input := b.Get("input")
+		if f, ok := rawField(input, input.Raw, "application/json", bodyKindInput); ok {
+			fields = append(fields, f)
+		}
+	}
+	return fields
+}
+
+// grokBodyFields lifts Grok tool bodies: a tool_call line's rawInput (raw JSON)
+// and a terminal (completed/failed) tool_call_update's rawOutput. A progress
+// tool_call_update echoes rawInput but resolves nothing, so nothing is lifted
+// from it; the cases mirror reduceGrok's switch exactly.
+func grokBodyFields(e gjson.Result) []bodyField {
+	u := e.Get("params.update")
+	switch u.Get("sessionUpdate").String() {
+	case "tool_call":
+		in := u.Get("rawInput")
+		if f, ok := rawField(in, in.Raw, "application/json", bodyKindInput); ok {
+			return []bodyField{f}
+		}
+	case "tool_call_update":
+		if s := u.Get("status").String(); s != "completed" && s != "failed" {
+			return nil
+		}
+		out := u.Get("rawOutput")
+		c, media := bodyContent(out)
+		if f, ok := rawField(out, c, media, bodyKindResult); ok {
 			return []bodyField{f}
 		}
 	}

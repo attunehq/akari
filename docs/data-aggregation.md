@@ -27,6 +27,12 @@ Token and cost data is aggregated from exactly three places.
    usage event, carrying the four token classes (input,
    output, cache read, cache write), a cost, an `occurred_at`, and the dedup keys
    that make a replayed line idempotent. Summing it is the source of truth.
+   One family of sessions writes no ledger by design: a Grok subagent whose
+   parent is ingested, because the parent's own transcript reports usage that
+   aggregates the child's spend. The child's rebuild suppresses its rows (see
+   `store.RebuildSession`), so summing the ledger counts that spend exactly
+   once, on the parent, and the subagent cost-share panel attributes Grok
+   delegation spend to the parent rather than the child.
 
 2. **The session rollups: `sessions.total_*`.** Per-session running totals
    (`total_input_tokens`, `total_output_tokens`, `total_cache_read_tokens`,
@@ -84,7 +90,7 @@ to plot, so counting it in a headline but not in the daily chart would make the 
 exceed the sum of the chart (the exact drift #40 fixed). The rollups carry no such
 filter; they count every surviving event. So the rollup base and the ledger-analytics
 base differ by exactly the undated usage, and by nothing else. In practice that is
-zero (Claude, Codex, and pi all stamp the turn a usage line belongs to, so a NULL
+zero (every agent parser stamps the turn a usage line belongs to, so a NULL
 `occurred_at` is a malformed transcript to fix at ingest, not usage to scatter across
 the dashboard), but it is a real difference and is pinned to exactly the undated
 amount by `TestUndatedUsageIsTheOnlyRollupAnalyticsGap`.

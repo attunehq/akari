@@ -241,7 +241,8 @@
     "PRNumber": 0,
     "PRURL": "",
     "PRRepo": "",
-    "ParentSourceID": "parent-thread-1"
+    "ParentSourceID": "parent-thread-1",
+    "ChildSourceIDs": null
   },
   "Started": "2024-01-01T10:00:00Z",
   "Ended": "2024-01-01T10:00:22Z"

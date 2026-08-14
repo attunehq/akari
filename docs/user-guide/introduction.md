@@ -8,7 +8,7 @@ order: 1
 
 ## The problem
 
-Claude Code, Codex, and pi each write a detailed session log to disk as they
+Claude Code, Codex, pi, Cursor, and Grok each write a detailed session log to disk as they
 work: every message, every piece of thinking, every tool call and its result, the
 tokens spent. That log is the record of what an agent actually did, and it is
 worth keeping. But by default it lives in a dot-directory on one laptop, in a

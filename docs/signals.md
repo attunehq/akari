@@ -120,5 +120,9 @@ each turn by its reasoning-trace byte size (`messages.thinking_bytes`),
 plaintext where present and the encrypted payload length otherwise; the
 ciphertext length tracks the hidden reasoning volume closely (r=0.97 for Claude
 signatures, r=0.997 for Codex against the reasoning-token count it reports), and
-pi keeps its thinking in the clear. `has_thinking` is set on the presence of a
-reasoning block, not on non-empty text, so a redacted turn still counts.
+pi and Grok keep their thinking in the clear (Grok logs summary thoughts and
+also reports an exact per-turn reasoning-token count, which takes precedence
+over the byte estimate). Cursor's transcript never separates reasoning from
+answer text, so its turns record no thinking and the signal stays unmeasured.
+`has_thinking` is set on the presence of a reasoning block, not on non-empty
+text, so a redacted turn still counts.

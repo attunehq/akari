@@ -103,6 +103,11 @@ type SessionIdentityDelta struct {
 	PRURL           string
 	PRRepo          string
 	ParentSourceID  string
+	// ChildSourceIDs are the source ids of subagents this transcript declared it
+	// spawned (Grok). A claim links the child like a child-declared parent key,
+	// and also marks the child's spend as aggregated into this session's usage,
+	// so the child's own rebuild writes no usage ledger.
+	ChildSourceIDs []string
 }
 
 // ProjUsage is one usage event as the reducer saw it, pre-dedup. SourceOffset
@@ -281,7 +286,23 @@ func (s *Store) RebuildSession(ctx context.Context, sessionID int64, epoch int, 
 			}
 			parsedLen = regionEnd
 		}
-		return rebuildTx(ctx, tx, sessionID, epoch, byteLen, r.Finish())
+		d := r.Finish()
+		// A session claimed as a spawned subagent writes no usage ledger: the
+		// claiming parent's own usage aggregates the child's spend (Grok), so
+		// keeping the child's rows would count the tokens twice. The check runs
+		// inside this transaction, which holds the child's row locks; see
+		// usageAggregatedByParentTx for why a claim that lands concurrently
+		// still converges.
+		if len(d.Usage) > 0 {
+			claimed, err := usageAggregatedByParentTx(ctx, tx, sessionID)
+			if err != nil {
+				return err
+			}
+			if claimed {
+				d.Usage = nil
+			}
+		}
+		return rebuildTx(ctx, tx, sessionID, epoch, byteLen, d)
 	})
 	if err != nil {
 		return err
@@ -292,17 +313,19 @@ func (s *Store) RebuildSession(ctx context.Context, sessionID int64, epoch int, 
 	return s.linkDeclaredFamily(ctx, sessionID)
 }
 
-// linkDeclaredFamily resolves the parent/child links a rebuild's
-// parent_source_id write makes possible: the rebuilt session links up to an
-// existing parent, and children that declared it before its row settled are
-// adopted. It runs after the rebuild transaction commits because both writes
-// touch sessions rows beyond the rebuilt one and FK-reference the parent row,
-// which must not happen while the rebuild holds blob_pins (see the single-write
-// rule in rebuildTx). Each statement is its own transaction, so a link-up only
-// ever holds the child row while key-sharing its parent: lock chains point up
-// the family tree and cannot cycle. Both are guarded by parent_session_id IS
-// NULL, so a settled link is never rewritten, and both mirror announce's
-// linkSubagentParentTx exactly; whichever path runs second is a no-op.
+// linkDeclaredFamily resolves the parent/child links a rebuild's identity
+// writes make possible, from both declaration directions: the child-declared
+// parent key (parent_source_id) and the parent-declared child claims
+// (subagent_source_ids). The rebuilt session links up to an existing parent,
+// and children that were ingested before its row settled are adopted. It runs
+// after the rebuild transaction commits because the writes touch sessions rows
+// beyond the rebuilt one and FK-reference the parent row, which must not happen
+// while the rebuild holds blob_pins (see the single-write rule in rebuildTx).
+// Each statement is its own transaction, so a link-up only ever holds the child
+// row while key-sharing its parent: lock chains point up the family tree and
+// cannot cycle. Every statement is guarded by parent_session_id IS NULL, so a
+// settled link is never rewritten; the parent_source_id pair mirrors announce's
+// linkSubagentParentTx exactly, and whichever path runs second is a no-op.
 func (s *Store) linkDeclaredFamily(ctx context.Context, sessionID int64) error {
 	if _, err := s.Pool.Exec(ctx,
 		`UPDATE sessions AS child
@@ -330,7 +353,89 @@ func (s *Store) linkDeclaredFamily(ctx context.Context, sessionID int64) error {
 		    AND child.id <> parent.id`, sessionID); err != nil {
 		return fmt.Errorf("adopt children of rebuilt session %d: %w", sessionID, err)
 	}
+	// The claim-keyed pair mirrors the two above for parent-declared children
+	// (sessions.subagent_source_ids, Grok): the rebuilt session links up to a
+	// parent that claims it, and adopts children its own transcript claims.
+	// Because a claim also means the parent's usage aggregates the child's,
+	// a child that already rolled up a ledger of its own is marked due again
+	// (parser_epoch = 0), so its reparse re-runs the suppression check and
+	// drops the double-counted rows. The totals guard keeps the mark off
+	// children that never wrote usage: their projection is already correct,
+	// and an unconditional mark would force a pointless reparse of every
+	// child on every link. Linking fills parent_source_id too, so readers
+	// keyed on the child-declared column see one consistent story.
+	if _, err := s.Pool.Exec(ctx,
+		`WITH linked AS (
+		    UPDATE sessions AS child
+		       SET parent_session_id = parent.id,
+		           parent_source_id = parent.source_session_id,
+		           relationship_type = 'subagent'
+		      FROM sessions AS parent
+		     WHERE child.id = $1
+		       AND child.parent_session_id IS NULL
+		       AND parent.user_id = child.user_id
+		       AND parent.agent = child.agent
+		       AND parent.id <> child.id
+		       AND parent.subagent_source_ids @> ARRAY[child.source_session_id]
+		 RETURNING child.id,
+		           child.total_input_tokens + child.total_output_tokens
+		         + child.total_cache_write_tokens + child.total_cache_read_tokens > 0 AS has_ledger)
+		 UPDATE session_raw
+		    SET parser_epoch = 0
+		  WHERE session_id IN (SELECT id FROM linked WHERE has_ledger)`, sessionID); err != nil {
+		return fmt.Errorf("link rebuilt session %d to claiming parent: %w", sessionID, err)
+	}
+	if _, err := s.Pool.Exec(ctx,
+		`WITH adopted AS (
+		    UPDATE sessions AS child
+		       SET parent_session_id = parent.id,
+		           parent_source_id = parent.source_session_id,
+		           relationship_type = 'subagent'
+		      FROM sessions AS parent
+		     WHERE parent.id = $1
+		       AND child.parent_session_id IS NULL
+		       AND child.user_id = parent.user_id
+		       AND child.agent = parent.agent
+		       AND child.id <> parent.id
+		       AND child.source_session_id = ANY(parent.subagent_source_ids)
+		 RETURNING child.id,
+		           child.total_input_tokens + child.total_output_tokens
+		         + child.total_cache_write_tokens + child.total_cache_read_tokens > 0 AS has_ledger)
+		 UPDATE session_raw
+		    SET parser_epoch = 0
+		  WHERE session_id IN (SELECT id FROM adopted WHERE has_ledger)`, sessionID); err != nil {
+		return fmt.Errorf("adopt claimed children of rebuilt session %d: %w", sessionID, err)
+	}
 	return nil
+}
+
+// usageAggregatedByParentTx reports whether another session's transcript claims
+// this one as a spawned subagent (sessions.subagent_source_ids). A claiming
+// parent's own turn_completed usage aggregates the child's spend (Grok logs it
+// this way), so a claimed session's rebuild writes no usage ledger of its own.
+// Claude and Codex subagents bill their own API calls and their parents declare
+// no claims, so the check is naturally false for them.
+//
+// The read runs inside the rebuild transaction, which holds the child's
+// sessions and session_raw row locks. A parent whose claim commits after this
+// read cannot strand the stale ledger: its linkDeclaredFamily adoption updates
+// this child's sessions row, so it blocks until this transaction commits, then
+// links the child and marks it due again, and the forced reparse sees the claim.
+func usageAggregatedByParentTx(ctx context.Context, tx pgx.Tx, sessionID int64) (bool, error) {
+	var claimed bool
+	if err := tx.QueryRow(ctx,
+		`SELECT EXISTS (
+		    SELECT 1
+		      FROM sessions child
+		      JOIN sessions parent
+		        ON parent.user_id = child.user_id
+		       AND parent.agent = child.agent
+		       AND parent.id <> child.id
+		       AND parent.subagent_source_ids @> ARRAY[child.source_session_id]
+		     WHERE child.id = $1)`, sessionID).Scan(&claimed); err != nil {
+		return false, fmt.Errorf("check aggregating parent for session %d: %w", sessionID, err)
+	}
+	return claimed, nil
 }
 
 // rebuildTx replaces a session's derived rows with the folded form of one
@@ -446,7 +551,8 @@ func rebuildTx(ctx context.Context, tx pgx.Tx, sessionID int64, epoch int, byteL
 		   pr_number = $19,
 		   pr_url = $20,
 		   pr_repo = $21,
-		   parent_source_id = CASE WHEN $22 <> '' THEN $22 ELSE parent_source_id END
+		   parent_source_id = CASE WHEN $22 <> '' THEN $22 ELSE parent_source_id END,
+		   subagent_source_ids = $23
 		 WHERE id = $1`,
 		sessionID, len(d.Messages), userMessages, fallbackCount,
 		roll.input, roll.output, roll.cacheWrite, roll.cacheRead,
@@ -456,7 +562,8 @@ func rebuildTx(ctx context.Context, tx pgx.Tx, sessionID int64, epoch int, byteL
 		sanitizeText(d.Identity.PermissionMode), sanitizeText(d.Identity.ReasoningEffort),
 		sanitizeText(d.Identity.SubagentName), d.Identity.PRNumber,
 		sanitizeText(d.Identity.PRURL), sanitizeText(d.Identity.PRRepo),
-		sanitizeText(d.Identity.ParentSourceID)); err != nil {
+		sanitizeText(d.Identity.ParentSourceID),
+		sanitizeTextSlice(d.Identity.ChildSourceIDs)); err != nil {
 		return fmt.Errorf("update aggregates for session %d: %w", sessionID, err)
 	}
 
@@ -1140,4 +1247,14 @@ func nullInt(n *int) any {
 // unchanged when there is nothing to fix, so the clean path does not allocate.
 func sanitizeText(s string) string {
 	return strings.ReplaceAll(strings.ToValidUTF8(s, "�"), "\x00", "�")
+}
+
+// sanitizeTextSlice sanitizes each element and never returns nil: the target
+// column is NOT NULL, and pgx encodes a nil slice as NULL rather than '{}'.
+func sanitizeTextSlice(ss []string) []string {
+	out := make([]string, len(ss))
+	for i, s := range ss {
+		out[i] = sanitizeText(s)
+	}
+	return out
 }

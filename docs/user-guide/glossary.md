@@ -10,8 +10,9 @@ Definitions for the terms the rest of the guide uses.
 
 ## The session
 
-A **session** is one agent run: a single, continuous interaction with Claude Code,
-Codex, or pi, from the first message to the last. Each agent writes its session to
+A **session** is one agent run: a single, continuous interaction with a supported
+coding agent (Claude Code, Codex, pi, Cursor, or Grok), from the first message to
+the last. Each agent writes its session to
 a log file on disk as it works, and that file is what akari ingests. A session
 carries a stable **source id** (the agent's own identifier for the run), the
 **machine** it ran on, the account that owns it, the git branch and working
@@ -79,7 +80,9 @@ with a size, a media type, and a status.
 
 Some sessions spawn **subagents**: child sessions launched from within a parent
 run. akari links them to the session that spawned them, so a subagent shows up
-under its parent rather than floating loose in the feed.
+under its parent rather than floating loose in the feed. A Grok subagent shows
+its full transcript but no tokens or cost of its own: the Grok CLI bills a
+subagent's spend inside its parent's usage, so akari counts it there once.
 
 Tool bodies can be large (a single result might be megabytes of JSON or a
 base64-encoded image), so the transcript does not inline them. It holds a small
@@ -104,7 +107,12 @@ pricing is part of parsing, reprices old sessions automatically on the next
 
 When a session uses a model the table does not know, its tokens are still recorded
 and its cost is stored as zero. Zero means Akari does not know the price; it does
-not mean the model was free. All dollar figures are best-effort estimates, and
+not mean the model was free.
+
+Cursor sessions record no usage at all. The cursor-agent CLI never writes token
+counts, model ids, tool results, or reasoning to its transcript, so a Cursor
+session shows its conversation, tool calls, and outcomes, with tokens and cost
+zero by construction rather than measured. All dollar figures are best-effort estimates, and
 analytics group zero-priced models under `Other`. Costs below a cent show extra
 precision rather than collapsing to `$0`.
 

@@ -140,7 +140,7 @@ func (r *reducer) reduceClaude(region []byte, base int64) error {
 					tc := ToolCall{
 						MessageOrdinal: ord, CallIndex: r.openCalls,
 						ToolName: name, Category: toolCategory(name),
-						FilePath: b.Get("input.file_path").String(),
+						FilePath: toolFilePath(b.Get("input")),
 						CallUID:  b.Get("id").String(),
 						// The line-level attribution stamps what drove this call: the
 						// subagent type, the invoked skill, and its plugin. They co-occur

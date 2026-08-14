@@ -167,6 +167,18 @@ var table = map[string][]DatedRate{
 	"gpt-5-codex": flat(Rate{Input: 1.25, Output: 10, CacheRead: 0.125}),
 	"gpt-5-mini":  flat(Rate{Input: 0.25, Output: 2, CacheRead: 0.025}),
 	"gpt-5-nano":  flat(Rate{Input: 0.05, Output: 0.40, CacheRead: 0.005}),
+
+	// xAI Grok, as served through the Grok CLI (grok.com accounts). The rates are
+	// derived from the CLI's own per-turn billing telemetry rather than a price
+	// page: turn_completed reports costUsdTicks (1 tick = 1e-10 USD) beside exact
+	// token splits, and fitting independent turns solves both models to these
+	// round numbers exactly (Aug 2026), with reasoning tokens billed inside
+	// output. The two differ only on cached reads. cacheCreationTokens is live in
+	// the schema but zero on every observed turn, and no write rate is published
+	// or derivable until one is nonzero, so CacheWrite stays unset like the
+	// pre-5.6 OpenAI keys.
+	"grok-4.6": flat(Rate{Input: 2, Output: 6, CacheRead: 0.50}),
+	"grok-4.5": flat(Rate{Input: 2, Output: 6, CacheRead: 0.30}),
 }
 
 // datedSnapshot matches a trailing release-date suffix in either the Anthropic

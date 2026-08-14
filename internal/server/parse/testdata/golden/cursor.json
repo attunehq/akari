@@ -1,0 +1,124 @@
+{
+  "Messages": [
+    {
+      "Ordinal": 0,
+      "Role": "user",
+      "Content": "Fix the login bug",
+      "ThinkingText": "",
+      "ThinkingBytes": 0,
+      "Model": "",
+      "HasThinking": false,
+      "HasToolUse": false,
+      "Timestamp": "2024-03-01T13:00:00Z"
+    },
+    {
+      "Ordinal": 1,
+      "Role": "assistant",
+      "Content": "Reading the auth package first.\nThe guard drops the session token; writing the fix.\nFixed: the guard now keeps the session token.",
+      "ThinkingText": "",
+      "ThinkingBytes": 0,
+      "Model": "",
+      "HasThinking": false,
+      "HasToolUse": true,
+      "Timestamp": "0001-01-01T00:00:00Z"
+    },
+    {
+      "Ordinal": 2,
+      "Role": "user",
+      "Content": "Thanks, ship it",
+      "ThinkingText": "",
+      "ThinkingBytes": 0,
+      "Model": "",
+      "HasThinking": false,
+      "HasToolUse": false,
+      "Timestamp": "2024-03-01T13:05:00Z"
+    },
+    {
+      "Ordinal": 3,
+      "Role": "assistant",
+      "Content": "Committed.",
+      "ThinkingText": "",
+      "ThinkingBytes": 0,
+      "Model": "",
+      "HasThinking": false,
+      "HasToolUse": false,
+      "Timestamp": "0001-01-01T00:00:00Z"
+    }
+  ],
+  "ToolCalls": [
+    {
+      "MessageOrdinal": 1,
+      "CallIndex": 0,
+      "ToolName": "Read",
+      "Category": "read",
+      "FilePath": "/home/grace/code/proj/auth.go",
+      "Detail": "",
+      "InputBody": "{\"path\":\"/home/grace/code/proj/auth.go\"}",
+      "InputSHA256": "",
+      "InputBytes": 40,
+      "InputMediaType": "application/json",
+      "CallUID": "",
+      "AttributionAgent": "",
+      "AttributionSkill": "",
+      "AttributionPlugin": ""
+    },
+    {
+      "MessageOrdinal": 1,
+      "CallIndex": 1,
+      "ToolName": "Shell",
+      "Category": "bash",
+      "FilePath": "",
+      "Detail": "go test ./auth/...",
+      "InputBody": "{\"command\":\"go test ./auth/...\",\"description\":\"Run the auth tests\"}",
+      "InputSHA256": "",
+      "InputBytes": 67,
+      "InputMediaType": "application/json",
+      "CallUID": "",
+      "AttributionAgent": "",
+      "AttributionSkill": "",
+      "AttributionPlugin": ""
+    },
+    {
+      "MessageOrdinal": 1,
+      "CallIndex": 2,
+      "ToolName": "Write",
+      "Category": "write",
+      "FilePath": "/home/grace/code/proj/auth.go",
+      "Detail": "",
+      "InputBody": "{\"path\":\"/home/grace/code/proj/auth.go\",\"contents\":\"package auth\\n\"}",
+      "InputSHA256": "",
+      "InputBytes": 68,
+      "InputMediaType": "application/json",
+      "CallUID": "",
+      "AttributionAgent": "",
+      "AttributionSkill": "",
+      "AttributionPlugin": ""
+    }
+  ],
+  "ToolResults": null,
+  "Usage": null,
+  "Attachments": null,
+  "Fallbacks": null,
+  "Events": [
+    {
+      "MessageOrdinal": 3,
+      "Kind": "turn_aborted",
+      "AttrsJSON": "{\"reason\":\"user interrupted\"}",
+      "OccurredAt": "0001-01-01T00:00:00Z"
+    }
+  ],
+  "Identity": {
+    "CustomTitle": "",
+    "Slug": "",
+    "PermissionMode": "",
+    "ReasoningEffort": "",
+    "SubagentName": "",
+    "PRNumber": 0,
+    "PRURL": "",
+    "PRRepo": "",
+    "ParentSourceID": "",
+    "ChildSourceIDs": null
+  },
+  "Started": "2024-03-01T13:00:00Z",
+  "Ended": "2024-03-01T13:05:00Z"
+}

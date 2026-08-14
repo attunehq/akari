@@ -19,7 +19,7 @@ export const GET: APIRoute = async () => {
   );
   out.push("");
   out.push(
-    "akari collects the local session logs of Claude Code, Codex, and pi from every machine, parses them on one server, and shows them as a searchable history grouped by git project, with token usage and cost on every run. This is the user guide."
+    "akari collects the local session logs of Claude Code, Codex, pi, Cursor, and Grok from every machine, parses them on one server, and shows them as a searchable history grouped by git project, with token usage and cost on every run. This is the user guide."
   );
   out.push("");
   out.push("## User guide");

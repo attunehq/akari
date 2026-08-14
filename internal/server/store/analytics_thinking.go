@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/jssblck/akari/internal/quality"
 )
@@ -31,17 +32,16 @@ func perTurnTokensExpr(mAlias, mtuAlias, agentExpr string) string {
 }
 
 // agentDivisorExpr builds the bytes-per-token divisor as a SQL CASE over the agent, with the
-// numeric factors pulled from quality.ThinkingBytesPerToken so the SQL cannot drift from the Go
-// mapping. The ELSE arm uses the same default (the Claude factor) that
-// quality.ThinkingBytesPerToken returns for an unknown agent, so a divide never yields NULL even
-// for an agent the map does not name.
+// arms enumerated from quality.ThinkingCalibratedAgents and the numeric factors pulled from
+// quality.ThinkingBytesPerToken so the SQL cannot drift from the Go mapping. The ELSE arm uses
+// the same default (the Claude factor) that quality.ThinkingBytesPerToken returns for an
+// unknown agent, so a divide never yields NULL even for an agent the map does not name.
 func agentDivisorExpr(agentExpr string) string {
-	return fmt.Sprintf(
-		`CASE %s WHEN 'claude' THEN %g WHEN 'codex' THEN %g WHEN 'pi' THEN %g ELSE %g END`,
-		agentExpr,
-		quality.ThinkingBytesPerToken("claude"),
-		quality.ThinkingBytesPerToken("codex"),
-		quality.ThinkingBytesPerToken("pi"),
-		quality.ThinkingBytesPerToken(""),
-	)
+	var b strings.Builder
+	fmt.Fprintf(&b, "CASE %s", agentExpr)
+	for _, agent := range quality.ThinkingCalibratedAgents() {
+		fmt.Fprintf(&b, " WHEN '%s' THEN %g", agent, quality.ThinkingBytesPerToken(agent))
+	}
+	fmt.Fprintf(&b, " ELSE %g END", quality.ThinkingBytesPerToken(""))
+	return b.String()
 }

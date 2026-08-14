@@ -13,12 +13,14 @@ const (
 	AgentClaude Agent = "claude"
 	AgentCodex  Agent = "codex"
 	AgentPi     Agent = "pi"
+	AgentCursor Agent = "cursor"
+	AgentGrok   Agent = "grok"
 )
 
 // Agents lists every supported format. Validation outside the parser (the announce
 // endpoint) derives from it, so this enum stays the one owner of "which agent
 // formats exist" and a format the parser handles is never rejected at announce.
-var Agents = []Agent{AgentClaude, AgentCodex, AgentPi}
+var Agents = []Agent{AgentClaude, AgentCodex, AgentPi, AgentCursor, AgentGrok}
 
 // Session is the parsed projection of one session file.
 type Session struct {

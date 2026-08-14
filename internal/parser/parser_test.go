@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func loadFixture(t *testing.T, name string) []byte {
@@ -593,5 +594,181 @@ this is not json
 	}
 	if len(s.Messages) != 2 {
 		t.Fatalf("messages = %d, want 2", len(s.Messages))
+	}
+}
+
+func TestParseCursor(t *testing.T) {
+	s, err := Parse(AgentCursor, loadFixture(t, "cursor.jsonl"))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	// The three assistant lines of the first turn fold into one message, closed
+	// by turn_ended.
+	if len(s.Messages) != 4 {
+		t.Fatalf("messages = %d, want 4", len(s.Messages))
+	}
+	u0 := s.Messages[0]
+	if u0.Role != RoleUser || u0.Content != "Fix the login bug" {
+		t.Errorf("message 0 = %+v", u0)
+	}
+	// The transcript's user timestamp is "8:00 AM (UTC-5)", i.e. 13:00 UTC.
+	if got := u0.Timestamp.UTC().Format(time.RFC3339); got != "2024-03-01T13:00:00Z" {
+		t.Errorf("message 0 timestamp = %s", got)
+	}
+	a1 := s.Messages[1]
+	if a1.Role != RoleAssistant || !a1.HasToolUse {
+		t.Errorf("message 1 = %+v", a1)
+	}
+	if !strings.HasPrefix(a1.Content, "Reading the auth package first.") ||
+		!strings.HasSuffix(a1.Content, "Fixed: the guard now keeps the session token.") {
+		t.Errorf("message 1 content = %q", a1.Content)
+	}
+	// Cursor's transcript records no model, no usage, and no thinking.
+	if a1.Model != "" || a1.HasThinking {
+		t.Errorf("message 1 should have no model or thinking: %+v", a1)
+	}
+	if len(s.UsageEvent) != 0 {
+		t.Errorf("usage events = %d, want 0", len(s.UsageEvent))
+	}
+
+	if len(s.ToolCalls) != 3 {
+		t.Fatalf("tool calls = %d, want 3", len(s.ToolCalls))
+	}
+	tc := s.ToolCalls[0]
+	if tc.ToolName != "Read" || tc.Category != "read" || tc.FilePath != "/home/grace/code/proj/auth.go" {
+		t.Errorf("tool call 0 = %+v", tc)
+	}
+	if tc.ResultStatus != "" {
+		t.Errorf("tool call 0 status = %q, want pending (no results in transcript)", tc.ResultStatus)
+	}
+	if sh := s.ToolCalls[1]; sh.ToolName != "Shell" || sh.Category != "bash" || sh.Detail != "go test ./auth/..." {
+		t.Errorf("tool call 1 = %+v", sh)
+	}
+	// The folded turn keeps one call sequence across its assistant lines.
+	if w := s.ToolCalls[2]; w.ToolName != "Write" || w.MessageOrdinal != 1 || w.CallIndex != 2 {
+		t.Errorf("tool call 2 = %+v", w)
+	}
+
+	// The aborted second turn records its event.
+	if len(s.Events) != 1 {
+		t.Fatalf("events = %d, want 1", len(s.Events))
+	}
+	if ev := s.Events[0]; ev.Kind != EventTurnAborted || ev.AttrsJSON != `{"reason":"user interrupted"}` {
+		t.Errorf("event = %+v", ev)
+	}
+
+	if got := s.StartedAt.UTC().Format(time.RFC3339); got != "2024-03-01T13:00:00Z" {
+		t.Errorf("started = %s", got)
+	}
+	if got := s.EndedAt.UTC().Format(time.RFC3339); got != "2024-03-01T13:05:00Z" {
+		t.Errorf("ended = %s", got)
+	}
+}
+
+func TestParseGrok(t *testing.T) {
+	s, err := Parse(AgentGrok, loadFixture(t, "grok.jsonl"))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	if len(s.Messages) != 4 {
+		t.Fatalf("messages = %d, want 4", len(s.Messages))
+	}
+	if m := s.Messages[0]; m.Role != RoleUser || m.Content != "Fix the login bug" {
+		t.Errorf("message 0 = %+v", m)
+	}
+	a := s.Messages[1]
+	if a.Role != RoleAssistant || a.Model != "grok-4.6" {
+		t.Errorf("message 1 = %+v", a)
+	}
+	if a.Content != "Looking at auth.\nThe guard drops the session token; fixed." {
+		t.Errorf("message 1 content = %q", a.Content)
+	}
+	if !a.HasThinking || a.ThinkingText != "Grace's report points at the auth package; read it first." {
+		t.Errorf("message 1 thinking = %q (has=%v)", a.ThinkingText, a.HasThinking)
+	}
+	// The second turn runs on the switched model the user chunk's meta carries.
+	if m := s.Messages[3]; m.Role != RoleAssistant || m.Model != "grok-4.5" {
+		t.Errorf("message 3 = %+v", m)
+	}
+
+	if len(s.ToolCalls) != 2 {
+		t.Fatalf("tool calls = %d, want 2", len(s.ToolCalls))
+	}
+	tc := s.ToolCalls[0]
+	if tc.ToolName != "read_file" || tc.Category != "read" || tc.FilePath != "/home/grace/code/proj/auth.go" {
+		t.Errorf("tool call 0 = %+v", tc)
+	}
+	if tc.ResultStatus != "ok" || tc.ResultBody != `{"type":"Read","content":"package auth"}` {
+		t.Errorf("tool call 0 result = %q (%s)", tc.ResultBody, tc.ResultStatus)
+	}
+	sh := s.ToolCalls[1]
+	if sh.ToolName != "run_terminal_command" || sh.Category != "bash" || sh.Detail != "go test ./..." {
+		t.Errorf("tool call 1 = %+v", sh)
+	}
+	if sh.ResultStatus != "error" || sh.ResultBody != "go: build failed" || sh.ResultMediaType != "text/plain" {
+		t.Errorf("tool call 1 result = %q (%s, %s)", sh.ResultBody, sh.ResultStatus, sh.ResultMediaType)
+	}
+
+	// One usage record per model per turn_completed, with the cached reads split
+	// out of the combined input and the -build serving suffix stripped.
+	if len(s.UsageEvent) != 2 {
+		t.Fatalf("usage events = %d, want 2", len(s.UsageEvent))
+	}
+	u := s.UsageEvent[0]
+	if u.Model != "grok-4.6" || u.Input != 500 || u.Output != 80 || u.CacheRead != 700 || u.Reasoning != 30 {
+		t.Errorf("usage 0 = %+v", u)
+	}
+	if u.DedupKey != "p-1/grok-4.6-build" {
+		t.Errorf("usage 0 dedup = %q", u.DedupKey)
+	}
+	if u.MessageOrdinal == nil || *u.MessageOrdinal != 1 {
+		t.Errorf("usage 0 ordinal = %v, want 1", u.MessageOrdinal)
+	}
+	if u2 := s.UsageEvent[1]; u2.Model != "grok-4.5" || u2.Input != 300 || u2.CacheRead != 600 {
+		t.Errorf("usage 1 = %+v", u2)
+	}
+
+	// Each turn_completed records its telemetry, and the second turn's spawned
+	// subagent records its lifecycle pair around the failed tool call.
+	if len(s.Events) != 4 {
+		t.Fatalf("events = %d, want 4", len(s.Events))
+	}
+	if ev := s.Events[0]; ev.Kind != EventTurnEnd || ev.AttrsJSON != `{"duration_ms":4100,"model_calls":2,"stop_reason":"end_turn"}` {
+		t.Errorf("event 0 = %+v", ev)
+	}
+	if ev := s.Events[1]; ev.Kind != EventSubagentActivity ||
+		ev.AttrsJSON != `{"child_session_id":"019f0000-0000-7000-8000-0000000000c1","description":"Map the auth package","model":"grok-4.6","state":"started","subagent_type":"explore"}` {
+		t.Errorf("event 1 = %+v", ev)
+	}
+	if ev := s.Events[2]; ev.Kind != EventSubagentActivity ||
+		ev.AttrsJSON != `{"child_session_id":"019f0000-0000-7000-8000-0000000000c1","duration_ms":9200,"state":"completed","tokens_used":4100}` {
+		t.Errorf("event 2 = %+v", ev)
+	}
+
+	// The spawn also claims the child's session id on the identity, which is how
+	// the server links the child transcript (it never names its parent) and
+	// knows to drop the child's own usage ledger.
+	if len(s.Identity.ChildSourceIDs) != 1 || s.Identity.ChildSourceIDs[0] != "019f0000-0000-7000-8000-0000000000c1" {
+		t.Errorf("child source ids = %v", s.Identity.ChildSourceIDs)
+	}
+
+	if got := s.StartedAt.UTC().Format(time.RFC3339); got != "2024-03-01T08:00:00Z" {
+		t.Errorf("started = %s", got)
+	}
+}
+
+// TestParseGrokTrailingPrompt confirms a prompt the model never answered still
+// lands as a user turn when the parse finishes.
+func TestParseGrokTrailingPrompt(t *testing.T) {
+	raw := []byte(`{"timestamp":1709280001,"method":"session/update","params":{"sessionId":"s1","update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"hello"},"_meta":{"modelId":"grok-4.6"}}}}
+`)
+	s, err := Parse(AgentGrok, raw)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(s.Messages) != 1 || s.Messages[0].Role != RoleUser || s.Messages[0].Content != "hello" {
+		t.Fatalf("messages = %+v", s.Messages)
 	}
 }

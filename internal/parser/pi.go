@@ -68,7 +68,7 @@ func (r *reducer) reducePi(region []byte, base int64) error {
 						tc := ToolCall{
 							MessageOrdinal: ord, CallIndex: callIndex,
 							ToolName: name, Category: toolCategory(name),
-							FilePath: b.Get("arguments.file_path").String(),
+							FilePath: toolFilePath(b.Get("arguments")),
 							CallUID:  b.Get("id").String(),
 						}
 						setToolInput(&tc, b.Get("arguments"), "application/json")

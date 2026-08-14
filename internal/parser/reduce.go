@@ -105,8 +105,10 @@ const (
 	// EventStopHook: a Claude stop-hook summary; hook_count, errors,
 	// prevented_continuation, stop_reason.
 	EventStopHook = "stop_hook"
-	// EventSubagentActivity: a Codex subagent lifecycle event; thread_id, agent_path,
-	// state ("started"/...).
+	// EventSubagentActivity: a subagent lifecycle event. Codex carries thread_id,
+	// agent_path, state ("started"/...). Grok carries child_session_id and state
+	// ("started" with subagent_type, description, model; the finish status with
+	// duration_ms and tokens_used).
 	EventSubagentActivity = "subagent_activity"
 	// EventModelChange: a pi model switch; provider, model.
 	EventModelChange = "model_change"
@@ -216,6 +218,13 @@ type SessionIdentity struct {
 	// parent_thread_id). Claude declares parenthood in the file's location
 	// instead, so its reducer leaves this empty and announce derives it.
 	ParentSourceID string
+	// ChildSourceIDs is the inverse declaration: the source-session ids of the
+	// subagents this session spawned, for an agent whose child transcripts carry
+	// no parent reference (Grok's subagent_spawned updates). A parent that
+	// declares children this way also folds their token spend into its own
+	// turn_completed usage, so the store both links a claimed child and drops
+	// the child's own usage ledger (see store.RebuildSession).
+	ChildSourceIDs []string
 }
 
 // Reducer folds one session's raw bytes into a Delta. A parse always covers the
@@ -235,7 +244,7 @@ type Reducer struct {
 // NewReducer returns a Reducer for one session of the given agent.
 func NewReducer(agent Agent) (*Reducer, error) {
 	switch agent {
-	case AgentClaude, AgentCodex, AgentPi:
+	case AgentClaude, AgentCodex, AgentPi, AgentCursor, AgentGrok:
 		return &Reducer{agent: agent, r: reducer{lastUsageOffset: -1}}, nil
 	default:
 		return nil, fmt.Errorf("unknown agent %q", agent)
@@ -252,8 +261,14 @@ func (x *Reducer) Feed(region []byte, baseOffset int64) error {
 		return x.r.reduceClaude(region, baseOffset)
 	case AgentCodex:
 		return x.r.reduceCodex(region, baseOffset)
-	default:
+	case AgentPi:
 		return x.r.reducePi(region, baseOffset)
+	case AgentCursor:
+		return x.r.reduceCursor(region, baseOffset)
+	case AgentGrok:
+		return x.r.reduceGrok(region, baseOffset)
+	default:
+		return fmt.Errorf("unknown agent %q", x.agent)
 	}
 }
 
@@ -317,6 +332,12 @@ type reducer struct {
 	// Codex end event that mirrors an item (mcp_tool_call_end for a function_call)
 	// enriches nothing and only an event with no item behind it creates a call.
 	seenCalls map[string]bool
+
+	// grokUser folds a consecutive run of Grok user_message_chunk lines into one
+	// user turn; grokUserTS is the first chunk's timestamp. Any other update kind
+	// flushes the run (see flushGrokUser). Empty for other agents.
+	grokUser   []string
+	grokUserTS time.Time
 
 	// seenAttach dedups attachments by their content key within this region so the
 	// same image carried by more than one event (a Codex image_generation_call and
@@ -497,6 +518,18 @@ func (r *reducer) addEvent(kind string, attrs map[string]any, ts time.Time) {
 	r.d.Events = append(r.d.Events, op)
 }
 
+// claimChild records a spawned subagent's source-session id on the identity,
+// once per child: a resumed transcript replays its history, so the same spawn
+// can appear twice. Sessions spawn few subagents, so a linear scan suffices.
+func (r *reducer) claimChild(id string) {
+	for _, c := range r.d.Identity.ChildSourceIDs {
+		if c == id {
+			return
+		}
+	}
+	r.d.Identity.ChildSourceIDs = append(r.d.Identity.ChildSourceIDs, id)
+}
+
 // addUsage records a usage event tagged with a stable per-line source identity.
 func (r *reducer) addUsage(u Usage, offset int64) {
 	if offset == r.lastUsageOffset {
@@ -577,8 +610,12 @@ func (r *reducer) buildOpen() {
 }
 
 // closeTurn finalizes and emits the open assistant turn (a user line, a new
-// Claude message id, or Finish ends it).
+// Claude message id, or Finish ends it). A buffered Grok user run flushes first
+// so a prompt the model never answered still lands when Finish closes the parse
+// (flushGrokUser clears the buffer before re-entering, so the mutual call
+// terminates).
 func (r *reducer) closeTurn() {
+	r.flushGrokUser()
 	if r.open == nil {
 		return
 	}

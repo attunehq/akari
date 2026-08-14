@@ -217,3 +217,33 @@ func TestReadFullShortRead(t *testing.T) {
 		t.Fatal("expected short-read error past declared size")
 	}
 }
+
+// TestLocateCursorBodies checks Cursor tool_use inputs (assistant transcript
+// lines) against the oracle; the transcript carries no results to lift.
+func TestLocateCursorBodies(t *testing.T) {
+	cases := []string{
+		`{"role":"assistant","message":{"content":[{"type":"text","text":"on it"},{"type":"tool_use","name":"Write","input":{"path":"/tmp/a.txt","contents":"hello"}}]}}`,
+		`{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Shell","input":{"command":"ls"}},{"type":"tool_use","name":"Read","input":{"path":"b.txt"}}]}}`,
+		`{"role":"user","message":{"content":[{"type":"text","text":"no tool body"}]}}`,
+		`{"type":"turn_ended","status":"success"}`,
+	}
+	for _, c := range cases {
+		locateParity(t, AgentCursor, c)
+	}
+}
+
+// TestLocateGrokBodies checks Grok tool_call rawInput and terminal
+// tool_call_update rawOutput against the oracle; a progress update (no status)
+// lifts nothing.
+func TestLocateGrokBodies(t *testing.T) {
+	cases := []string{
+		`{"timestamp":1,"params":{"sessionId":"s","update":{"sessionUpdate":"tool_call","toolCallId":"c1","title":"write","rawInput":{"file_path":"/tmp/a.txt","content":"hello"}}}}`,
+		`{"timestamp":1,"params":{"sessionId":"s","update":{"sessionUpdate":"tool_call_update","toolCallId":"c1","status":"completed","rawOutput":{"type":"Write","ok":true}}}}`,
+		`{"timestamp":1,"params":{"sessionId":"s","update":{"sessionUpdate":"tool_call_update","toolCallId":"c1","status":"failed","rawOutput":"boom"}}}`,
+		`{"timestamp":1,"params":{"sessionId":"s","update":{"sessionUpdate":"tool_call_update","toolCallId":"c1","kind":"edit","title":"Write","rawInput":{"file_path":"/tmp/a.txt"}}}}`,
+		`{"timestamp":1,"params":{"sessionId":"s","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"no body"}}}}`,
+	}
+	for _, c := range cases {
+		locateParity(t, AgentGrok, c)
+	}
+}

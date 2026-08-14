@@ -266,9 +266,12 @@ func TestReassignSessionsRejectsNoUsers(t *testing.T) {
 	}
 }
 
-// isolateDiscoveryRoots points all three agents' discovery roots at fresh, empty
-// temp dirs via their documented env overrides, so a test sees only the files it
-// plants and never this machine's real session logs. It returns the claude root.
+// isolateDiscoveryRoots points every agent's discovery root at fresh, empty
+// temp dirs, so a test sees only the files it plants and never this machine's
+// real session logs. Agents with documented env overrides get one each; HOME is
+// redirected too, which isolates the agents whose only root is the default
+// under home (cursor, grok, and any agent added later). It returns the claude
+// root.
 func isolateDiscoveryRoots(t *testing.T) string {
 	t.Helper()
 	claude := t.TempDir()
@@ -279,6 +282,7 @@ func isolateDiscoveryRoots(t *testing.T) string {
 	t.Setenv("CLAUDE_PROJECTS_DIR", claude)
 	t.Setenv("CODEX_SESSIONS_DIR", t.TempDir())
 	t.Setenv("PI_DIR", piHome)
+	t.Setenv("HOME", t.TempDir())
 	return claude
 }
 

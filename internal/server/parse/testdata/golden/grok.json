@@ -1,0 +1,182 @@
+{
+  "Messages": [
+    {
+      "Ordinal": 0,
+      "Role": "user",
+      "Content": "Fix the login bug",
+      "ThinkingText": "",
+      "ThinkingBytes": 0,
+      "Model": "",
+      "HasThinking": false,
+      "HasToolUse": false,
+      "Timestamp": "2024-03-01T08:00:01Z"
+    },
+    {
+      "Ordinal": 1,
+      "Role": "assistant",
+      "Content": "Looking at auth.\nThe guard drops the session token; fixed.",
+      "ThinkingText": "Grace's report points at the auth package; read it first.",
+      "ThinkingBytes": 57,
+      "Model": "grok-4.6",
+      "HasThinking": true,
+      "HasToolUse": true,
+      "Timestamp": "2024-03-01T08:00:02Z"
+    },
+    {
+      "Ordinal": 2,
+      "Role": "user",
+      "Content": "Thanks, run the tests",
+      "ThinkingText": "",
+      "ThinkingBytes": 0,
+      "Model": "",
+      "HasThinking": false,
+      "HasToolUse": false,
+      "Timestamp": "2024-03-01T08:00:10Z"
+    },
+    {
+      "Ordinal": 3,
+      "Role": "assistant",
+      "Content": "The build fails before the tests run.",
+      "ThinkingText": "",
+      "ThinkingBytes": 0,
+      "Model": "grok-4.5",
+      "HasThinking": false,
+      "HasToolUse": true,
+      "Timestamp": "2024-03-01T08:00:11Z"
+    }
+  ],
+  "ToolCalls": [
+    {
+      "MessageOrdinal": 1,
+      "CallIndex": 0,
+      "ToolName": "read_file",
+      "Category": "read",
+      "FilePath": "/home/grace/code/proj/auth.go",
+      "Detail": "",
+      "InputBody": "{\"file_path\":\"/home/grace/code/proj/auth.go\"}",
+      "InputSHA256": "",
+      "InputBytes": 45,
+      "InputMediaType": "application/json",
+      "CallUID": "call-aa11-0",
+      "AttributionAgent": "",
+      "AttributionSkill": "",
+      "AttributionPlugin": ""
+    },
+    {
+      "MessageOrdinal": 3,
+      "CallIndex": 0,
+      "ToolName": "run_terminal_command",
+      "Category": "bash",
+      "FilePath": "",
+      "Detail": "go test ./...",
+      "InputBody": "{\"command\":\"go test ./...\",\"description\":\"Run the test suite\"}",
+      "InputSHA256": "",
+      "InputBytes": 62,
+      "InputMediaType": "application/json",
+      "CallUID": "call-aa11-1",
+      "AttributionAgent": "",
+      "AttributionSkill": "",
+      "AttributionPlugin": ""
+    }
+  ],
+  "ToolResults": [
+    {
+      "CallUID": "call-aa11-0",
+      "Body": "{\"type\":\"Read\",\"content\":\"package auth\"}",
+      "BodySHA256": "",
+      "Bytes": 40,
+      "MediaType": "application/json",
+      "Status": "ok",
+      "StructBody": "",
+      "StructSHA256": "",
+      "StructBytes": 0,
+      "StructMediaType": ""
+    },
+    {
+      "CallUID": "call-aa11-1",
+      "Body": "go: build failed",
+      "BodySHA256": "",
+      "Bytes": 16,
+      "MediaType": "text/plain",
+      "Status": "error",
+      "StructBody": "",
+      "StructSHA256": "",
+      "StructBytes": 0,
+      "StructMediaType": ""
+    }
+  ],
+  "Usage": [
+    {
+      "MessageOrdinal": 1,
+      "Model": "grok-4.6",
+      "Input": 500,
+      "Output": 80,
+      "CacheWrite": 0,
+      "CacheRead": 700,
+      "Reasoning": 30,
+      "CostUSD": 0.00183,
+      "OccurredAt": "2024-03-01T08:00:06Z",
+      "DedupKey": "p-1/grok-4.6-build",
+      "SourceOffset": 3022,
+      "SourceIndex": 0
+    },
+    {
+      "MessageOrdinal": 3,
+      "Model": "grok-4.5",
+      "Input": 300,
+      "Output": 40,
+      "CacheWrite": 0,
+      "CacheRead": 600,
+      "Reasoning": 0,
+      "CostUSD": 0.00102,
+      "OccurredAt": "2024-03-01T08:00:14Z",
+      "DedupKey": "p-2/grok-4.5-build",
+      "SourceOffset": 6345,
+      "SourceIndex": 0
+    }
+  ],
+  "Attachments": null,
+  "Fallbacks": null,
+  "Events": [
+    {
+      "MessageOrdinal": 1,
+      "Kind": "turn_end",
+      "AttrsJSON": "{\"duration_ms\":4100,\"model_calls\":2,\"stop_reason\":\"end_turn\"}",
+      "OccurredAt": "2024-03-01T08:00:06Z"
+    },
+    {
+      "MessageOrdinal": 3,
+      "Kind": "subagent_activity",
+      "AttrsJSON": "{\"child_session_id\":\"019f0000-0000-7000-8000-0000000000c1\",\"description\":\"Map the auth package\",\"model\":\"grok-4.6\",\"state\":\"started\",\"subagent_type\":\"explore\"}",
+      "OccurredAt": "2024-03-01T08:00:11.6Z"
+    },
+    {
+      "MessageOrdinal": 3,
+      "Kind": "subagent_activity",
+      "AttrsJSON": "{\"child_session_id\":\"019f0000-0000-7000-8000-0000000000c1\",\"duration_ms\":9200,\"state\":\"completed\",\"tokens_used\":4100}",
+      "OccurredAt": "2024-03-01T08:00:12.5Z"
+    },
+    {
+      "MessageOrdinal": 3,
+      "Kind": "turn_end",
+      "AttrsJSON": "{\"duration_ms\":1800,\"model_calls\":1,\"stop_reason\":\"end_turn\"}",
+      "OccurredAt": "2024-03-01T08:00:14Z"
+    }
+  ],
+  "Identity": {
+    "CustomTitle": "",
+    "Slug": "",
+    "PermissionMode": "",
+    "ReasoningEffort": "",
+    "SubagentName": "",
+    "PRNumber": 0,
+    "PRURL": "",
+    "PRRepo": "",
+    "ParentSourceID": "",
+    "ChildSourceIDs": [
+      "019f0000-0000-7000-8000-0000000000c1"
+    ]
+  },
+  "Started": "2024-03-01T08:00:00.1Z",
+  "Ended": "2024-03-01T08:00:14Z"
+}

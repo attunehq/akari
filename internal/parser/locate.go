@@ -72,6 +72,10 @@ func LocateToolBodies(ctx context.Context, agent Agent, f io.ReaderAt, lineOff, 
 		return locateCodex(src, emit)
 	case AgentPi:
 		return locatePi(src, emit)
+	case AgentCursor:
+		return locateCursor(src, emit)
+	case AgentGrok:
+		return locateGrok(src, emit)
 	default:
 		return nil
 	}
@@ -317,6 +321,46 @@ func locatePi(s *lineSource, emit func(BodyLocation) error) error {
 	return nil
 }
 
+// locateCursor finds Cursor tool inputs (the tool_use blocks of an assistant
+// transcript line); the transcript records no tool results. It is the streaming
+// twin of cursorBodyFields.
+func locateCursor(s *lineSource, emit func(BodyLocation) error) error {
+	role, err := s.topType(Key("role"))
+	if err != nil {
+		return err
+	}
+	if role != "assistant" {
+		return nil
+	}
+	return s.locateBlocks(
+		[]Step{Key("message"), Key("content")},
+		"tool_use", Key("input"), BodyRaw, "application/json", emit)
+}
+
+// locateGrok finds Grok tool bodies: a tool_call line's rawInput and a terminal
+// tool_call_update's rawOutput. It is the streaming twin of grokBodyFields.
+func locateGrok(s *lineSource, emit func(BodyLocation) error) error {
+	kind, err := s.unquotedAt([]Step{Key("params"), Key("update"), Key("sessionUpdate")})
+	if err != nil {
+		return err
+	}
+	update := func(k string) []Step { return []Step{Key("params"), Key("update"), Key(k)} }
+	switch kind {
+	case "tool_call":
+		return s.locateSingle(update("rawInput"), BodyRaw, "application/json", emit)
+	case "tool_call_update":
+		status, err := s.unquotedAt(update("status"))
+		if err != nil {
+			return err
+		}
+		if status != "completed" && status != "failed" {
+			return nil
+		}
+		return s.locateSingleResult(update("rawOutput"), emit)
+	}
+	return nil
+}
+
 // locateCodex finds every liftable Codex body in source order: tool inputs
 // (function_call arguments, custom_tool_call input), tool results
 // (function_call_output and custom_tool_call_output), and the base64 images Codex
@@ -501,7 +545,10 @@ func (s *lineSource) inputProjections(sp ValueSpan, kind BodyKind, media string)
 	// the raw object; BodyJSONString: the decoded contents of a JSON-encoded
 	// string). One structural pass locates file_path and every detail candidate; a
 	// candidate absent from the body simply has no span in the result map.
-	paths := [][]Step{{Key("file_path")}}
+	var paths [][]Step
+	for _, key := range filePathKeys {
+		paths = append(paths, []Step{Key(key)})
+	}
 	for _, key := range detailKeys {
 		paths = append(paths, []Step{Key(key)})
 	}
@@ -514,18 +561,24 @@ func (s *lineSource) inputProjections(sp ValueSpan, kind BodyKind, media string)
 	for _, ls := range located {
 		spans[ls.PathIndex] = ls.Span
 	}
-	// path index 0 is file_path; indexes 1.. are detailKeys in priority order.
-	if v, ok := spans[0]; ok {
+	// path indexes 0..len(filePathKeys)-1 are the file-path keys, the rest are
+	// detailKeys, each list in priority order.
+	for i := range filePathKeys {
+		v, ok := spans[i]
+		if !ok {
+			continue
+		}
 		fp, ok, err := s.readStringSpan(sp, kind, v, maxSentinelFilePath)
 		if err != nil {
 			return "", "", err
 		}
 		if ok {
 			filePath = fp
+			break
 		}
 	}
 	for i := range detailKeys {
-		v, ok := spans[i+1]
+		v, ok := spans[i+len(filePathKeys)]
 		if !ok {
 			continue
 		}

@@ -19,7 +19,10 @@ does not assume the reader has seen any other tool.
 ## Goals
 
 - Back up agent sessions (full text, plus binary attachments where present) from
-  Claude Code, Codex, and pi.
+  Claude Code, Codex, pi, Cursor (the cursor-agent CLI), and Grok (the Grok
+  CLI). Cursor is transcript-only: its CLI persists no model, token usage, tool
+  results, or reasoning, so its sessions parse without a usage ledger and stay
+  outside the money and thinking panels.
 - Normalize sessions to a project by **git remote**, so the same repository is
   one project regardless of local path, branch, or worktree, and regardless of
   which machine or user it came from.
@@ -201,7 +204,13 @@ spawned by another (for example Claude's runs under `subagents/`), or
 child are still independent session rows with their own messages and stats; the
 link lets the UI nest a subagent under the parent it ran for. The parent is
 resolved by source id within the same user and agent, so a subagent that arrives
-before its parent is linked once the parent lands.
+before its parent is linked once the parent lands. The declaration can point
+either way: a Claude child encodes its parent in its source id and a Codex child
+names its parent thread inside its transcript, while a Grok parent claims its
+children (its transcript's `subagent_spawned` updates; the child's own files
+never name the parent). A Grok parent's reported usage also aggregates its
+children's spend, so a claimed child keeps its full transcript but the rebuild
+writes no usage ledger for it: the spend counts once, on the parent.
 
 Cross-user duplication is expected and kept: if two people run agents in the same
 repo, those are two sessions (different `user_id`), both visible to everyone and
@@ -1252,6 +1261,9 @@ variables of its own (see Config):
   `CODEX_SESSIONS_DIR`.
 - pi: `~/.pi/agent/sessions/*/*.jsonl` (validated by a `type: "session"`
   header), `PI_DIR`.
+- Cursor: `~/.cursor/projects/*/agent-transcripts/*/*.jsonl` (no documented
+  override).
+- Grok: `~/.grok/sessions/<url-encoded cwd>/*/updates.jsonl`, `GROK_HOME`.
 
 Extra or non-standard roots are added through the config file, not through new
 environment variables.
@@ -1567,7 +1579,7 @@ cmd/
   akari/            # client binary
   akari-server/     # server binary (plus sweep, reparse, dev-seed subcommands)
 internal/
-  parser/           # claude, codex, pi parsers + normalized types (shared)
+  parser/           # claude, codex, pi, cursor, grok parsers + normalized types (shared)
   casenc/           # client-side CAS body encoder (zstd policy, deterministic)
   gitremote/        # remote URL canonicalization
   pricing/          # compiled-in rate table + cost computation
