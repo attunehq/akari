@@ -458,8 +458,8 @@ func joinNonEmpty(a, b string) string {
 }
 
 // codexExitMarkerRE matches the exit-status line of the exec output banner:
-// current builds title the result "Exit code: N"; earlier builds stream
-// "Process exited with code N".
+// format_exec_output_for_model titles the result "Exit code: N"; the
+// unified_exec formatter streams "Process exited with code N".
 var codexExitMarkerRE = regexp.MustCompile(`^(?:Exit code:|Process exited with code)\s*(-?\d+)\s*$`)
 
 // codexBannerFurniture are the other lines the exec banner is made of; the
@@ -487,8 +487,11 @@ const codexBannerMaxLines = 8
 // gets. Only the leading banner is scanned — the walk ends at "Output:", at
 // any line that is not banner furniture, and at a line cap — so a bannerless
 // body that merely QUOTES a marker (a transcript-processing session, say)
-// cannot flip the status. Results with no banner — MCP tools, plain bodies,
-// CAS-lifted outputs — keep status ok, as before.
+// cannot flip the status. Results with no banner — MCP tools, plain bodies —
+// keep status ok, as before; so does a body the client upload path already
+// lifted to a CAS sentinel, whose banner text is no longer in the transcript
+// (carrying a derived status on result sentinels is the follow-up that
+// closes that path).
 func codexResultIsErr(output gjson.Result) bool {
 	text := blockText(output)
 	if text == "" {

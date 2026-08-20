@@ -296,8 +296,11 @@ package parse
 // failures — tool-health signals and any cross-agent comparison read zero
 // failures. A nonzero "Exit code: N" / "Process exited with code N" banner
 // line or a "command timed out after" prefix now lands as status error;
-// bannerless results (MCP tools, plain bodies, CAS-lifted outputs) keep
-// status ok. The committed goldens are byte-for-byte identical (their exec
-// results all succeed); deployed corpora rebuild so real failing execs
-// re-grade.
+// bannerless results (MCP tools, plain bodies) keep status ok. The committed
+// goldens are byte-for-byte identical (their exec results all succeed).
+// Scope: the banner is read from the transcript, so only results whose body
+// is still inline re-grade on rebuild — a body the client upload path lifted
+// to a CAS sentinel left no banner text behind, and those results keep
+// status ok until result sentinels carry a derived status (follow-up; the
+// input sentinel's file_path/detail fields are the precedent).
 const Epoch = 23
