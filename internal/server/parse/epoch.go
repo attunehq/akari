@@ -288,4 +288,19 @@ package parse
 // New-agent parsing itself touches no existing projection; the claude and codex
 // goldens are byte-for-byte identical, and the new cursor and grok fixtures join
 // the snapshot set.
-const Epoch = 22
+//
+// Epoch 22 -> 23: Codex tool results derive their error status from the exec
+// output banner (codexResultIsErr) instead of hardcoding ok. Codex rollouts
+// carry no structural error field on *_output items, so every codex tool
+// result ingested as status ok and codex sessions could never register tool
+// failures — tool-health signals and any cross-agent comparison read zero
+// failures. A nonzero "Exit code: N" / "Process exited with code N" banner
+// line or a "command timed out after" prefix now lands as status error;
+// bannerless results (MCP tools, plain bodies) keep status ok. The committed
+// goldens are byte-for-byte identical (their exec results all succeed).
+// Scope: the banner is read from the transcript, so only results whose body
+// is still inline re-grade on rebuild — a body the client upload path lifted
+// to a CAS sentinel left no banner text behind, and those results keep
+// status ok until result sentinels carry a derived status (follow-up; the
+// input sentinel's file_path/detail fields are the precedent).
+const Epoch = 23
