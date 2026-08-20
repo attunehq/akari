@@ -2,6 +2,7 @@ package parser
 
 import (
 	"encoding/json"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -140,7 +141,8 @@ func (r *reducer) reduceCodex(region []byte, base int64) error {
 
 			case itemType == "function_call_output",
 				itemType == "custom_tool_call_output":
-				r.applyResult(p.Get("call_id").String(), p.Get("output"), false)
+				out := p.Get("output")
+				r.applyResult(p.Get("call_id").String(), out, codexResultIsErr(out))
 
 			case itemType == "image_generation_call":
 				// The generated image rides inline as a base64 result; record it as an
@@ -453,4 +455,69 @@ func joinNonEmpty(a, b string) string {
 		return a
 	}
 	return a + "\n" + b
+}
+
+// codexExitMarkerRE matches the exit-status line of the exec output banner:
+// current builds title the result "Exit code: N"; earlier builds stream
+// "Process exited with code N".
+var codexExitMarkerRE = regexp.MustCompile(`^(?:Exit code:|Process exited with code)\s*(-?\d+)\s*$`)
+
+// codexBannerFurniture are the other lines the exec banner is made of; the
+// status scan walks past them but stops at anything else. "Wall time:",
+// "Total output lines:", and "Output:" come from the current formatter,
+// "Original token count:" and "Warning: truncated output" from truncation.
+var codexBannerFurniture = []string{
+	"Wall time:",
+	"Total output lines:",
+	"Original token count:",
+	"Warning: truncated output",
+	"Chunk ID:",
+}
+
+// codexBannerMaxLines bounds the banner scan; the real banner is a handful of
+// leading lines.
+const codexBannerMaxLines = 8
+
+// codexResultIsErr derives a tool result's error status from the banner codex
+// leaves in the exec output text. Codex rollouts carry no structural error
+// field on *_output items — the harness's internal success flag is not
+// serialized (FunctionCallOutputPayload serializes as the bare body) — so the
+// exec formats' banner lines are the only signal: a nonzero exit marker, or
+// the "command timed out after ... milliseconds" prefix a timed-out command
+// gets. Only the leading banner is scanned — the walk ends at "Output:", at
+// any line that is not banner furniture, and at a line cap — so a bannerless
+// body that merely QUOTES a marker (a transcript-processing session, say)
+// cannot flip the status. Results with no banner — MCP tools, plain bodies,
+// CAS-lifted outputs — keep status ok, as before.
+func codexResultIsErr(output gjson.Result) bool {
+	text := blockText(output)
+	if text == "" {
+		return false
+	}
+	if strings.HasPrefix(text, "command timed out after ") {
+		return true
+	}
+	for i, line := range strings.SplitN(text, "\n", codexBannerMaxLines+1) {
+		if i == codexBannerMaxLines {
+			break
+		}
+		line = strings.TrimSuffix(line, "\r")
+		if line == "Output:" {
+			return false // banner ended without an exit marker
+		}
+		if m := codexExitMarkerRE.FindStringSubmatch(line); m != nil {
+			return m[1] != "0"
+		}
+		furniture := false
+		for _, prefix := range codexBannerFurniture {
+			if strings.HasPrefix(line, prefix) {
+				furniture = true
+				break
+			}
+		}
+		if !furniture {
+			return false // not a banner: a plain body starts here
+		}
+	}
+	return false
 }
