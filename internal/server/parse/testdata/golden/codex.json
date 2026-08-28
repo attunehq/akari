@@ -197,7 +197,7 @@
       "CacheWrite": 1000,
       "CacheRead": 4000,
       "Reasoning": 80,
-      "CostUSD": 0.006999999999999999,
+      "CostUSD": 0.007,
       "OccurredAt": "2024-01-01T10:00:04Z",
       "DedupKey": "",
       "SourceOffset": 2179,
