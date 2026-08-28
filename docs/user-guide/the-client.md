@@ -106,9 +106,11 @@ standard error. It holds a single-instance lock for its lifetime, so two watcher
 cannot run at once. Under the hood it layers three change detectors so nothing is
 missed: an OS file-system watcher for prompt, debounced uploads; a periodic
 re-stat of known files to catch changes the OS watcher drops (network filesystems,
-watch exhaustion); and a slower full rescan that rediscovers roots for
-newly created files. It does an initial full pass before entering the event loop,
-ingesting any backlog on startup.
+watch exhaustion); and a slower rescan that restores directory watches and queues
+only new or metadata-changed files. It does an initial full pass before entering
+the event loop, ingesting any backlog on startup. A network failure, retryable
+server response, or process-capacity failure pauses the whole queue for 30 seconds
+before it retries the failed file.
 
 ### daemon
 
