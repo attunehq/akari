@@ -691,7 +691,7 @@ func TestResolveRealWorktreeGroupsByCommonDir(t *testing.T) {
 			rMain.LocalRoot, rA.LocalRoot, rB.LocalRoot)
 	}
 	// And it is the main worktree, not a per-worktree path or a .git dir.
-	if want, err := filepath.Abs(main); err != nil {
+	if want, err := filepath.EvalSymlinks(main); err != nil {
 		t.Fatal(err)
 	} else if filepath.Clean(rMain.LocalRoot) != filepath.Clean(want) {
 		t.Errorf("local root = %q, want the main worktree %q", rMain.LocalRoot, want)

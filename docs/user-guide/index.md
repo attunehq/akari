@@ -35,7 +35,7 @@ runs," here is the whole path, each step linked to its detail:
    `akari login --server <url> --token <token>`.
    [Getting started](./getting-started.md#2-point-the-client-at-your-server).
 3. **Push once, then keep pushing.** `akari sync` uploads everything new; `akari
-   watch` (or `akari daemon start`) keeps it flowing.
+   watch` (or `akari daemon start`, which syncs every 10 minutes) keeps it flowing.
    [Getting started](./getting-started.md#3-push-your-sessions).
 4. **Read them.** Open the server in a browser, or connect a coding agent over
    [MCP](./agent-access.md).

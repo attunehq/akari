@@ -298,4 +298,13 @@ package parse
 // fixture joins the snapshot set. OpenCode's per-turn reasoning-token count is
 // used directly (like Codex and Grok); the 4.0 plaintext bytes-per-token factor
 // is only a fallback.
-const Epoch = 23
+//
+// Epoch 23 -> 24: derive Codex tool-result error status from the exec output
+// banner instead of hardcoding ok. Nonzero exit markers and command timeouts
+// now land as errors. Bannerless results keep status ok.
+//
+// Epoch 24 -> 25: preserve Codex error status through the client CAS transform
+// and recognize code-mode failures. Buffered and streaming transforms use the
+// same banner rule. Existing sentinels remain ok until a current client syncs
+// the source transcript again.
+const Epoch = 25

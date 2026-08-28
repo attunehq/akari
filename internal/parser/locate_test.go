@@ -59,6 +59,9 @@ func locateParity(t *testing.T, agent Agent, line string) {
 		if got[i].Detail != wantDetail {
 			t.Errorf("%s body %d: detail = %q, want %q", agent, i, got[i].Detail, wantDetail)
 		}
+		if got[i].IsError != want[i].isError {
+			t.Errorf("%s body %d: is_error = %v, want %v", agent, i, got[i].IsError, want[i].isError)
+		}
 	}
 }
 
@@ -101,6 +104,8 @@ func TestLocateCodexBodies(t *testing.T) {
 		// body), so the sentinel must carry the command.
 		`{"type":"response_item","payload":{"type":"function_call","name":"Bash","arguments":"{\"command\":\"make test\"}"}}`,
 		`{"type":"response_item","payload":{"type":"function_call_output","output":"total 0\n"}}`,
+		`{"type":"response_item","payload":{"type":"function_call_output","output":"Exit code: 2\nWall time: 0.1 seconds\nOutput:\nboom"}}`,
+		`{"type":"response_item","payload":{"type":"function_call_output","output":[{"type":"input_text","text":"Script failed\nWall time 0.0 seconds\nOutput:\n"},{"type":"input_text","text":"Script error:\nboom"}]}}`,
 		`{"type":"response_item","payload":{"type":"function_call_output","output":{"stdout":"x"}}}`,
 		`{"type":"response_item","payload":{"role":"user","content":[{"type":"input_text","text":"hi"}]}}`,
 		// A custom tool call's plain-string input is lifted like any tool input.

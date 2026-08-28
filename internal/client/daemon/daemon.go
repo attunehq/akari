@@ -56,10 +56,10 @@ func DefaultPaths() (Paths, error) {
 	}, nil
 }
 
-// Start launches `self watchArgs...` as a detached background process whose
-// output goes to the log file. The child acquires the lock itself; Start waits
-// briefly to confirm an instance is holding it.
-func Start(self string, watchArgs []string, p Paths) error {
+// Start launches `self args...` as a detached background process whose output
+// goes to the log file. The child acquires the lock itself; Start waits briefly
+// to confirm an instance is holding it.
+func Start(self string, args []string, p Paths) error {
 	running, err := IsRunning(p.Pidfile)
 	if err != nil {
 		return fmt.Errorf("check daemon status: %w", err)
@@ -70,7 +70,7 @@ func Start(self string, watchArgs []string, p Paths) error {
 	if err := os.MkdirAll(filepath.Dir(p.Pidfile), 0o700); err != nil {
 		return err
 	}
-	childArgs := append(append([]string(nil), watchArgs...), "--daemon-log", p.Logfile)
+	childArgs := append(append([]string(nil), args...), "--daemon-log", p.Logfile)
 	proc, err := spawnDetached(self, childArgs)
 	if err != nil {
 		return fmt.Errorf("start background process: %w", err)

@@ -28,10 +28,11 @@ type SyncFunc func(ctx context.Context, f discover.File) syncer.Result
 
 // Options tune the watch timers. Zero values fall back to defaults.
 type Options struct {
-	Debounce time.Duration // quiet period before uploading a changed file
-	Poll     time.Duration // mtime/size re-stat interval for the polling fallback
-	Discover time.Duration // interval to re-walk the roots for newly created files
-	Rescan   time.Duration // full rediscover-and-sync safety net interval
+	Debounce        time.Duration // quiet period before uploading a changed file
+	Poll            time.Duration // mtime/size re-stat interval for the polling fallback
+	Discover        time.Duration // interval to re-walk the roots for newly created files
+	Rescan          time.Duration // rediscovery safety net interval
+	PressureBackoff time.Duration // pause after a network, server, or process-capacity failure
 	// Excludes are glob patterns of paths to skip (see discover.Excluder). They
 	// keep an ignored location out of discovery, the poll, and event handling.
 	Excludes []string
@@ -50,6 +51,9 @@ func (o Options) withDefaults() Options {
 	}
 	if o.Rescan <= 0 {
 		o.Rescan = 15 * time.Minute
+	}
+	if o.PressureBackoff <= 0 {
+		o.PressureBackoff = 30 * time.Second
 	}
 	if o.Logf == nil {
 		o.Logf = func(string, ...any) {}
@@ -199,18 +203,15 @@ func (w *Watcher) run(ctx context.Context, fsw *fsnotify.Watcher) error {
 			}
 
 		case <-rescan.C:
-			// Safety net: re-add any new directories and re-sync everything.
+			// Safety net: re-add directories and catch files whose metadata changed
+			// without an event. Re-syncing the full corpus here would re-read and
+			// transform every historical session even while the machine is idle.
 			for _, r := range w.roots {
 				if err := w.addRecursive(fsw, r); err != nil {
 					w.opt.Logf("watch root %s: %v", r.Dir, err)
 				}
 			}
-			for _, f := range w.discover() {
-				if m, ok := statMeta(f.Path); ok {
-					known[f] = m
-				}
-				rs.mark(f)
-			}
+			markDiscoveredChanges(known, w.discover(), rs.mark)
 		}
 	}
 }
@@ -282,6 +283,13 @@ func (r *runState) worker(ctx context.Context) {
 				r.w.opt.Logf("error %s: %v", f.Path, res.Err)
 			case res.UploadedBytes > 0:
 				r.w.opt.Logf("uploaded %s -> %s (%d bytes)", f.Path, res.Destination(), res.UploadedBytes)
+			}
+			if pressureFailure(res.Err) {
+				r.mark(f)
+				r.w.opt.Logf("watch paused for %s after resource pressure", r.w.opt.PressureBackoff)
+				if !waitForPressureBackoff(ctx, r.w.opt.PressureBackoff) {
+					return
+				}
 			}
 			if ctx.Err() != nil {
 				return // finished the current file; stop without draining the backlog
