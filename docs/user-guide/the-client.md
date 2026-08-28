@@ -20,7 +20,7 @@ This chapter is the reference for driving it.
 | `akari assign-project --session <id> --project <id>` | Pin an orphaned session onto a project. |
 | `akari sync` | Discover and upload everything new, then exit. |
 | `akari watch` | Stay running and upload sessions as they change (foreground). |
-| `akari daemon start` \| `status` \| `stop` | Run `sync` every 10 minutes as a background process. |
+| `akari daemon start` \| `status` \| `stop` | Update, then sync, every 10 minutes as a background process. |
 | `akari daemon install` \| `uninstall` | Start that daemon at login on macOS. |
 | `akari update` | Update the client to the latest release in place. |
 | `akari version` | Print the build version and exit. |
@@ -125,9 +125,13 @@ akari daemon uninstall # macOS: stop starting the daemon at login
 ```
 
 `daemon` is a detached, per-user background process (it is not a system service).
-It runs `akari sync` with a 5 minute time limit as soon as it starts, then waits
-10 minutes and runs it again. The wait starts after the pass ends, so two syncs
-never overlap. It does not run `watch`. It writes a pidfile and
+Each pass runs `akari update`, then `akari sync` with a 5 minute time limit. The
+first pass runs immediately. After a pass ends it waits 10 minutes and runs
+another, so two syncs never overlap. A failed update is logged and the sync
+still runs. A successful update restarts the process onto the new binary before
+that pass's sync, so an installed daemon stays on the latest release.
+Development builds (a commit SHA or `dev`) are left in place so a local build is
+not overwritten. It does not run `watch`. It writes a pidfile and
 `akari.log` under your config directory; `start` confirms the child took the
 single-instance lock before returning. `stop` sends an authenticated local
 shutdown request, then waits until the process exits and releases that lock. A
@@ -187,8 +191,9 @@ akari version           # print the build version
 `update` is a native updater: it downloads the latest release archive for your
 platform, verifies it against the release `SHA256SUMS`, and swaps the binary in
 place, with no shell or `curl` involved. On Windows it moves the running
-executable aside so the update succeeds while akari is running; restart any
-`akari watch` or `akari daemon` afterward to pick up the new version.
+executable aside so the update succeeds while akari is running. Restart
+`akari watch` afterward to pick up the new version. A running daemon applies
+the same update on its next pass and restarts itself onto the new binary.
 
 ## Configuration
 

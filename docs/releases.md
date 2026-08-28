@@ -106,6 +106,10 @@ finishes (GitHub's asset CDN can lag the publish by a few seconds).
 The client can update itself to the latest release with `akari update`.
 `akari update --check` reports availability without installing, and `--force`
 reinstalls the latest release even when the current version matches. The
+daemon does the same check at the start of every pass, before `akari sync`,
+and restarts onto the new binary when a release is installed, so a machine
+that ran `akari daemon install` (or `akari daemon start`) stays current
+without another install. Development builds are left in place. The
 [`internal/selfupdate`](../internal/selfupdate) package resolves the latest
 release, downloads the matching client archive, and verifies it against
 `SHA256SUMS`, the same assets the install scripts use.

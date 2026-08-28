@@ -41,14 +41,27 @@ func runUpdate(ctx context.Context, args []string) error {
 		return nil
 	}
 
+	if _, err := replaceRunningBinary(ctx, c, latest); err != nil {
+		return err
+	}
+
+	fmt.Printf("akari updated from %s to %s.\n", current, latest)
+	fmt.Println("Restart any running akari watch to use the new version. A running daemon picks up the new binary on its next pass.")
+	return nil
+}
+
+// replaceRunningBinary downloads latest and swaps it in place of the running
+// executable. It returns the resolved target path so a caller can re-exec that
+// directory entry (os.Executable after a replace can still name the old inode).
+func replaceRunningBinary(ctx context.Context, c *selfupdate.Client, latest string) (string, error) {
 	target, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("locate the running binary: %w", err)
+		return "", fmt.Errorf("locate the running binary: %w", err)
 	}
 	// Replace the real file, not a symlink that points at it.
 	target, err = resolveUpdateTarget(target)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Clear any leftover from a previous Windows update before staging the next.
@@ -59,16 +72,13 @@ func runUpdate(ctx context.Context, args []string) error {
 	tmp := filepath.Join(filepath.Dir(target), fmt.Sprintf(".akari-update-%d", os.Getpid()))
 	if err := c.Fetch(ctx, "akari", latest, runtime.GOOS, runtime.GOARCH, tmp); err != nil {
 		os.Remove(tmp)
-		return err
+		return "", err
 	}
 	if err := selfupdate.Replace(target, tmp); err != nil {
 		os.Remove(tmp)
-		return err
+		return "", err
 	}
-
-	fmt.Printf("akari updated from %s to %s.\n", current, latest)
-	fmt.Println("Restart any running akari watch or daemon to use the new version.")
-	return nil
+	return target, nil
 }
 
 func resolveUpdateTarget(target string) (string, error) {

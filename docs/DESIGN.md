@@ -1448,11 +1448,14 @@ finish on a detached context. A second Ctrl-C exits the process outright.
 ### Daemon management
 
 `akari watch` is the foreground loop. `akari daemon {start|stop|status}` manages
-a detached per-user process that runs `sync` (5 minute time limit) on start and every
-10 minutes after each pass completes. On macOS, `akari daemon install` writes a
-per-user LaunchAgent that runs that same worker at Aqua login; launchd is the
-parent, so the process dies with the login session and comes back at the next
-one. `daemon start` remains the detached, session-independent form on every OS.
+a detached per-user process that runs `update` then `sync` (5 minute time limit)
+on start and every 10 minutes after each pass completes. A failed update is
+logged and the sync still runs. A successful update re-execs onto the new
+binary before that pass's sync, so an installed daemon stays on the latest
+release. Development builds are left in place. On macOS, `akari daemon install`
+writes a per-user LaunchAgent that runs that same worker at Aqua login; launchd
+is the parent, so the process dies with the login session and comes back at the
+next one. `daemon start` remains the detached, session-independent form on every OS.
 A single advisory file lock ensures only one client instance runs per machine.
 Its pidfile records both the PID and a random per-run token; the token
 authenticates local control and distinguishes a replacement process that reused

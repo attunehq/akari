@@ -113,6 +113,71 @@ func TestDaemonRunRecordsStartupErrorsInRotatingLog(t *testing.T) {
 	}
 }
 
+func TestSyncIntervalReturnsRestartErrorWithoutAnotherPass(t *testing.T) {
+	var n atomic.Int32
+	err := runSyncInterval(context.Background(), time.Hour, func(context.Context) error {
+		n.Add(1)
+		return restartAfterUpdateError{path: "/opt/akari"}
+	}, func(string, ...any) {})
+	path, ok := restartPath(err)
+	if !ok {
+		t.Fatalf("error = %v, want restartAfterUpdateError", err)
+	}
+	if path != "/opt/akari" {
+		t.Fatalf("restart path = %q, want /opt/akari", path)
+	}
+	if n.Load() != 1 {
+		t.Fatalf("passes = %d, want 1", n.Load())
+	}
+}
+
+func TestFinishDaemonLoopRestartsAfterUpdate(t *testing.T) {
+	orig := restartDaemon
+	t.Cleanup(func() { restartDaemon = orig })
+	var gotPath string
+	var gotArgs []string
+	restartDaemon = func(self string, args []string) error {
+		gotPath = self
+		gotArgs = append([]string(nil), args...)
+		return nil
+	}
+
+	if err := finishDaemonLoop(restartAfterUpdateError{path: "/opt/akari"}, []string{"akari", "daemon", "run"}); err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/opt/akari" {
+		t.Fatalf("restart path = %q, want /opt/akari", gotPath)
+	}
+	if strings.Join(gotArgs, " ") != "akari daemon run" {
+		t.Fatalf("restart args = %v, want akari daemon run", gotArgs)
+	}
+}
+
+func TestFinishDaemonLoopPassesOtherErrorsThrough(t *testing.T) {
+	orig := restartDaemon
+	t.Cleanup(func() { restartDaemon = orig })
+	restartDaemon = func(string, []string) error {
+		t.Fatal("restart ran for a non-update error")
+		return nil
+	}
+	want := errors.New("config missing")
+	if err := finishDaemonLoop(want, []string{"akari"}); !errors.Is(err, want) {
+		t.Fatalf("error = %v, want %v", err, want)
+	}
+}
+
+func TestFinishDaemonLoopWrapsRestartFailure(t *testing.T) {
+	orig := restartDaemon
+	t.Cleanup(func() { restartDaemon = orig })
+	restartDaemon = func(string, []string) error {
+		return errors.New("exec failed")
+	}
+	err := finishDaemonLoop(restartAfterUpdateError{path: "/opt/akari"}, []string{"akari"})
+	if err == nil || !strings.Contains(err.Error(), "restart after update") {
+		t.Fatalf("error = %v, want restart wrapping", err)
+	}
+}
+
 func TestDaemonRunRejectsNonPositiveInterval(t *testing.T) {
 	err := runSyncInterval(context.Background(), 0, func(context.Context) error {
 		t.Fatal("pass ran with a non-positive interval")

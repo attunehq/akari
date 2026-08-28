@@ -12,17 +12,39 @@ import (
 
 	"github.com/jssblck/akari/internal/client/daemon"
 	"github.com/jssblck/akari/internal/config"
+	"github.com/jssblck/akari/internal/selfupdate"
+	"github.com/jssblck/akari/internal/version"
 )
 
 // daemonSyncInterval is the pause after each completed sync pass. A pass that
 // overruns this bound delays the next start rather than overlapping.
 const daemonSyncInterval = 10 * time.Minute
 
+// restartDaemon is the process-replacement used after a successful unattended
+// update. It is a variable so tests can observe the path without exec.
+var restartDaemon = daemon.Restart
+
 // runDaemonLoop is the detached worker behind `akari daemon start` and the
-// macOS login agent. It holds the single-instance lock, runs `akari sync` with
-// the same time limit as a one-shot sync, then waits daemonSyncInterval and
-// repeats until cancelled.
-func runDaemonLoop(ctx context.Context, args []string) (runErr error) {
+// macOS login agent. It holds the single-instance lock, runs `akari update`
+// then `akari sync` with the same time limit as a one-shot sync, then waits
+// daemonSyncInterval and repeats until cancelled. A successful update
+// re-execs onto the new binary before the sync so the pass runs current code.
+func runDaemonLoop(ctx context.Context, args []string) error {
+	return finishDaemonLoop(runPeriodicDaemon(ctx, args), os.Args)
+}
+
+func finishDaemonLoop(err error, args []string) error {
+	path, ok := restartPath(err)
+	if !ok {
+		return err
+	}
+	if err := restartDaemon(path, args); err != nil {
+		return fmt.Errorf("restart after update: %w", err)
+	}
+	return nil
+}
+
+func runPeriodicDaemon(ctx context.Context, args []string) (runErr error) {
 	fs := flag.NewFlagSet("daemon run", flag.ContinueOnError)
 	configPath := fs.String("config", "", "config file path (default: platform config dir)")
 	daemonLogPath := fs.String("daemon-log", "", "internal: log file path used when run as a detached daemon process")
@@ -56,8 +78,10 @@ func runDaemonLoop(ctx context.Context, args []string) (runErr error) {
 		defer func() {
 			restore()
 			if runErr != nil {
-				if _, err := fmt.Fprintf(output, "akari: %v\n", runErr); err != nil {
-					runErr = errors.Join(runErr, fmt.Errorf("write daemon startup error: %w", err))
+				if _, ok := restartPath(runErr); !ok {
+					if _, err := fmt.Fprintf(output, "akari: %v\n", runErr); err != nil {
+						runErr = errors.Join(runErr, fmt.Errorf("write daemon startup error: %w", err))
+					}
 				}
 			}
 			if err := output.Close(); err != nil {
@@ -80,9 +104,12 @@ func runDaemonLoop(ctx context.Context, args []string) (runErr error) {
 	if *configPath != "" {
 		syncArgs = append(syncArgs, "--config", *configPath)
 	}
-	logf("akari daemon: syncing every %s; press Ctrl-C to stop", daemonSyncInterval)
+	logf("akari daemon: updating then syncing every %s; press Ctrl-C to stop", daemonSyncInterval)
+	updater := selfupdate.New()
 	return runSyncInterval(ctx, daemonSyncInterval, func(ctx context.Context) error {
-		return runSync(ctx, syncArgs)
+		return runDaemonCycle(ctx, updater, version.String(), replaceRunningBinary, func(ctx context.Context) error {
+			return runSync(ctx, syncArgs)
+		}, logf)
 	}, logf)
 }
 
@@ -99,8 +126,15 @@ func runSyncInterval(ctx context.Context, interval time.Duration, pass func(cont
 			return nil
 		}
 		logf("akari daemon: starting sync")
-		if err := pass(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			logf("akari daemon: sync: %v", err)
+		if err := pass(ctx); err != nil {
+			if _, ok := restartPath(err); ok {
+				return err
+			}
+			if !errors.Is(err, context.Canceled) {
+				logf("akari daemon: sync: %v", err)
+			} else if ctx.Err() == nil {
+				logf("akari daemon: sync finished")
+			}
 		} else if ctx.Err() == nil {
 			logf("akari daemon: sync finished")
 		}
