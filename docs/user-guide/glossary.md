@@ -11,9 +11,11 @@ Definitions for the terms the rest of the guide uses.
 ## The session
 
 A **session** is one agent run: a single, continuous interaction with a supported
-coding agent (Claude Code, Codex, pi, Cursor, or Grok), from the first message to
+coding agent (Claude Code, Codex, pi, Cursor, Grok, or OpenCode), from the first message to
 the last. Each agent writes its session to
-a log file on disk as it works, and that file is what akari ingests. A session
+a log file on disk as it works, and that file is what akari ingests. OpenCode is
+the exception: it stores sessions in SQLite, and the client materializes JSONL
+from that database before upload. A session
 carries a stable **source id** (the agent's own identifier for the run), the
 **machine** it ran on, the account that owns it, the git branch and working
 directory it started in, timings, and its full transcript. A session still being
@@ -44,7 +46,11 @@ three kinds:
   project identifying the machine and folder. A live worktree records its main
   worktree root so the server can still fold sibling worktrees together.
 - **Orphaned**: the working directory is unknown or no longer exists on disk. The
-  session is kept, keyed to its last-known local location.
+  session is kept, keyed to its last-known local location. An owner or admin can
+  pin it onto a known project (`akari assign-project`,
+  `PUT /api/v1/app/sessions/{id}/project`, or the MCP tool
+  `assign_session_project`); that assignment survives a reparse and a later
+  orphaned announce.
 
 Standalone and orphaned projects are grouped and labeled apart from git-remote
 projects in the UI, so a folder that never had a remote does not masquerade as a

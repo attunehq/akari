@@ -14,11 +14,11 @@ order: 0
 
 You run one **server** (backed by Postgres) and point many thin **clients** at
 it, one per machine. The client discovers the session logs Claude Code, Codex,
-pi, Cursor, and Grok leave on disk, resolves each session's working directory to a canonical
+pi, Cursor, Grok, and OpenCode leave on disk, resolves each session's working directory to a canonical
 git remote, and streams the raw bytes to the server with a resumable, append-only
 protocol. The server stores those bytes losslessly, parses them into a normalized
 projection (messages, tool calls, token usage, cost from a compiled-in rate
-table), and serves a web UI and a read-only [MCP](./agent-access.md) endpoint over
+table), and serves a web UI and an [MCP](./agent-access.md) endpoint over
 it. **Projects** are keyed by git remote, so the same repository across worktrees
 and machines collapses into one. Because the client keeps no derived state, a
 parser improvement reaches old sessions by re-parsing on the server, with nothing
@@ -35,7 +35,7 @@ runs," here is the whole path, each step linked to its detail:
    `akari login --server <url> --token <token>`.
    [Getting started](./getting-started.md#2-point-the-client-at-your-server).
 3. **Push once, then keep pushing.** `akari sync` uploads everything new; `akari
-   watch` (or `akari daemon start`) keeps it flowing.
+   watch` (or `akari daemon start`, which syncs every 10 minutes) keeps it flowing.
    [Getting started](./getting-started.md#3-push-your-sessions).
 4. **Read them.** Open the server in a browser, or connect a coding agent over
    [MCP](./agent-access.md).
@@ -62,7 +62,7 @@ The chapters build on each other.
    invites, the three token scopes (`ingest`, `read`, `full`), session visibility,
    and publishing a session or your usage overview.
 6. **[Agent access](./agent-access.md)**: point a coding agent at your history
-   through the read-only Model Context Protocol endpoint. The connect flow and the
+   through the Model Context Protocol endpoint. The connect flow and the
    full tool catalog.
 7. **[Self-hosting](./self-hosting.md)**: run the server. Docker Compose,
    configuration, the database, the first admin account, and reparse.
@@ -76,7 +76,7 @@ A few constraints shape everything that follows:
 
 - **The client runs anywhere; the server is Linux-only.** Push from macOS,
   Windows, or Linux; host the server on Linux (a container or a systemd service).
-- **Supported agents are Claude Code, Codex, pi, Cursor, and Grok.** The client
+- **Supported agents are Claude Code, Codex, pi, Cursor, Grok, and OpenCode.** The client
   reads the session logs each leaves in its standard location. Cursor is
   transcript-only: its CLI logs no model or token data, so Cursor sessions carry
   conversation, tool calls, and outcomes but no cost.

@@ -254,6 +254,7 @@ func TestRoots(t *testing.T) {
 		{Agent: "pi", Dir: filepath.Join(home, ".pi", "agent", "sessions"), Optional: true},
 		{Agent: "cursor", Dir: filepath.Join(home, ".cursor", "projects"), Optional: true},
 		{Agent: "grok", Dir: filepath.Join(home, ".grok", "sessions"), Optional: true},
+		{Agent: "opencode", Dir: filepath.Join(home, ".local", "share", "opencode"), Optional: true},
 		{Agent: "pi", Dir: "/extra/pi"},
 		{Agent: "claude", Dir: "/mnt/linked-claude", FollowRootLink: true},
 	}

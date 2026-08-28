@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -8,15 +9,19 @@ import (
 	"github.com/jssblck/akari/internal/client/daemon"
 )
 
-// runDaemon manages the watch loop as a background process: start, stop, status.
-func runDaemon(args []string) error {
+// runDaemon manages the periodic-sync background process: start, stop, status,
+// and on macOS a login LaunchAgent. `run` is the detached worker start launches.
+func runDaemon(ctx context.Context, args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: akari daemon {start|status} [--config PATH] | akari daemon stop [--timeout DUR] [--force]")
+		return fmt.Errorf("usage: akari daemon {start|status|install} [--config PATH] | akari daemon stop [--timeout DUR] [--force] | akari daemon uninstall")
 	}
 	sub := args[0]
+	if sub == "run" {
+		return runDaemonLoop(ctx, args[1:])
+	}
 
 	fs := flag.NewFlagSet("daemon", flag.ContinueOnError)
-	configPath := fs.String("config", "", "config file path (passed to the watch process)")
+	configPath := fs.String("config", "", "config file path (passed to the daemon process)")
 	force := fs.Bool("force", false, "terminate the daemon if graceful shutdown does not complete")
 	timeout := fs.Duration("timeout", daemon.DefaultStopTimeout, "maximum wait for each shutdown phase")
 	if err := fs.Parse(args[1:]); err != nil {
@@ -46,11 +51,11 @@ func runDaemon(args []string) error {
 		if err != nil {
 			return err
 		}
-		watchArgs := []string{"watch"}
+		childArgs := []string{"daemon", "run"}
 		if *configPath != "" {
-			watchArgs = append(watchArgs, "--config", *configPath)
+			childArgs = append(childArgs, "--config", *configPath)
 		}
-		if err := daemon.Start(self, watchArgs, paths); err != nil {
+		if err := daemon.Start(self, childArgs, paths); err != nil {
 			return err
 		}
 		running, pid, err := daemon.Status(paths)
@@ -58,10 +63,10 @@ func runDaemon(args []string) error {
 			return err
 		}
 		if running {
-			fmt.Printf("akari watch started (pid %d); logging to %s\n", pid, paths.Logfile)
+			fmt.Printf("akari daemon started (pid %d); logging to %s\n", pid, paths.Logfile)
 			return nil
 		}
-		return fmt.Errorf("background watch did not acquire its daemon lock")
+		return fmt.Errorf("background daemon did not acquire its lock")
 
 	case "stop":
 		result, err := daemon.Stop(paths, daemon.StopOptions{Timeout: *timeout, Force: *force})
@@ -69,9 +74,9 @@ func runDaemon(args []string) error {
 			return err
 		}
 		if result == daemon.StoppedForcefully {
-			fmt.Println("akari watch force-stopped")
+			fmt.Println("akari daemon force-stopped")
 		} else {
-			fmt.Println("akari watch stopped")
+			fmt.Println("akari daemon stopped")
 		}
 		return nil
 
@@ -87,7 +92,12 @@ func runDaemon(args []string) error {
 		}
 		return nil
 
+	case "install":
+		return runDaemonInstall(*configPath, paths)
+	case "uninstall":
+		return runDaemonUninstall()
+
 	default:
-		return fmt.Errorf("unknown daemon command %q (want start, stop, or status)", sub)
+		return fmt.Errorf("unknown daemon command %q (want start, stop, status, install, or uninstall)", sub)
 	}
 }

@@ -1,6 +1,6 @@
 ---
 title: The client
-summary: "The akari CLI in depth: login, sync, watch, the daemon, discovery, and the resumable upload."
+summary: "The akari CLI in depth: login, assign-project, sync, watch, the daemon, discovery, and the resumable upload."
 order: 3
 ---
 
@@ -17,9 +17,11 @@ This chapter is the reference for driving it.
 | Command | What it does |
 | --- | --- |
 | `akari login --server <url> --token <token>` | Write the client config (server URL and token). |
+| `akari assign-project --session <id> --project <id>` | Pin an orphaned session onto a project. |
 | `akari sync` | Discover and upload everything new, then exit. |
 | `akari watch` | Stay running and upload sessions as they change (foreground). |
-| `akari daemon start` \| `status` \| `stop` | Run and manage `watch` as a background process. |
+| `akari daemon start` \| `status` \| `stop` | Run `sync` every 10 minutes as a background process. |
+| `akari daemon install` \| `uninstall` | Start that daemon at login on macOS. |
 | `akari update` | Update the client to the latest release in place. |
 | `akari version` | Print the build version and exit. |
 
@@ -44,6 +46,20 @@ to rotate a token or move servers does not wipe your discovery settings.
 session (see the `machine` config key below). Omit it to keep the OS hostname, or
 to leave an existing name untouched on a re-run; pass `--machine ""` to clear it
 back to the hostname.
+
+### assign-project
+
+```sh
+akari assign-project --session <id> --project <id>
+```
+
+`assign-project` pins an orphaned session onto a known project. Use it when a
+deleted worktree uploaded as orphaned but the git project is obvious. The pin
+survives a reparse and a later client announce that still reports the session as
+orphaned.
+
+The config token must be **full** scope. An ingest token is refused. Session and
+project ids are the numeric ids the web UI and MCP tools return.
 
 ### sync
 
@@ -90,36 +106,42 @@ standard error. It holds a single-instance lock for its lifetime, so two watcher
 cannot run at once. Under the hood it layers three change detectors so nothing is
 missed: an OS file-system watcher for prompt, debounced uploads; a periodic
 re-stat of known files to catch changes the OS watcher drops (network filesystems,
-watch exhaustion); and a slower full rescan that rediscovers roots for
-newly created files. It does an initial full pass before entering the event loop,
-ingesting any backlog on startup.
+watch exhaustion); and a slower rescan that restores directory watches and queues
+only new or metadata-changed files. It does an initial full pass before entering
+the event loop, ingesting any backlog on startup. A network failure, retryable
+server response, or process-capacity failure pauses the whole queue for 30 seconds
+before it retries the failed file.
 
 ### daemon
 
 ```sh
-akari daemon start     # launch watch in the background; prints its PID and log path
+akari daemon start     # launch a background process that syncs every 10 minutes
 akari daemon status    # report whether it is running, and its PID
 akari daemon stop      # request shutdown; wait up to 10s for cleanup and lock release
 akari daemon stop --timeout 30s   # allow longer for in-flight uploads
 akari daemon stop --force         # escalate only if graceful shutdown fails
+akari daemon install   # macOS: start the daemon at login (and now, if it is not already running)
+akari daemon uninstall # macOS: stop starting the daemon at login
 ```
 
-`daemon` runs the same `watch` loop as a detached, per-user background process (it
-is not a system service). It writes a pidfile and `akari.log` under your config
-directory; `start` confirms the child took the single-instance lock before
-returning. `stop` sends an authenticated local shutdown request, then waits until
-the watcher exits and releases that lock. A zero exit status therefore means a
-new watcher can start immediately. Unix uses a user-only Unix-domain socket for
-the request; Windows uses a random per-run named event, so it follows the same
-cleanup path instead of being killed.
+`daemon` is a detached, per-user background process (it is not a system service).
+It runs `akari sync` with a 5 minute time limit as soon as it starts, then waits
+10 minutes and runs it again. The wait starts after the pass ends, so two syncs
+never overlap. It does not run `watch`. It writes a pidfile and
+`akari.log` under your config directory; `start` confirms the child took the
+single-instance lock before returning. `stop` sends an authenticated local
+shutdown request, then waits until the process exits and releases that lock. A
+zero exit status therefore means a new daemon can start immediately. Unix uses a
+user-only Unix-domain socket for the request; Windows uses a random per-run named
+event, so it follows the same cleanup path instead of being killed.
 
 The default timeout is 10 seconds. If cleanup does not finish, `stop` exits
-non-zero and leaves the watcher running. `--timeout <duration>` changes the bound.
+non-zero and leaves the daemon running. `--timeout <duration>` changes the bound.
 `--force` keeps the graceful request as the first step, then terminates the
 recorded process after the timeout and waits again for lock release. Before that
 escalation, `stop` re-reads the per-run identity in the locked pidfile; if another
-watcher has replaced it, the command fails instead of targeting the new process.
-A forced, confirmed stop exits zero and prints `akari watch force-stopped`, which
+daemon has replaced it, the command fails instead of targeting the new process.
+A forced, confirmed stop exits zero and prints `akari daemon force-stopped`, which
 distinguishes it from ordinary cleanup and from a timeout.
 
 The pidfile now contains a JSON process identity instead of a bare PID. A client
@@ -131,7 +153,21 @@ upgrading, or end that process through the operating system once; the next
 The log rotates while the daemon runs: each file is capped at 5 MiB, three rotated files
 (`akari.log.1` through `akari.log.3`) are retained, and the whole set is bounded
 at 20 MiB. The active and rotated files remain owner-only. This is the steady
-state on a workstation: run `akari daemon start` once.
+state on a workstation: `akari daemon install` on macOS, or `akari daemon start`
+once per boot elsewhere.
+
+On macOS, `akari daemon install` writes `~/Library/LaunchAgents/com.jssblck.akari.plist`
+and loads it into the current session. The plist runs the same periodic-sync
+daemon under launchd: logout stops it, the next login starts it, and logs still
+go to `akari.log`. That is the session-owned equivalent of `daemon start`, which
+detaches and can outlive logout. If a daemon is already running, install leaves
+it alone and only registers the next login. Re-run `akari daemon install` after
+upgrading so an older LaunchAgent that still started `watch` is replaced.
+`akari daemon uninstall` removes the agent.
+
+`--config` is stored as an absolute path, and the PATH from the install command
+is copied into the plist. Login agents do not source shell rc files, and sync
+calls `git` by name.
 
 | Platform | Daemon log |
 | --- | --- |
@@ -204,7 +240,7 @@ The keys:
   overrides it per run.
 - **`extra_roots`** (optional): additional discovery roots, each an
   `{ agent, path, follow_root_link }` entry where `agent` is `claude`, `codex`,
-  `pi`, `cursor`, or `grok` and `follow_root_link` (optional, default `false`) opts the root into
+  `pi`, `cursor`, `grok`, or `opencode` and `follow_root_link` (optional, default `false`) opts the root into
   resolving a symlink or, on Windows, a directory junction at `path` itself
   before walking it; see [Discovery](#discovery) below for why that is opt-in.
   Use these when your sessions live somewhere other than the standard location.
@@ -250,6 +286,7 @@ plus any `extra_roots` you configured:
 | pi | `~/.pi/agent/sessions` | `PI_DIR` (sessions at `$PI_DIR/agent/sessions`) |
 | Cursor | `~/.cursor/projects` (per-session transcripts under `<project>/agent-transcripts`) | none |
 | Grok | `~/.grok/sessions` (one directory per session; `updates.jsonl` is the record) | `GROK_HOME` (sessions at `$GROK_HOME/sessions`) |
+| OpenCode | `~/.local/share/opencode` (`opencode.db`; the client materializes JSONL) | `OPENCODE_DATA_DIR` (data dir) or `OPENCODE_DB` (database file). Uses `$XDG_DATA_HOME/opencode` when `XDG_DATA_HOME` is set |
 
 Missing built-in roots are skipped without error because an unused agent normally
 has no session directory. A missing path supplied through an agent override or

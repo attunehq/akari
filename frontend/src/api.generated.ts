@@ -815,6 +815,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/app/sessions/{id}/project": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Permanently pin an orphaned session onto a project */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SessionProjectRequest"];
+                };
+            };
+            responses: {
+                /** @description Session pinned to the project */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SessionProjectResponse"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/app/sessions/{id}/publication": {
         parameters: {
             query?: never;
@@ -1609,7 +1654,7 @@ export interface components {
         };
         AnnounceSession: {
             /** @enum {string} */
-            agent: "claude" | "codex" | "pi" | "cursor" | "grok";
+            agent: "claude" | "codex" | "pi" | "cursor" | "grok" | "opencode";
             cwd?: string;
             git_branch?: string;
             /**
@@ -2209,6 +2254,17 @@ export interface components {
             Since: string;
             Sort: string;
             Username: string;
+        };
+        SessionProjectRequest: {
+            /** Format: int64 */
+            project_id: number;
+        };
+        SessionProjectResponse: {
+            pinned: boolean;
+            /** Format: int64 */
+            project_id: number;
+            /** Format: int64 */
+            session_id: number;
         };
         SessionPublicationResponse: {
             public_id?: string;

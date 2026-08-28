@@ -1,10 +1,10 @@
 # akari
 
 akari collects the local session logs of coding agents (Claude Code, Codex, pi,
-Cursor, and Grok) on a self-hosted server: a searchable history of every session across your
+Cursor, Grok, and OpenCode) on a self-hosted server: a searchable history of every session across your
 machines, grouped by the git project they ran in, with every token priced. It
 is an explicit client/server split. Thin clients push raw session bytes; the
-server parses, prices, and serves a web UI and a read-only MCP endpoint. Because
+server parses, prices, and serves a web UI and an MCP endpoint. Because
 the client keeps no derived state, a parser improvement reaches old sessions by
 re-parsing on the server, with nothing re-uploaded.
 
@@ -66,7 +66,8 @@ the client at your server and start pushing:
 ```sh
 akari login --server https://akari.example.com --token <ingest-token>
 akari sync            # one-shot upload of everything new
-akari daemon start    # keep uploading in the background
+akari daemon start    # sync every 10 minutes in the background
+akari daemon install  # macOS: also start it at login
 ```
 
 The [getting-started chapter](https://akari.attune.inc/guide/getting-started)

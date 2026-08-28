@@ -52,6 +52,7 @@ visible.
 | Push sessions and blobs | yes | no | yes |
 | Read the web UI | no | no | yes |
 | Reach the [MCP](./agent-access.md) endpoint | no | yes | yes |
+| Pin an orphaned session onto a project | no | yes (MCP) | yes (MCP, HTTP, CLI) |
 | Publish / unpublish / delete, mint tokens | no | no | yes |
 
 The intent behind each:
@@ -59,11 +60,11 @@ The intent behind each:
 - **`ingest`** is push-only. It is what the [client](./the-client.md) uses: it can
   upload sessions and their blobs and nothing else, so it is safe to leave on a
   laptop or bake into a deployment.
-- **`read`** is read-only. It sees everything a signed-in user sees but can mutate
-  nothing (no publish, delete, or token creation), which is exactly what you want
-  to hand an untrusted coding agent. It is the scope the OAuth connect flow
-  issues. A full-scope token also reaches the MCP endpoint, but it carries the
-  whole write surface with it, so `read` is the one to hand out.
+- **`read`** sees everything a signed-in user sees. It cannot publish, delete, or
+  mint tokens. Through MCP it can pin an orphaned session onto a project. It is
+  the scope the OAuth connect flow issues. A full-scope token also reaches the
+  MCP endpoint, but it carries the whole write surface with it, so `read` is the
+  one to hand out.
 - **`full`** is read and write: the browser session's level of access, as a token.
   Treat it as a real credential; it is rarely the right thing to hand a third
   party.

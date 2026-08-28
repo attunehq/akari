@@ -43,6 +43,9 @@ func TestThinkingBytesPerToken(t *testing.T) {
 	if got := ThinkingBytesPerToken("claude"); got != 10.7 {
 		t.Errorf("claude factor = %v, want 10.7", got)
 	}
+	if got := ThinkingBytesPerToken("opencode"); got != 4.0 {
+		t.Errorf("opencode factor = %v, want 4.0", got)
+	}
 	if got := ThinkingBytesPerToken("mystery-agent"); got != 10.7 {
 		t.Errorf("unknown agent factor = %v, want 10.7 (claude default)", got)
 	}

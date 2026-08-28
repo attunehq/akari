@@ -289,26 +289,22 @@ package parse
 // goldens are byte-for-byte identical, and the new cursor and grok fixtures join
 // the snapshot set.
 //
-// Epoch 22 -> 23: Codex tool results derive their error status from the exec
-// output banner (codexResultIsErr) instead of hardcoding ok. Codex rollouts
-// carry no structural error field on *_output items, so every codex tool
-// result ingested as status ok and codex sessions could never register tool
-// failures — tool-health signals and any cross-agent comparison read zero
-// failures. A nonzero "Exit code: N" / "Process exited with code N" banner
-// line or a "command timed out after" prefix now lands as status error;
-// bannerless results (MCP tools, plain bodies) keep status ok. The committed
-// goldens are byte-for-byte identical (their exec results all succeed).
-// Scope: the banner is read from the transcript, so only results whose body
-// is still inline re-grade on rebuild — a body the client upload path lifted
-// to a CAS sentinel left no banner text behind, and those results keep
-// status ok until result sentinels carry a derived status (follow-up; the
-// input sentinel's file_path/detail fields are the precedent).
+// Epoch 22 -> 23: add the OpenCode session format. The client materializes
+// OpenCode's SQLite store (~/.local/share/opencode/opencode.db) into JSONL; the
+// reducer reads that transcript. Tool inputs now also project a top-level
+// "filePath" key (OpenCode's spelling) when "file_path" and "path" are absent.
+// New-agent parsing itself touches no existing projection; the claude, codex,
+// cursor, and grok goldens stay byte-for-byte identical, and the new opencode
+// fixture joins the snapshot set. OpenCode's per-turn reasoning-token count is
+// used directly (like Codex and Grok); the 4.0 plaintext bytes-per-token factor
+// is only a fallback.
 //
-// Epoch 23 -> 24: preserve Codex error status through the client CAS transform
-// and recognize code-mode failures. The client derives the status before lifting
-// a result body and adds status=error to that result sentinel; successful results
-// omit the field. Buffered and streaming transforms use the same banner rule, so
-// direct, unified-exec, and code-mode results project identically at every body
-// size. Existing stored sentinels have no status to rebuild from and remain ok
-// until a current client re-syncs their source transcript.
-const Epoch = 24
+// Epoch 23 -> 24: derive Codex tool-result error status from the exec output
+// banner instead of hardcoding ok. Nonzero exit markers and command timeouts
+// now land as errors. Bannerless results keep status ok.
+//
+// Epoch 24 -> 25: preserve Codex error status through the client CAS transform
+// and recognize code-mode failures. Buffered and streaming transforms use the
+// same banner rule. Existing sentinels remain ok until a current client syncs
+// the source transcript again.
+const Epoch = 25

@@ -1,6 +1,6 @@
 ---
 title: Agent access
-summary: Point a coding agent at your history through the read-only Model Context Protocol endpoint.
+summary: Point a coding agent at your history through the Model Context Protocol endpoint.
 order: 6
 ---
 
@@ -11,8 +11,8 @@ endpoint, so a coding agent can read your whole session history without opening 
 browser. It exposes the same surface the web UI shows (the overview analytics, the
 projects index, the session feed, and a session's full transcript) plus the raw
 data behind it: tool-call bodies from the content store, and the lossless bytes a
-session was ingested from. It is **read-only** by construction; no tool creates,
-changes, or deletes anything.
+session was ingested from. Tools are read-only except `assign_session_project`,
+which pins an orphaned session onto a known project.
 
 The endpoint is at `/mcp` on your server, over Streamable HTTP:
 
@@ -36,7 +36,7 @@ Behind that click is the OAuth 2.1 flow MCP defines, with akari acting as both t
 resource and the authorization server. The agent registers itself, redirects
 through a PKCE-protected authorization request, and exchanges the result for a
 read-only access token that refreshes on its own. The token carries the **read**
-scope and nothing more. You can revoke it any time from the Account page's
+scope. You can revoke it any time from the Account page's
 **Connected apps** section, which disconnects the agent and invalidates its tokens
 at once.
 
@@ -47,8 +47,8 @@ For the flow to advertise correct URLs behind a reverse proxy, set
 ## Connecting without a browser
 
 A harness that cannot run the browser flow authenticates with a **read-scope API
-token** instead. Create one on the account page (the `read` scope is read-only,
-the counterpart of the push-only `ingest` and the read-write `full`) and pass it
+token** instead. Create one on the account page (the `read` scope is the
+counterpart of the push-only `ingest` and the read-write `full`) and pass it
 as a bearer token:
 
 ```sh
@@ -57,14 +57,15 @@ claude mcp add --transport http akari https://akari.example.com/mcp \
 ```
 
 A read token reaches only the MCP endpoint: it cannot push sessions or drive the
-write surface. It does not expire until you revoke it.
+browser write surface. It does not expire until you revoke it.
 
 ## The tools
 
-Every tool is read-only and sees every internal session, the same surface a
-signed-in user sees. Fetch data top-down: `overview` and `list_projects` for the
-lay of the land, `list_sessions` to find runs, `get_session` for a transcript,
-then `read_tool_body` or `get_session_raw` to go deeper on one.
+Every tool sees every internal session, the same surface a signed-in user sees.
+Fetch data top-down: `overview` and `list_projects` for the lay of the land,
+`list_sessions` to find runs, `get_session` for a transcript, then
+`read_tool_body` or `get_session_raw` to go deeper on one. `assign_session_project`
+pins an orphaned session onto a project when the worktree is gone.
 
 | Tool | Returns |
 | --- | --- |
@@ -76,6 +77,7 @@ then `read_tool_body` or `get_session_raw` to go deeper on one.
 | `get_session` | One session's header and a window of its transcript: messages, thinking, tool-call metadata, attachments, and subagents. |
 | `read_tool_body` | A tool call's input or result body from the content store, by the hash the tool call carries. |
 | `get_session_raw` | The lossless bytes a session was ingested from, behind the parsed projection. |
+| `assign_session_project` | Pin an orphaned session onto a project. Survives reparse and later orphaned announces. Owner or admin. |
 
 Parameters that govern paging through a large history:
 
@@ -112,8 +114,9 @@ the full JSON payload.
 The MCP surface mirrors the web UI: the same sessions, the same visibility rule
 (every internal session, exactly what a signed-in user sees), plus `get_session_raw`
 for the ingested bytes, which the web UI does not surface. It exposes no account or
-token management and no way to publish, delete, or write; those stay on the
-full-scope web surface.
+token management and no way to publish or delete; those stay on the full-scope web
+surface. `assign_session_project` is the matching write on the HTTP API
+(`PUT /api/v1/app/sessions/{id}/project`) and the CLI (`akari assign-project`).
 
 ---
 

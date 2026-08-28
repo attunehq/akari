@@ -28,10 +28,11 @@ type SyncFunc func(ctx context.Context, f discover.File) syncer.Result
 
 // Options tune the watch timers. Zero values fall back to defaults.
 type Options struct {
-	Debounce time.Duration // quiet period before uploading a changed file
-	Poll     time.Duration // mtime/size re-stat interval for the polling fallback
-	Discover time.Duration // interval to re-walk the roots for newly created files
-	Rescan   time.Duration // full rediscover-and-sync safety net interval
+	Debounce        time.Duration // quiet period before uploading a changed file
+	Poll            time.Duration // mtime/size re-stat interval for the polling fallback
+	Discover        time.Duration // interval to re-walk the roots for newly created files
+	Rescan          time.Duration // rediscovery safety net interval
+	PressureBackoff time.Duration // pause after a network, server, or process-capacity failure
 	// Excludes are glob patterns of paths to skip (see discover.Excluder). They
 	// keep an ignored location out of discovery, the poll, and event handling.
 	Excludes []string
@@ -50,6 +51,9 @@ func (o Options) withDefaults() Options {
 	}
 	if o.Rescan <= 0 {
 		o.Rescan = 15 * time.Minute
+	}
+	if o.PressureBackoff <= 0 {
+		o.PressureBackoff = 30 * time.Second
 	}
 	if o.Logf == nil {
 		o.Logf = func(string, ...any) {}
@@ -199,18 +203,15 @@ func (w *Watcher) run(ctx context.Context, fsw *fsnotify.Watcher) error {
 			}
 
 		case <-rescan.C:
-			// Safety net: re-add any new directories and re-sync everything.
+			// Safety net: re-add directories and catch files whose metadata changed
+			// without an event. Re-syncing the full corpus here would re-read and
+			// transform every historical session even while the machine is idle.
 			for _, r := range w.roots {
 				if err := w.addRecursive(fsw, r); err != nil {
 					w.opt.Logf("watch root %s: %v", r.Dir, err)
 				}
 			}
-			for _, f := range w.discover() {
-				if m, ok := statMeta(f.Path); ok {
-					known[f] = m
-				}
-				rs.mark(f)
-			}
+			markDiscoveredChanges(known, w.discover(), rs.mark)
 		}
 	}
 }
@@ -283,6 +284,13 @@ func (r *runState) worker(ctx context.Context) {
 			case res.UploadedBytes > 0:
 				r.w.opt.Logf("uploaded %s -> %s (%d bytes)", f.Path, res.Destination(), res.UploadedBytes)
 			}
+			if pressureFailure(res.Err) {
+				r.mark(f)
+				r.w.opt.Logf("watch paused for %s after resource pressure", r.w.opt.PressureBackoff)
+				if !waitForPressureBackoff(ctx, r.w.opt.PressureBackoff) {
+					return
+				}
+			}
 			if ctx.Err() != nil {
 				return // finished the current file; stop without draining the backlog
 			}
@@ -297,6 +305,20 @@ func (r *runState) worker(ctx context.Context) {
 // the slower discover ticker folds it in.
 func (w *Watcher) handleEvent(fsw *fsnotify.Watcher, ev fsnotify.Event, known map[discover.File]fileMeta, pending map[discover.File]time.Time) {
 	if ev.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Rename) == 0 {
+		return
+	}
+	if w.isOpenCodeStoreEvent(ev.Name) {
+		_ = fsw.Add(ev.Name)
+		deadline := time.Now().Add(w.opt.Debounce)
+		for _, f := range w.discover() {
+			pending[f] = deadline
+			if m, ok := statMeta(f.Path); ok {
+				known[f] = m
+			}
+		}
+		return
+	}
+	if w.withinOpenCodeRoot(ev.Name) {
 		return
 	}
 	if info, err := os.Lstat(ev.Name); err == nil && info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
@@ -437,6 +459,9 @@ func (w *Watcher) addRecursive(fsw *fsnotify.Watcher, root discover.Root) error 
 		w.opt.Logf("%s", notice)
 		return nil
 	}
+	if root.Agent == "opencode" {
+		return w.addOpenCodeStore(fsw, dir, root)
+	}
 	var problems []error
 	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -459,6 +484,67 @@ func (w *Watcher) addRecursive(fsw *fsnotify.Watcher, root discover.Root) error 
 		problems = append(problems, err)
 	}
 	return errors.Join(problems...)
+}
+
+func (w *Watcher) addOpenCodeStore(fsw *fsnotify.Watcher, dir string, root discover.Root) error {
+	if err := fsw.Add(dir); err != nil {
+		return fmt.Errorf("add %s: %w", dir, err)
+	}
+	name := root.SessionDB
+	if name == "" {
+		name = "opencode.db"
+	}
+	var problems []error
+	for _, base := range []string{name, name + "-wal", name + "-shm"} {
+		p := filepath.Join(dir, base)
+		if _, err := os.Lstat(p); err != nil {
+			continue
+		}
+		if err := fsw.Add(p); err != nil {
+			problems = append(problems, fmt.Errorf("add %s: %w", p, err))
+		}
+	}
+	return errors.Join(problems...)
+}
+
+func (w *Watcher) isOpenCodeStoreEvent(path string) bool {
+	base := filepath.Base(path)
+	for _, r := range w.roots {
+		if r.Agent != "opencode" {
+			continue
+		}
+		dir, notice, err := discover.ResolveRoot(r)
+		if err != nil || notice != "" {
+			continue
+		}
+		if !within(dir, path) {
+			continue
+		}
+		name := r.SessionDB
+		if name == "" {
+			name = "opencode.db"
+		}
+		if base == name || base == name+"-wal" || base == name+"-shm" {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *Watcher) withinOpenCodeRoot(path string) bool {
+	for _, r := range w.roots {
+		if r.Agent != "opencode" {
+			continue
+		}
+		dir, notice, err := discover.ResolveRoot(r)
+		if err != nil || notice != "" {
+			continue
+		}
+		if within(dir, path) {
+			return true
+		}
+	}
+	return false
 }
 
 func statMeta(path string) (fileMeta, bool) {

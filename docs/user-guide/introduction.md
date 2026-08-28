@@ -8,7 +8,7 @@ order: 1
 
 ## The problem
 
-Claude Code, Codex, pi, Cursor, and Grok each write a detailed session log to disk as they
+Claude Code, Codex, pi, Cursor, Grok, and OpenCode each write a detailed session log to disk as they
 work: every message, every piece of thinking, every tool call and its result, the
 tokens spent. That log is the record of what an agent actually did, and it is
 worth keeping. But by default it lives in a dot-directory on one laptop, in a
@@ -59,7 +59,7 @@ What it is:
 - **A backup and a ledger.** Sessions are stored losslessly and priced, so the
   record survives a wiped laptop and you can see where tokens and cost go.
 - **A reading surface for humans and agents alike.** The same history is a web UI
-  you browse and a read-only [MCP](./agent-access.md) endpoint an agent queries.
+  you browse and an [MCP](./agent-access.md) endpoint an agent queries.
 
 What it is not:
 
@@ -70,8 +70,8 @@ What it is not:
 - **Not multi-tenant.** One server is one team's shared history. Isolation between
   teams is one server per team, not per-user partitions inside one.
 - **Not an agent runner.** akari never runs an agent or writes to your code. It
-  reads the logs your agents already produce. Its MCP surface is read-only by
-  construction.
+  reads the logs your agents already produce. An MCP credential cannot publish,
+  delete, or mint tokens.
 
 The practical shape of sharing and access is [Accounts and
 sharing](./accounts-and-sharing.md).

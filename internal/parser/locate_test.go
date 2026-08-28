@@ -252,3 +252,18 @@ func TestLocateGrokBodies(t *testing.T) {
 		locateParity(t, AgentGrok, c)
 	}
 }
+
+// TestLocateOpenCodeBodies checks OpenCode tool part inputs and terminal
+// results against the oracle; a running tool lifts only its input.
+func TestLocateOpenCodeBodies(t *testing.T) {
+	cases := []string{
+		`{"type":"message","id":"m","data":{"role":"assistant"},"parts":[{"id":"p","data":{"type":"tool","tool":"read","callID":"c1","state":{"status":"completed","input":{"filePath":"/tmp/a.txt"},"output":"hello"}}}]}`,
+		`{"type":"message","id":"m","data":{"role":"assistant"},"parts":[{"id":"p","data":{"type":"tool","tool":"bash","callID":"c1","state":{"status":"error","input":{"command":"ls"},"error":"boom"}}}]}`,
+		`{"type":"message","id":"m","data":{"role":"assistant"},"parts":[{"id":"p","data":{"type":"tool","tool":"grep","callID":"c1","state":{"status":"running","input":{"pattern":"x"}}}}]}`,
+		`{"type":"session","id":"s","directory":"/home/grace"}`,
+		`{"type":"message","id":"m","data":{"role":"user"},"parts":[{"id":"p","data":{"type":"text","text":"no body"}}]}`,
+	}
+	for _, c := range cases {
+		locateParity(t, AgentOpenCode, c)
+	}
+}

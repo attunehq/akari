@@ -326,7 +326,8 @@
               "codex",
               "pi",
               "cursor",
-              "grok"
+              "grok",
+              "opencode"
             ],
             "type": "string"
           },
@@ -2637,6 +2638,41 @@
           "Since",
           "Sort",
           "Username"
+        ],
+        "type": "object"
+      },
+      "SessionProjectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "project_id": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "project_id"
+        ],
+        "type": "object"
+      },
+      "SessionProjectResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "pinned": {
+            "type": "boolean"
+          },
+          "project_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "session_id": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pinned",
+          "project_id",
+          "session_id"
         ],
         "type": "object"
       },
@@ -5245,6 +5281,56 @@
           }
         },
         "summary": "Read a session's turns past a rendered ordinal",
+        "tags": [
+          "Application"
+        ]
+      }
+    },
+    "/api/v1/app/sessions/{id}/project": {
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionProjectResponse"
+                }
+              }
+            },
+            "description": "Session pinned to the project"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "summary": "Permanently pin an orphaned session onto a project",
         "tags": [
           "Application"
         ]
