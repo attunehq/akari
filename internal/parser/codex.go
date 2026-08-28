@@ -2,8 +2,10 @@ package parser
 
 import (
 	"encoding/json"
+	"io"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -462,12 +464,14 @@ func joinNonEmpty(a, b string) string {
 // unified_exec formatter streams "Process exited with code N".
 var codexExitMarkerRE = regexp.MustCompile(`^(?:Exit code:|Process exited with code)\s*(-?\d+)\s*$`)
 
-// codexBannerFurniture are the other lines the exec banner is made of; the
-// status scan walks past them but stops at anything else. "Wall time:",
-// "Total output lines:", and "Output:" come from the current formatter,
-// "Original token count:" and "Warning: truncated output" from truncation.
+var codexTimeoutMarkerRE = regexp.MustCompile(`^command timed out after \d+ milliseconds$`)
+
+// codexBannerFurniture are the other lines the direct, unified-exec, and
+// code-mode banners contain. The status scan walks past them but stops at
+// anything else.
 var codexBannerFurniture = []string{
 	"Wall time:",
+	"Wall time ",
 	"Total output lines:",
 	"Original token count:",
 	"Warning: truncated output",
@@ -478,38 +482,66 @@ var codexBannerFurniture = []string{
 // leading lines.
 const codexBannerMaxLines = 8
 
-// codexResultIsErr derives a tool result's error status from the banner codex
-// leaves in the exec output text. Codex rollouts carry no structural error
-// field on *_output items — the harness's internal success flag is not
-// serialized (FunctionCallOutputPayload serializes as the bare body) — so the
-// exec formats' banner lines are the only signal: a nonzero exit marker, or
-// the "command timed out after ... milliseconds" prefix a timed-out command
-// gets. Only the leading banner is scanned — the walk ends at "Output:", at
-// any line that is not banner furniture, and at a line cap — so a bannerless
-// body that merely QUOTES a marker (a transcript-processing session, say)
-// cannot flip the status. Results with no banner — MCP tools, plain bodies —
-// keep status ok, as before; so does a body the client upload path already
-// lifted to a CAS sentinel, whose banner text is no longer in the transcript
-// (carrying a derived status on result sentinels is the follow-up that
-// closes that path).
+const codexBannerMaxBytes = 4 << 10
+
+// codexResultIsErr derives a tool result's error status from the banner Codex
+// leaves in the output text. Codex rollouts do not serialize the harness's
+// internal success flag, so the banner is the durable signal. A complete banner
+// must reach its Output separator before an exit or script marker takes effect;
+// this keeps ordinary tool bodies that quote a marker at status ok. The client
+// records derived errors on CAS sentinels before it lifts the banner text.
 func codexResultIsErr(output gjson.Result) bool {
-	text := blockText(output)
+	if ref, ok := asCASRef(output); ok {
+		return ref.IsError
+	}
+	return codexResultTextIsErr(blockText(output))
+}
+
+// codexResultReaderIsErr is the streaming twin of codexResultIsErr. The client
+// uses it before replacing a large result with a CAS sentinel, so the sentinel
+// keeps the status without buffering the result body.
+func codexResultReaderIsErr(r io.Reader) (bool, error) {
+	prefix, err := io.ReadAll(io.LimitReader(r, codexBannerMaxBytes))
+	if err != nil {
+		return false, err
+	}
+	return codexResultTextIsErr(string(prefix)), nil
+}
+
+func codexResultTextIsErr(text string) bool {
 	if text == "" {
 		return false
 	}
-	if strings.HasPrefix(text, "command timed out after ") {
+	if len(text) > codexBannerMaxBytes {
+		text = text[:codexBannerMaxBytes]
+	}
+	lines := strings.SplitN(text, "\n", codexBannerMaxLines+1)
+	if codexTimeoutMarkerRE.MatchString(strings.TrimSuffix(lines[0], "\r")) {
 		return true
 	}
-	for i, line := range strings.SplitN(text, "\n", codexBannerMaxLines+1) {
+
+	scriptFailed := false
+	exitCode := 0
+	hasExitCode := false
+	for i, line := range lines {
 		if i == codexBannerMaxLines {
 			break
 		}
 		line = strings.TrimSuffix(line, "\r")
 		if line == "Output:" {
-			return false // banner ended without an exit marker
+			return scriptFailed || hasExitCode && exitCode != 0
+		}
+		if i == 0 && (line == "Script failed" || line == "Script terminated") {
+			scriptFailed = true
+			continue
 		}
 		if m := codexExitMarkerRE.FindStringSubmatch(line); m != nil {
-			return m[1] != "0"
+			code, err := strconv.Atoi(m[1])
+			if err != nil {
+				return false
+			}
+			exitCode, hasExitCode = code, true
+			continue
 		}
 		furniture := false
 		for _, prefix := range codexBannerFurniture {

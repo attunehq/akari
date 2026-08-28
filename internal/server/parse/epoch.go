@@ -303,4 +303,12 @@ package parse
 // to a CAS sentinel left no banner text behind, and those results keep
 // status ok until result sentinels carry a derived status (follow-up; the
 // input sentinel's file_path/detail fields are the precedent).
-const Epoch = 23
+//
+// Epoch 23 -> 24: preserve Codex error status through the client CAS transform
+// and recognize code-mode failures. The client derives the status before lifting
+// a result body and adds status=error to that result sentinel; successful results
+// omit the field. Buffered and streaming transforms use the same banner rule, so
+// direct, unified-exec, and code-mode results project identically at every body
+// size. Existing stored sentinels have no status to rebuild from and remain ok
+// until a current client re-syncs their source transcript.
+const Epoch = 24
