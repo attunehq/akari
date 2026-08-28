@@ -33,7 +33,10 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
         <section className="auth-panel">
           <h1>{mode === "login" ? "Log in to akari" : "Create an account"}</h1>
           {mode === "register" ? (
-            <p>Use the invitation issued by an instance administrator.</p>
+            <p>
+              The first account on a new instance needs no invitation.
+              Otherwise, use the invitation issued by an administrator.
+            </p>
           ) : null}
           <form
             onSubmit={async (event) => {
@@ -86,7 +89,6 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
               <label>
                 Invite token
                 <input
-                  required
                   value={invite}
                   onChange={(event) => setInvite(event.target.value)}
                 />
