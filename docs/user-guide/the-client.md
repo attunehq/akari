@@ -19,6 +19,7 @@ This chapter is the reference for driving it.
 | `akari login --server <url> --token <token>` | Write the client config (server URL and token). |
 | `akari assign-project --session <id> --project <id>` | Pin an orphaned session onto a project. |
 | `akari sync` | Discover and upload everything new, then exit. |
+| `akari ingest --root <dir>` | Discover and upload session files under one directory, then exit. |
 | `akari watch` | Stay running and upload sessions as they change (foreground). |
 | `akari daemon start` \| `status` \| `stop` | Run `sync` every 10 minutes as a background process. |
 | `akari daemon install` \| `uninstall` | Start that daemon at login on macOS. |
@@ -60,6 +61,36 @@ orphaned.
 
 The config token must be **full** scope. An ingest token is refused. Session and
 project ids are the numeric ids the web UI and MCP tools return.
+
+### ingest
+
+```sh
+akari ingest --root <dir> [--finalize=false]
+```
+
+`ingest` discovers session files under one directory and uploads them through
+the same resumable protocol as `sync`, using the logged-in client config. It
+does not walk the agent's standard global roots. Use it when a caller already
+has the sessions in a known place: a review runner, a CI wrapper, or a tool
+that wrote them somewhere other than the default directory.
+
+The directory is scanned with the same per-agent matching and header checks as
+an `extra_roots` entry. You do not pass an agent or a file: a Pi session, a
+Claude transcript, and a Codex rollout in the same tree are each classified
+from their contents. A random JSONL with no session header is skipped rather
+than uploaded as junk. An empty directory is success (zero files).
+
+You can pass the directory as `--root <dir>` or as a positional argument.
+
+Unlike `sync --finalize`, which marks every discovered session on the machine
+terminal, `ingest` defaults to `--finalize` because it is handing off a
+finished set. Pass `--finalize=false` to wait for the idle settle window
+instead.
+
+Project resolution is the same as `sync`: the client peeks the working
+directory from each file header and asks git for `origin`. Call `ingest` while
+that directory still exists (before an ephemeral worktree is removed) so the
+session is filed under a remote project rather than as orphaned.
 
 ### sync
 

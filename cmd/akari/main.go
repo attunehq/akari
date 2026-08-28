@@ -28,6 +28,8 @@ func main() {
 	switch os.Args[1] {
 	case "sync":
 		err = runSync(ctx, os.Args[2:])
+	case "ingest":
+		err = runIngest(ctx, os.Args[2:])
 	case "watch":
 		err = runWatch(ctx, os.Args[2:])
 	case "daemon":
@@ -60,6 +62,7 @@ func usage() {
 
 Usage:
   akari sync [--config PATH] [--dry-run] [--time-limit DUR] [--concurrency N] [--finalize] discover and upload new session bytes, then exit
+  akari ingest --root DIR [--finalize=false] [--config PATH]  discover and upload session files under DIR, then exit
   akari watch [--config PATH]                             watch continuously and upload changes (foreground)
   akari daemon {start|status} [--config PATH]             manage a background process that syncs every 10 minutes
   akari daemon stop [--timeout DUR] [--force]             stop it and confirm shutdown
