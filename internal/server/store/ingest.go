@@ -98,6 +98,8 @@ func upsertProjectTx(ctx context.Context, q projectUpserter, remoteKey, host, ow
 // project. Backed-up work keeps its repo grouping rather than sliding into an
 // orphaned bucket the moment its checkout is removed. An upgrade in the other
 // direction (a local session that gains a remote) is allowed and re-homes it.
+// A project_pinned session is stickier still: AssignSessionProject set its
+// project, and no later announce (local or remote) moves it.
 func (s *Store) Announce(ctx context.Context, p AnnounceParams) (AnnounceResult, error) {
 	var r AnnounceResult
 	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
@@ -120,9 +122,10 @@ func (s *Store) Announce(ctx context.Context, p AnnounceParams) (AnnounceResult,
 }
 
 // AnnounceWithProject upserts the project and the session in one transaction.
-// For non-remote announces it first applies the sticky remote guard; when the
-// guard wins, the local project is never inserted. The HTTP ingest path uses
-// this form because it receives a project identity rather than a project id.
+// For non-remote announces it first applies the sticky remote (and pin) guard;
+// when the guard wins, the local project is never inserted. The HTTP ingest
+// path uses this form because it receives a project identity rather than a
+// project id.
 func (s *Store) AnnounceWithProject(ctx context.Context, p AnnounceParams, project ProjectParams) (AnnounceResult, error) {
 	var r AnnounceResult
 	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
@@ -202,52 +205,55 @@ func lockAnnounceFamilyTx(ctx context.Context, tx pgx.Tx, p AnnounceParams) erro
 
 func keepRemoteAttributionTx(ctx context.Context, tx pgx.Tx, p AnnounceParams) (AnnounceResult, bool, error) {
 	var r AnnounceResult
-	if p.Kind == "" || p.Kind == "remote" {
-		return r, false, nil
-	}
 	var existingID int64
 	var existingKind string
 	var priorCwd string
+	var pinned bool
 	err := tx.QueryRow(ctx,
-		`SELECT s.id, pr.kind, COALESCE(s.cwd, '')
+		`SELECT s.id, pr.kind, COALESCE(s.cwd, ''), s.project_pinned
 		   FROM sessions s JOIN projects pr ON pr.id = s.project_id
 		  WHERE s.user_id = $1 AND s.agent = $2 AND s.source_session_id = $3`,
-		p.UserID, p.Agent, p.SourceSessionID).Scan(&existingID, &existingKind, &priorCwd)
+		p.UserID, p.Agent, p.SourceSessionID).Scan(&existingID, &existingKind, &priorCwd, &pinned)
 	switch {
-	case err == nil && existingKind == "remote":
-		r.SessionID = existingID
-		// Keep only the remote project attribution. Mutable announce metadata still
-		// follows the latest client observation, and terminal remains sticky.
-		parentSource := announceParentSource(p)
-		if _, err := tx.Exec(ctx,
-			`UPDATE sessions
-			    SET machine = $2, cwd = $3, git_branch = $4,
-			        terminal = sessions.terminal OR $5,
-			        parent_source_id = CASE WHEN $6 <> '' THEN $6 ELSE parent_source_id END,
-			        updated_at = now()
-			  WHERE id = $1`,
-			existingID, p.Machine, p.Cwd, p.GitBranch, p.Terminal, parentSource); err != nil {
-			return AnnounceResult{}, false, fmt.Errorf("update kept remote session %d metadata: %w", existingID, err)
-		}
-		if err := refreshCwdDerivedStateTx(ctx, tx, existingID, priorCwd, p.Cwd); err != nil {
-			return AnnounceResult{}, false, err
-		}
-		if _, err := tx.Exec(ctx,
-			`INSERT INTO session_raw (session_id) VALUES ($1) ON CONFLICT DO NOTHING`, existingID); err != nil {
-			return AnnounceResult{}, false, err
-		}
-		if err := linkSubagentParentTx(ctx, tx, p, existingID); err != nil {
-			return AnnounceResult{}, false, err
-		}
-		err := tx.QueryRow(ctx,
-			`SELECT byte_len, content_sha256 FROM session_raw WHERE session_id = $1`, existingID).
-			Scan(&r.StoredBytes, &r.PrefixSHA256)
-		return r, true, err
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return AnnounceResult{}, false, err
-	default:
-		return AnnounceResult{}, false, nil
+	case err != nil:
+		return r, false, nil
 	}
+	// A pin always wins. Unpinned remote attribution still blocks a local
+	// downgrade, and still lets a later remote announce re-home.
+	keep := pinned || (existingKind == "remote" && p.Kind != "" && p.Kind != "remote")
+	if !keep {
+		return r, false, nil
+	}
+	r.SessionID = existingID
+	// Keep the stored project_id. Mutable announce metadata still follows the
+	// latest client observation, and terminal remains sticky.
+	parentSource := announceParentSource(p)
+	if _, err := tx.Exec(ctx,
+		`UPDATE sessions
+		    SET machine = $2, cwd = $3, git_branch = $4,
+		        terminal = sessions.terminal OR $5,
+		        parent_source_id = CASE WHEN $6 <> '' THEN $6 ELSE parent_source_id END,
+		        updated_at = now()
+		  WHERE id = $1`,
+		existingID, p.Machine, p.Cwd, p.GitBranch, p.Terminal, parentSource); err != nil {
+		return AnnounceResult{}, false, fmt.Errorf("update kept session %d metadata: %w", existingID, err)
+	}
+	if err := refreshCwdDerivedStateTx(ctx, tx, existingID, priorCwd, p.Cwd); err != nil {
+		return AnnounceResult{}, false, err
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO session_raw (session_id) VALUES ($1) ON CONFLICT DO NOTHING`, existingID); err != nil {
+		return AnnounceResult{}, false, err
+	}
+	if err := linkSubagentParentTx(ctx, tx, p, existingID); err != nil {
+		return AnnounceResult{}, false, err
+	}
+	err = tx.QueryRow(ctx,
+		`SELECT byte_len, content_sha256 FROM session_raw WHERE session_id = $1`, existingID).
+		Scan(&r.StoredBytes, &r.PrefixSHA256)
+	return r, true, err
 }
 
 func announceIntoProjectTx(ctx context.Context, tx pgx.Tx, p AnnounceParams) (AnnounceResult, error) {
@@ -271,7 +277,10 @@ func announceIntoProjectTx(ctx context.Context, tx pgx.Tx, p AnnounceParams) (An
 		`INSERT INTO sessions (user_id, project_id, agent, source_session_id, machine, cwd, git_branch, terminal, parent_source_id)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		 ON CONFLICT (user_id, agent, source_session_id) DO UPDATE
-		   SET project_id = EXCLUDED.project_id,
+		   SET project_id = CASE
+		         WHEN sessions.project_pinned THEN sessions.project_id
+		         ELSE EXCLUDED.project_id
+		       END,
 		       machine    = EXCLUDED.machine,
 		       cwd        = EXCLUDED.cwd,
 		       git_branch = EXCLUDED.git_branch,

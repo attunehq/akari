@@ -18,7 +18,7 @@ pi, Cursor, and Grok leave on disk, resolves each session's working directory to
 git remote, and streams the raw bytes to the server with a resumable, append-only
 protocol. The server stores those bytes losslessly, parses them into a normalized
 projection (messages, tool calls, token usage, cost from a compiled-in rate
-table), and serves a web UI and a read-only [MCP](./agent-access.md) endpoint over
+table), and serves a web UI and an [MCP](./agent-access.md) endpoint over
 it. **Projects** are keyed by git remote, so the same repository across worktrees
 and machines collapses into one. Because the client keeps no derived state, a
 parser improvement reaches old sessions by re-parsing on the server, with nothing
@@ -62,7 +62,7 @@ The chapters build on each other.
    invites, the three token scopes (`ingest`, `read`, `full`), session visibility,
    and publishing a session or your usage overview.
 6. **[Agent access](./agent-access.md)**: point a coding agent at your history
-   through the read-only Model Context Protocol endpoint. The connect flow and the
+   through the Model Context Protocol endpoint. The connect flow and the
    full tool catalog.
 7. **[Self-hosting](./self-hosting.md)**: run the server. Docker Compose,
    configuration, the database, the first admin account, and reparse.

@@ -4,7 +4,7 @@ akari collects the local session logs of coding agents (Claude Code, Codex, pi,
 Cursor, and Grok) on a self-hosted server: a searchable history of every session across your
 machines, grouped by the git project they ran in, with every token priced. It
 is an explicit client/server split. Thin clients push raw session bytes; the
-server parses, prices, and serves a web UI and a read-only MCP endpoint. Because
+server parses, prices, and serves a web UI and an MCP endpoint. Because
 the client keeps no derived state, a parser improvement reaches old sessions by
 re-parsing on the server, with nothing re-uploaded.
 
