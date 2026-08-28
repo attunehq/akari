@@ -48,10 +48,18 @@ type DatedRate struct {
 // literal rather than a DatedRate slice.
 func flat(r Rate) []DatedRate { return []DatedRate{{Rate: r}} }
 
-// sonnet5Sticker is the date Claude Sonnet 5's introductory $2/$10 promo ends and the
-// $3/$15 sticker rate takes over. It is a UTC-midnight boundary so it aligns with the
-// day buckets the aggregate cache-savings paths price against (see store/analytics_cache.go).
-var sonnet5Sticker = time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+var (
+	// sonnet5Sticker is the date Claude Sonnet 5's introductory $2/$10 promo ends and the
+	// $3/$15 sticker rate takes over. It is a UTC-midnight boundary so it aligns with the
+	// day buckets the aggregate cache-savings paths price against (see store/analytics_cache.go).
+	sonnet5Sticker = time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+
+	// OpenAI reduced GPT-5.6 Luna and Terra pricing on July 30, then reduced Sol
+	// pricing on August 21. These UTC-midnight boundaries follow the effective dates
+	// in OpenAI's API changelog and preserve the launch prices for earlier usage.
+	gpt56LunaTerraReprice = time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC)
+	gpt56SolReprice       = time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+)
 
 // glm53FlashSticker is the first whole UTC day after Z.AI's 50% launch promotion.
 // The provider ends the promotion at 2026-09-10 00:00 UTC+8. Pricing windows align
@@ -128,25 +136,34 @@ var table = map[string][]DatedRate{
 	// OpenAI GPT-5 family as served through Codex.
 	//
 	// GPT-5.6 is a three-tier family: sol is the flagship, terra the mini-class
-	// balance tier, luna the nano-class throughput tier (Codex's models.json and the
-	// docs' latest-model map). Sol reprises gpt-5.5's $5/$30 sticker and terra
-	// reprises gpt-5.4's $2.50/$15; luna is new at $1/$6. Output is a flat 6x input
-	// across all three. "gpt-5.6" is the documented default alias that routes to sol,
-	// so it is priced at sol's rate (a real billable ID, not a prefix catch-all).
+	// balance tier, and luna the nano-class throughput tier. "gpt-5.6" is the
+	// documented default alias that routes to sol, so it carries the same dated rates.
 	// There is no gpt-5.6-pro slug: GPT-5.6 Pro is a Responses reasoning mode on the
 	// base model, so nothing new to price.
 	//
 	// GPT-5.6 is the first OpenAI family to BILL cache writes (creation tokens at
-	// 1.25x input; the $6.25/$3.125/$1.25 column on the pricing page), a real break
-	// from the free-write convention every older OpenAI model follows (see below).
+	// 1.25x input), a real break from the free-write convention every older OpenAI
+	// model follows (see below).
 	// The Codex reducer reads token_count's cache_write_input_tokens (zero on every
 	// rollout observed so far, but live in the schema) and subtracts it from the
 	// combined input alongside the cached reads, so the write premium prices
 	// correctly the moment Codex reports a nonzero count (issue #126).
-	"gpt-5.6":       flat(Rate{Input: 5, Output: 30, CacheWrite: 6.25, CacheRead: 0.50}),
-	"gpt-5.6-sol":   flat(Rate{Input: 5, Output: 30, CacheWrite: 6.25, CacheRead: 0.50}),
-	"gpt-5.6-terra": flat(Rate{Input: 2.50, Output: 15, CacheWrite: 3.125, CacheRead: 0.25}),
-	"gpt-5.6-luna":  flat(Rate{Input: 1, Output: 6, CacheWrite: 1.25, CacheRead: 0.10}),
+	"gpt-5.6": {
+		{Rate: Rate{Input: 5, Output: 30, CacheWrite: 6.25, CacheRead: 0.50}},
+		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, CacheWrite: 5, CacheRead: 0.40}},
+	},
+	"gpt-5.6-sol": {
+		{Rate: Rate{Input: 5, Output: 30, CacheWrite: 6.25, CacheRead: 0.50}},
+		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, CacheWrite: 5, CacheRead: 0.40}},
+	},
+	"gpt-5.6-terra": {
+		{Rate: Rate{Input: 2.50, Output: 15, CacheWrite: 3.125, CacheRead: 0.25}},
+		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 2, Output: 12, CacheWrite: 2.50, CacheRead: 0.20}},
+	},
+	"gpt-5.6-luna": {
+		{Rate: Rate{Input: 1, Output: 6, CacheWrite: 1.25, CacheRead: 0.10}},
+		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 0.20, Output: 1.20, CacheWrite: 0.25, CacheRead: 0.02}},
+	},
 	//
 	// CacheWrite is deliberately left unset (zero) for every OpenAI model before
 	// GPT-5.6, and that is not a missing rate: those models do not bill cache
@@ -180,10 +197,24 @@ var table = map[string][]DatedRate{
 	// The direct OpenAI, OpenCode Zen, and OpenRouter GPT-5.6 routes do not share
 	// Codex's rates. These are the base-context prices; Akari's per-turn usage
 	// projection does not retain the provider's long-context tier decision.
-	"openai/gpt-5.6":                  flat(Rate{Input: 4, Output: 20, Reasoning: 20, CacheWrite: 5, CacheRead: 0.40}),
-	"openai/gpt-5.6-sol":              flat(Rate{Input: 4, Output: 20, Reasoning: 20, CacheWrite: 5, CacheRead: 0.40}),
-	"openai/gpt-5.6-terra":            flat(Rate{Input: 2, Output: 12, Reasoning: 12, CacheWrite: 2.50, CacheRead: 0.20}),
-	"openai/gpt-5.6-luna":             flat(Rate{Input: 0.20, Output: 1.20, Reasoning: 1.20, CacheWrite: 0.25, CacheRead: 0.02}),
+	// The openai/ routes are OpenAI's own list price, so they carry the same dated
+	// windows as the unqualified slugs above rather than a flat current rate.
+	"openai/gpt-5.6": {
+		{Rate: Rate{Input: 5, Output: 30, Reasoning: 30, CacheWrite: 6.25, CacheRead: 0.50}},
+		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, Reasoning: 20, CacheWrite: 5, CacheRead: 0.40}},
+	},
+	"openai/gpt-5.6-sol": {
+		{Rate: Rate{Input: 5, Output: 30, Reasoning: 30, CacheWrite: 6.25, CacheRead: 0.50}},
+		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, Reasoning: 20, CacheWrite: 5, CacheRead: 0.40}},
+	},
+	"openai/gpt-5.6-terra": {
+		{Rate: Rate{Input: 2.50, Output: 15, Reasoning: 15, CacheWrite: 3.125, CacheRead: 0.25}},
+		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 2, Output: 12, Reasoning: 12, CacheWrite: 2.50, CacheRead: 0.20}},
+	},
+	"openai/gpt-5.6-luna": {
+		{Rate: Rate{Input: 1, Output: 6, Reasoning: 6, CacheWrite: 1.25, CacheRead: 0.10}},
+		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 0.20, Output: 1.20, Reasoning: 1.20, CacheWrite: 0.25, CacheRead: 0.02}},
+	},
 	"opencode/gpt-5.6-sol":            flat(Rate{Input: 2, Output: 10, Reasoning: 10, CacheWrite: 2.50, CacheRead: 0.20}),
 	"opencode/gpt-5.6-terra":          flat(Rate{Input: 2.50, Output: 15, Reasoning: 15, CacheWrite: 3.125, CacheRead: 0.25}),
 	"opencode/gpt-5.6-luna":           flat(Rate{Input: 0.20, Output: 1.20, Reasoning: 1.20, CacheWrite: 0.25, CacheRead: 0.02}),

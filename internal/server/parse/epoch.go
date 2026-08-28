@@ -316,4 +316,9 @@ package parse
 // GLM 5.3, GLM 5.3 Flash, DeepSeek V4, Kimi K3, MiniMax M2.7, Gemini 3.7 Flash,
 // and Qwen3.8 routes. pi cache reads and writes now reach pricing. OpenCode's
 // separately reported reasoning tokens now price at each route's reasoning rate.
-const Epoch = 26
+//
+// Epoch 26 -> 27: apply OpenAI's July 30 GPT-5.6 Luna and Terra price reductions
+// and its August 21 Sol price reduction. Date-effective windows preserve launch
+// pricing for earlier usage. Rebuilding the corpus re-prices usage events and
+// refreshes every derived cost rollup.
+const Epoch = 27
