@@ -175,10 +175,10 @@ func sentinelBytes(sha string, n int, media, filePath, detail string) []byte {
 
 // filePathKeys are the top-level input keys that name the file a tool call
 // operates on, in priority order: "file_path" is what Claude, Codex, and pi
-// write; "path" is Cursor's spelling. Every reducer's FilePath projection and
+// write; "path" is Cursor's spelling; "filePath" is OpenCode's. Every reducer's FilePath projection and
 // both sentinel writers read them through this one list so a lifted line and a
 // raw line always project the same path.
-var filePathKeys = []string{"file_path", "path"}
+var filePathKeys = []string{"file_path", "path", "filePath"}
 
 // sentinelFilePath decides what file_path a body's sentinel carries: the top-level
 // file-path string of a JSON tool input (see filePathKeys), or "" for everything
@@ -354,6 +354,8 @@ func toolBodyFields(agent Agent, line []byte) []bodyField {
 		return cursorBodyFields(e)
 	case AgentGrok:
 		return grokBodyFields(e)
+	case AgentOpenCode:
+		return opencodeBodyFields(e)
 	default:
 		return nil
 	}

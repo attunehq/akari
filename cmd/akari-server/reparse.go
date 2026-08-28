@@ -21,7 +21,7 @@ import (
 // no background sweep) attached.
 func runReparse(args []string) error {
 	fs := flag.NewFlagSet("reparse", flag.ContinueOnError)
-	agent := fs.String("agent", "", "limit to one agent (claude|codex|pi|cursor|grok); empty means all")
+	agent := fs.String("agent", "", "limit to one agent (claude|codex|pi|cursor|grok|opencode); empty means all")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

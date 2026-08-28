@@ -219,7 +219,7 @@ The keys:
   overrides it per run.
 - **`extra_roots`** (optional): additional discovery roots, each an
   `{ agent, path, follow_root_link }` entry where `agent` is `claude`, `codex`,
-  `pi`, `cursor`, or `grok` and `follow_root_link` (optional, default `false`) opts the root into
+  `pi`, `cursor`, `grok`, or `opencode` and `follow_root_link` (optional, default `false`) opts the root into
   resolving a symlink or, on Windows, a directory junction at `path` itself
   before walking it; see [Discovery](#discovery) below for why that is opt-in.
   Use these when your sessions live somewhere other than the standard location.
@@ -265,6 +265,7 @@ plus any `extra_roots` you configured:
 | pi | `~/.pi/agent/sessions` | `PI_DIR` (sessions at `$PI_DIR/agent/sessions`) |
 | Cursor | `~/.cursor/projects` (per-session transcripts under `<project>/agent-transcripts`) | none |
 | Grok | `~/.grok/sessions` (one directory per session; `updates.jsonl` is the record) | `GROK_HOME` (sessions at `$GROK_HOME/sessions`) |
+| OpenCode | `~/.local/share/opencode` (`opencode.db`; the client materializes JSONL) | `OPENCODE_DATA_DIR` (data dir) or `OPENCODE_DB` (database file). Uses `$XDG_DATA_HOME/opencode` when `XDG_DATA_HOME` is set |
 
 Missing built-in roots are skipped without error because an unused agent normally
 has no session directory. A missing path supplied through an agent override or

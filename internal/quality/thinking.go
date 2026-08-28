@@ -62,17 +62,18 @@ const (
 // estimated token count. The factors differ because the trace is a different encoding per
 // agent: Claude ships an encrypted "signature" (~10.7 bytes per plaintext token, measured
 // against the blocks that kept their plaintext), Codex an "encrypted_content" blob (~14.2
-// bytes per reasoning token, measured against the exact counts it also reports), and pi
-// and Grok keep plaintext (~4 bytes per token, the usual English ratio; Grok logs summary
-// thoughts). Codex's and Grok's exact per-turn counts are used directly where present, so
-// their factors only cover a turn that somehow logged a trace but no token count. Cursor
-// has no entry on purpose: its transcript never separates reasoning from answer text, so
-// a Cursor turn records no thinking bytes for a divisor to act on.
+// bytes per reasoning token, measured against the exact counts it also reports), and pi,
+// Grok, and OpenCode keep plaintext (~4 bytes per token, the usual English ratio). Codex's,
+// Grok's, and OpenCode's exact per-turn counts are used directly where present, so their
+// factors only cover a turn that somehow logged a trace but no token count. Cursor has no
+// entry on purpose: its transcript never separates reasoning from answer text, so a Cursor
+// turn records no thinking bytes for a divisor to act on.
 var thinkingBytesPerToken = map[string]float64{
-	"claude": 10.7,
-	"codex":  14.2,
-	"pi":     4.0,
-	"grok":   4.0,
+	"claude":   10.7,
+	"codex":    14.2,
+	"pi":       4.0,
+	"grok":     4.0,
+	"opencode": 4.0,
 }
 
 // ThinkingCalibratedAgents returns the agents with a measured bytes-per-token

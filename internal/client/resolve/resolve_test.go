@@ -45,6 +45,8 @@ func TestPeekHeader(t *testing.T) {
 		`{"type":"session_meta","payload":{"id":"x-9","cwd":"/home/grace/api","git":{"branch":"dev"}}}`+"\n")
 	pi := writeFile(t, dir, "pi.jsonl",
 		`{"type":"session","id":"p-7","cwd":"/home/grace/proj"}`+"\n")
+	opencode := writeFile(t, dir, "ses_1.jsonl",
+		`{"type":"session","id":"ses_1","directory":"/home/grace/app","branch":"main"}`+"\n")
 
 	cases := []struct {
 		agent, path                 string
@@ -53,6 +55,7 @@ func TestPeekHeader(t *testing.T) {
 		{"claude", claude, "/home/grace/app", "main", "c-123"},
 		{"codex", codex, "/home/grace/api", "dev", "x-9"},
 		{"pi", pi, "/home/grace/proj", "", "p-7"},
+		{"opencode", opencode, "/home/grace/app", "main", "ses_1"},
 	}
 	for _, c := range cases {
 		h, err := PeekHeader(discover.File{Agent: c.agent, Root: dir, Path: c.path})

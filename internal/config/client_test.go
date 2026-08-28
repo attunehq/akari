@@ -211,7 +211,7 @@ path = "/sessions"
 	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := LoadClient(path); err == nil || !strings.Contains(err.Error(), "must be claude, codex, pi, cursor, or grok") {
+	if _, err := LoadClient(path); err == nil || !strings.Contains(err.Error(), "must be claude, codex, pi, cursor, grok, or opencode") {
 		t.Fatalf("LoadClient invalid agent error = %v", err)
 	}
 }

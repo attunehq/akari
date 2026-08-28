@@ -299,6 +299,20 @@ func (w *Watcher) handleEvent(fsw *fsnotify.Watcher, ev fsnotify.Event, known ma
 	if ev.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Rename) == 0 {
 		return
 	}
+	if w.isOpenCodeStoreEvent(ev.Name) {
+		_ = fsw.Add(ev.Name)
+		deadline := time.Now().Add(w.opt.Debounce)
+		for _, f := range w.discover() {
+			pending[f] = deadline
+			if m, ok := statMeta(f.Path); ok {
+				known[f] = m
+			}
+		}
+		return
+	}
+	if w.withinOpenCodeRoot(ev.Name) {
+		return
+	}
 	if info, err := os.Lstat(ev.Name); err == nil && info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
 		if err := w.addRecursive(fsw, discover.Root{Dir: ev.Name}); err != nil {
 			w.opt.Logf("watch directory %s: %v", ev.Name, err)
@@ -437,6 +451,9 @@ func (w *Watcher) addRecursive(fsw *fsnotify.Watcher, root discover.Root) error 
 		w.opt.Logf("%s", notice)
 		return nil
 	}
+	if root.Agent == "opencode" {
+		return w.addOpenCodeStore(fsw, dir, root)
+	}
 	var problems []error
 	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -459,6 +476,67 @@ func (w *Watcher) addRecursive(fsw *fsnotify.Watcher, root discover.Root) error 
 		problems = append(problems, err)
 	}
 	return errors.Join(problems...)
+}
+
+func (w *Watcher) addOpenCodeStore(fsw *fsnotify.Watcher, dir string, root discover.Root) error {
+	if err := fsw.Add(dir); err != nil {
+		return fmt.Errorf("add %s: %w", dir, err)
+	}
+	name := root.SessionDB
+	if name == "" {
+		name = "opencode.db"
+	}
+	var problems []error
+	for _, base := range []string{name, name + "-wal", name + "-shm"} {
+		p := filepath.Join(dir, base)
+		if _, err := os.Lstat(p); err != nil {
+			continue
+		}
+		if err := fsw.Add(p); err != nil {
+			problems = append(problems, fmt.Errorf("add %s: %w", p, err))
+		}
+	}
+	return errors.Join(problems...)
+}
+
+func (w *Watcher) isOpenCodeStoreEvent(path string) bool {
+	base := filepath.Base(path)
+	for _, r := range w.roots {
+		if r.Agent != "opencode" {
+			continue
+		}
+		dir, notice, err := discover.ResolveRoot(r)
+		if err != nil || notice != "" {
+			continue
+		}
+		if !within(dir, path) {
+			continue
+		}
+		name := r.SessionDB
+		if name == "" {
+			name = "opencode.db"
+		}
+		if base == name || base == name+"-wal" || base == name+"-shm" {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *Watcher) withinOpenCodeRoot(path string) bool {
+	for _, r := range w.roots {
+		if r.Agent != "opencode" {
+			continue
+		}
+		dir, notice, err := discover.ResolveRoot(r)
+		if err != nil || notice != "" {
+			continue
+		}
+		if within(dir, path) {
+			return true
+		}
+	}
+	return false
 }
 
 func statMeta(path string) (fileMeta, bool) {

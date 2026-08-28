@@ -72,7 +72,7 @@ func (e Excluder) ExcludedDir(path string) bool {
 // workflow files (which all carry their parent's sessionId inside) avoid
 // colliding on a single source id.
 type File struct {
-	Agent string // claude | codex | pi
+	Agent string // claude | codex | pi | cursor | grok | opencode
 	Root  string
 	Path  string
 }
@@ -90,6 +90,10 @@ type Root struct {
 	// The no-follow policy still applies to everything found inside the walk
 	// regardless of this setting; it only ever affects the root path itself.
 	FollowRootLink bool
+	// SessionDB is the SQLite filename inside Dir for an OpenCode root. Empty
+	// means opencode.db, the default. OPENCODE_DB sets it when the database is
+	// not named opencode.db.
+	SessionDB string
 }
 
 // Roots builds the directories to scan for each agent. It honors each agent's own
@@ -130,6 +134,16 @@ func Roots(cfg config.Client, env func(string) string, home string) []Root {
 		roots = append(roots, Root{Agent: "grok", Dir: filepath.Join(home, ".grok", "sessions"), Optional: true})
 	}
 
+	if db := env("OPENCODE_DB"); db != "" {
+		roots = append(roots, Root{Agent: "opencode", Dir: filepath.Dir(db), SessionDB: filepath.Base(db)})
+	} else if dir := env("OPENCODE_DATA_DIR"); dir != "" {
+		roots = append(roots, Root{Agent: "opencode", Dir: dir})
+	} else if xdg := env("XDG_DATA_HOME"); xdg != "" {
+		roots = append(roots, Root{Agent: "opencode", Dir: filepath.Join(xdg, "opencode"), Optional: true})
+	} else {
+		roots = append(roots, Root{Agent: "opencode", Dir: filepath.Join(home, ".local", "share", "opencode"), Optional: true})
+	}
+
 	for _, r := range cfg.ExtraRoots {
 		roots = append(roots, Root{Agent: r.Agent, Dir: r.Path, FollowRootLink: r.FollowRootLink})
 	}
@@ -167,7 +181,10 @@ func ErrorCount(err error) int {
 // Matches reports whether a filename is a session file for the given agent.
 // Codex files are named rollout-*.jsonl; Grok keeps several JSONL files per
 // session directory, of which updates.jsonl is the session record; Claude, pi,
-// and Cursor use any *.jsonl. This is only a name gate: every agent's files are
+// Cursor, and materialized OpenCode transcripts use any *.jsonl. OpenCode's
+// on-disk source is SQLite, so Discover does not walk its data directory for
+// JSONL; it queries the database and writes cache files. This is only a name
+// gate: every agent's files are
 // further validated by a positive session-header signature at resolve time (see
 // resolve.sessionSignature), which is what keeps unrelated *.jsonl under a
 // custom extra_root from being ingested.
@@ -214,6 +231,20 @@ func Discover(roots []Root, ex Excluder) (files []File, notices []string, err er
 		}
 		if notice != "" {
 			notices = append(notices, notice)
+			continue
+		}
+		if root.Agent == "opencode" {
+			found, oerr := discoverOpenCode(root, walkDir, ex)
+			for _, f := range found {
+				if seen[f.Path] {
+					continue
+				}
+				seen[f.Path] = true
+				out = append(out, f)
+			}
+			if oerr != nil {
+				problems = append(problems, oerr)
+			}
 			continue
 		}
 		werr := filepath.WalkDir(walkDir, func(path string, d fs.DirEntry, err error) error {

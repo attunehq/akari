@@ -19,10 +19,11 @@ does not assume the reader has seen any other tool.
 ## Goals
 
 - Back up agent sessions (full text, plus binary attachments where present) from
-  Claude Code, Codex, pi, Cursor (the cursor-agent CLI), and Grok (the Grok
-  CLI). Cursor is transcript-only: its CLI persists no model, token usage, tool
-  results, or reasoning, so its sessions parse without a usage ledger and stay
-  outside the money and thinking panels.
+  Claude Code, Codex, pi, Cursor (the cursor-agent CLI), Grok (the Grok CLI),
+  and OpenCode. Cursor is transcript-only: its CLI persists no model, token
+  usage, tool results, or reasoning, so its sessions parse without a usage ledger
+  and stay outside the money and thinking panels. OpenCode stores sessions in
+  SQLite; the client materializes JSONL from that database before upload.
 - Normalize sessions to a project by **git remote**, so the same repository is
   one project regardless of local path, branch, or worktree, and regardless of
   which machine or user it came from.
@@ -54,9 +55,10 @@ does not assume the reader has seen any other tool.
 ```
   developer machine (xN)                         server (Linux)
   ----------------------                         --------------
-  ~/.claude/projects/*.jsonl  ┐
-  ~/.codex/sessions/*.jsonl   ├─ discover ─┐
-  ~/.pi/agent/sessions/*.jsonl┘            │
+  ~/.claude/projects/*.jsonl     ┐
+  ~/.codex/sessions/*.jsonl      ├─ discover ─┐
+  ~/.pi/agent/sessions/*.jsonl   │            │
+  ~/.local/share/opencode/*.db   ┘            │
                                            ▼
                                     resolve git remote
                                     (cwd -> repo -> remote)
@@ -704,6 +706,12 @@ Per-agent specifics the parser must handle:
   input and `cache_read` (cached) before storing.
 - **pi** (`~/.pi/agent/sessions/<encoded-cwd>/<id>.jsonl`): first line is a
   `type: "session"` header carrying `cwd`; subsequent lines are messages.
+- **OpenCode** (`~/.local/share/opencode/opencode.db`): SQLite `session`,
+  `message`, and `part` tables. The client materializes one JSONL file per
+  session (a `type: "session"` header, then one `type: "message"` line per turn
+  with its parts nested). Subagent rows set `parent_id` on the child; each
+  session keeps its own token ledger. Token usage is per assistant message
+  (`data.tokens`); reasoning may be plaintext, an encrypted xAI blob, or both.
 
 Token usage is normalized across agents into one shape: input, output,
 cache-write (cache creation), cache-read, reasoning.
@@ -1278,6 +1286,8 @@ variables of its own (see Config):
 - Cursor: `~/.cursor/projects/*/agent-transcripts/*/*.jsonl` (no documented
   override).
 - Grok: `~/.grok/sessions/<url-encoded cwd>/*/updates.jsonl`, `GROK_HOME`.
+- OpenCode: `~/.local/share/opencode/opencode.db`, `OPENCODE_DATA_DIR` or
+  `OPENCODE_DB` (and `XDG_DATA_HOME/opencode` when that is set).
 
 Extra or non-standard roots are added through the config file, not through new
 environment variables.
@@ -1593,7 +1603,7 @@ cmd/
   akari/            # client binary
   akari-server/     # server binary (plus sweep, reparse, dev-seed subcommands)
 internal/
-  parser/           # claude, codex, pi, cursor, grok parsers + normalized types (shared)
+  parser/           # claude, codex, pi, cursor, grok, opencode parsers + normalized types (shared)
   casenc/           # client-side CAS body encoder (zstd policy, deterministic)
   gitremote/        # remote URL canonicalization
   pricing/          # compiled-in rate table + cost computation

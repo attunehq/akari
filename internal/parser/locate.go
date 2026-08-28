@@ -76,6 +76,8 @@ func LocateToolBodies(ctx context.Context, agent Agent, f io.ReaderAt, lineOff, 
 		return locateCursor(src, emit)
 	case AgentGrok:
 		return locateGrok(src, emit)
+	case AgentOpenCode:
+		return locateOpenCode(src, emit)
 	default:
 		return nil
 	}

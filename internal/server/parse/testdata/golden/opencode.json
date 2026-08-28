@@ -1,0 +1,196 @@
+{
+  "Messages": [
+    {
+      "Ordinal": 0,
+      "Role": "user",
+      "Content": "Fix the login bug",
+      "ThinkingText": "",
+      "ThinkingBytes": 0,
+      "Model": "",
+      "HasThinking": false,
+      "HasToolUse": false,
+      "Timestamp": "2024-03-01T12:00:01Z"
+    },
+    {
+      "Ordinal": 1,
+      "Role": "assistant",
+      "Content": "Looking at the auth module",
+      "ThinkingText": "Consider the auth module",
+      "ThinkingBytes": 24,
+      "Model": "grok-4.6",
+      "HasThinking": true,
+      "HasToolUse": true,
+      "Timestamp": "2024-03-01T12:00:02Z"
+    },
+    {
+      "Ordinal": 2,
+      "Role": "user",
+      "Content": "Run the tests",
+      "ThinkingText": "",
+      "ThinkingBytes": 0,
+      "Model": "",
+      "HasThinking": false,
+      "HasToolUse": false,
+      "Timestamp": "2024-03-01T12:01:40Z"
+    },
+    {
+      "Ordinal": 3,
+      "Role": "assistant",
+      "Content": "The build fails before the tests run.",
+      "ThinkingText": "",
+      "ThinkingBytes": 0,
+      "Model": "grok-4.6",
+      "HasThinking": false,
+      "HasToolUse": true,
+      "Timestamp": "2024-03-01T12:01:41Z"
+    }
+  ],
+  "ToolCalls": [
+    {
+      "MessageOrdinal": 1,
+      "CallIndex": 0,
+      "ToolName": "read",
+      "Category": "read",
+      "FilePath": "src/auth.ts",
+      "Detail": "",
+      "InputBody": "{\"filePath\":\"src/auth.ts\"}",
+      "InputSHA256": "",
+      "InputBytes": 26,
+      "InputMediaType": "application/json",
+      "CallUID": "call-1",
+      "AttributionAgent": "",
+      "AttributionSkill": "",
+      "AttributionPlugin": ""
+    },
+    {
+      "MessageOrdinal": 3,
+      "CallIndex": 0,
+      "ToolName": "bash",
+      "Category": "bash",
+      "FilePath": "",
+      "Detail": "go test ./...",
+      "InputBody": "{\"command\":\"go test ./...\"}",
+      "InputSHA256": "",
+      "InputBytes": 27,
+      "InputMediaType": "application/json",
+      "CallUID": "call-2",
+      "AttributionAgent": "",
+      "AttributionSkill": "",
+      "AttributionPlugin": ""
+    },
+    {
+      "MessageOrdinal": 3,
+      "CallIndex": 1,
+      "ToolName": "task",
+      "Category": "",
+      "FilePath": "",
+      "Detail": "Map the auth package",
+      "InputBody": "{\"description\":\"Map the auth package\",\"subagent_type\":\"explore\",\"prompt\":\"map it\"}",
+      "InputSHA256": "",
+      "InputBytes": 82,
+      "InputMediaType": "application/json",
+      "CallUID": "call-task",
+      "AttributionAgent": "",
+      "AttributionSkill": "",
+      "AttributionPlugin": ""
+    }
+  ],
+  "ToolResults": [
+    {
+      "CallUID": "call-1",
+      "Body": "export function login() {}",
+      "BodySHA256": "",
+      "Bytes": 26,
+      "MediaType": "text/plain",
+      "Status": "ok",
+      "StructBody": "",
+      "StructSHA256": "",
+      "StructBytes": 0,
+      "StructMediaType": ""
+    },
+    {
+      "CallUID": "call-2",
+      "Body": "go: build failed",
+      "BodySHA256": "",
+      "Bytes": 16,
+      "MediaType": "text/plain",
+      "Status": "error",
+      "StructBody": "",
+      "StructSHA256": "",
+      "StructBytes": 0,
+      "StructMediaType": ""
+    },
+    {
+      "CallUID": "call-task",
+      "Body": "auth package mapped",
+      "BodySHA256": "",
+      "Bytes": 19,
+      "MediaType": "text/plain",
+      "Status": "ok",
+      "StructBody": "",
+      "StructSHA256": "",
+      "StructBytes": 0,
+      "StructMediaType": ""
+    }
+  ],
+  "Usage": [
+    {
+      "MessageOrdinal": 1,
+      "Model": "grok-4.6",
+      "Input": 100,
+      "Output": 50,
+      "CacheWrite": 10,
+      "CacheRead": 30,
+      "Reasoning": 20,
+      "CostUSD": 0.000515,
+      "OccurredAt": "2024-03-01T12:00:02Z",
+      "DedupKey": "msg_a1",
+      "SourceOffset": 510,
+      "SourceIndex": 0
+    },
+    {
+      "MessageOrdinal": 3,
+      "Model": "grok-4.6",
+      "Input": 80,
+      "Output": 20,
+      "CacheWrite": 0,
+      "CacheRead": 10,
+      "Reasoning": 0,
+      "CostUSD": 0.00028500000000000004,
+      "OccurredAt": "2024-03-01T12:01:41Z",
+      "DedupKey": "msg_a2",
+      "SourceOffset": 1732,
+      "SourceIndex": 0
+    }
+  ],
+  "Attachments": null,
+  "Fallbacks": null,
+  "Events": [
+    {
+      "MessageOrdinal": 3,
+      "Kind": "subagent_activity",
+      "AttrsJSON": "{\"child_session_id\":\"ses_child\",\"description\":\"Map the auth package\",\"state\":\"completed\",\"subagent_type\":\"explore\"}",
+      "OccurredAt": "2024-03-01T12:01:41Z"
+    },
+    {
+      "MessageOrdinal": 3,
+      "Kind": "compaction",
+      "AttrsJSON": "{\"auto\":true,\"tail_start_id\":\"msg_a2\"}",
+      "OccurredAt": "2024-03-01T12:01:41Z"
+    }
+  ],
+  "Identity": {
+    "CustomTitle": "Fix the login bug",
+    "Slug": "silent-tiger",
+    "PermissionMode": "",
+    "ReasoningEffort": "high",
+    "SubagentName": "",
+    "PRNumber": 0,
+    "PRURL": "",
+    "PRRepo": "",
+    "ParentSourceID": "",
+    "ChildSourceIDs": null
+  },
+  "Started": "2024-03-01T12:00:00Z",
+  "Ended": "2024-03-01T12:01:41Z"
+}
