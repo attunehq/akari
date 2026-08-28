@@ -1,8 +1,9 @@
-// Package mcpserver builds the read-only Model Context Protocol surface akari
-// exposes to coding agents. It mirrors what the web UI shows (the overview
-// analytics, the projects index, the session feed, a session's full transcript)
-// and adds the raw underlying data the UI reaches for on demand (tool-call bodies
-// from the CAS, and the lossless bytes a session was ingested from).
+// Package mcpserver builds the Model Context Protocol surface akari exposes to
+// coding agents. It mirrors what the web UI shows (the overview analytics, the
+// projects index, the session feed, a session's full transcript) and adds the
+// raw underlying data the UI reaches for on demand (tool-call bodies from the
+// CAS, and the lossless bytes a session was ingested from). One write tool,
+// assign_session_project, pins an orphaned session onto a known project.
 //
 // The server is transport-agnostic: this package only registers tools against an
 // *mcp.Server. The HTTP wiring (the Streamable-HTTP handler and the OAuth bearer
@@ -18,7 +19,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// New builds an MCP server with every akari read tool registered against st. The
+// New builds an MCP server with every akari tool registered against st. The
 // returned server is safe to hand to a Streamable-HTTP handler for every session;
 // the per-request user is carried on each call's bearer token, not on the server.
 type Options struct {
@@ -45,7 +46,7 @@ const instructions = `akari stores the session logs of coding agents (Claude Cod
 
 Start with 'overview' for fleet-wide usage, or 'list_projects' to see projects ranked by recent activity. 'list_sessions' is the cross-project feed with agent/project/user/machine filters; pass a filter value verbatim from the facet counts the same tool returns. 'get_session' pages one session's transcript by encoded response bytes: messages, thinking, and tool-call metadata. Follow next_after while has_more is true. An oversized message field carries a preview and an authenticated resource link for the full text. Tool inputs and results are stored by content hash, not inline; fetch a body with 'read_tool_body' using the sha256 from a tool call. 'get_session_raw' returns the lossless bytes the session was ingested from, behind the parsed projection.
 
-Everything is read-only. You see every internal session, the same surface a logged-in user sees.`
+Most tools are read-only. You see every internal session, the same surface a logged-in user sees. assign_session_project is the exception: it pins an orphaned session onto a project when the worktree is gone but the git project is known. The pin survives reparse and later orphaned announces.`
 
 // callerID returns the authenticated user id carried on the call's bearer token.
 // The HTTP bearer check rejects an unauthenticated request before any tool runs, so

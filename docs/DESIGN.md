@@ -197,6 +197,17 @@ remote rather than sliding it into an orphaned bucket. A given session file live
 on one machine and is pushed by one client, so there is never write contention
 on a single session from multiple clients.
 
+An orphaned session can also be pinned onto a project by hand (or by an agent)
+through `PUT /api/v1/app/sessions/{id}/project` and the MCP tool
+`assign_session_project`. That writes `sessions.project_id` and sets
+`project_pinned`. A projection rebuild never writes those columns, and a later
+announce that still classifies the session as local (the worktree is still gone)
+does not move it. The pin also holds against a later remote announce: the
+assigned project is the association until another assign call changes it. Only
+an orphaned session, or one already pinned, can be assigned; a session that
+resolved to a remote or standalone project while its folder was live is left
+alone.
+
 Sessions can relate to one another. A session records an optional
 `parent_session_id` and a `relationship_type`: `subagent` for an agent run
 spawned by another (for example Claude's runs under `subagents/`), or
@@ -786,6 +797,7 @@ CREATE TABLE sessions (
   git_branch        TEXT NOT NULL DEFAULT '',
   visibility        visibility NOT NULL DEFAULT 'internal',
   public_id         TEXT UNIQUE,          -- unguessable; set on publish, null otherwise
+  project_pinned    BOOLEAN NOT NULL DEFAULT FALSE,  -- manual project assign; announce must not move it
   started_at        TIMESTAMPTZ,
   ended_at          TIMESTAMPTZ,
   message_count        INT NOT NULL DEFAULT 0,
@@ -1235,8 +1247,10 @@ so coding agents can read the corpus without the UI. Two decisions shape it:
   authorize and token endpoints. The authorize endpoint recognizes the `web_sessions`
   cookie a user already holds, so consent is one click; PKCE (S256) is mandatory,
   codes are single-use, and access tokens are short-lived with single-use refresh
-  rotation. Tokens are minted read-only (`read` scope): an MCP credential can read
-  everything a logged-in user sees and publish, delete, or mint nothing. New tables:
+  rotation. Tokens are minted with the `read` scope: an MCP credential can read
+  everything a logged-in user sees, and the one write it may perform is pinning an
+  orphaned session onto a project (`assign_session_project`). It cannot publish,
+  delete, or mint tokens. New tables:
   `oauth_clients`, `oauth_auth_codes`, `oauth_tokens`, every secret stored only as
   its sha256, matching how API tokens, sessions, and invites are already handled. A
   user disconnects a client from the account page, revoking its tokens at once.

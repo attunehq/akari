@@ -268,6 +268,7 @@ func registerTools(s *mcp.Server, st *store.Store, response responder) {
 		out.Encoding, out.Content = encodeBytes(buf.Bytes())
 		return jsonResult(response, fmt.Sprintf("get_session_raw: %d of %d bytes returned. Full data is in structuredContent.", written, total), out, nil)
 	})
+	registerAssignSessionProject(s, st, response)
 }
 
 // encodeCursor renders a feed cursor as an opaque, URL-safe token. nil (the last

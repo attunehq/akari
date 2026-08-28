@@ -44,7 +44,10 @@ three kinds:
   project identifying the machine and folder. A live worktree records its main
   worktree root so the server can still fold sibling worktrees together.
 - **Orphaned**: the working directory is unknown or no longer exists on disk. The
-  session is kept, keyed to its last-known local location.
+  session is kept, keyed to its last-known local location. An owner or admin can
+  pin it onto a known project (`PUT /api/v1/app/sessions/{id}/project`, or the
+  MCP tool `assign_session_project`); that assignment survives a reparse and a
+  later orphaned announce.
 
 Standalone and orphaned projects are grouped and labeled apart from git-remote
 projects in the UI, so a folder that never had a remote does not masquerade as a

@@ -59,7 +59,7 @@ What it is:
 - **A backup and a ledger.** Sessions are stored losslessly and priced, so the
   record survives a wiped laptop and you can see where tokens and cost go.
 - **A reading surface for humans and agents alike.** The same history is a web UI
-  you browse and a read-only [MCP](./agent-access.md) endpoint an agent queries.
+  you browse and an [MCP](./agent-access.md) endpoint an agent queries.
 
 What it is not:
 
@@ -70,8 +70,8 @@ What it is not:
 - **Not multi-tenant.** One server is one team's shared history. Isolation between
   teams is one server per team, not per-user partitions inside one.
 - **Not an agent runner.** akari never runs an agent or writes to your code. It
-  reads the logs your agents already produce. Its MCP surface is read-only by
-  construction.
+  reads the logs your agents already produce. An MCP credential cannot publish,
+  delete, or mint tokens.
 
 The practical shape of sharing and access is [Accounts and
 sharing](./accounts-and-sharing.md).

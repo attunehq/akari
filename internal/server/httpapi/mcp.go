@@ -24,7 +24,7 @@ import (
 const mcpSessionTimeout = 30 * time.Minute
 
 // newMCPHandler builds the Streamable-HTTP handler for the remote MCP server. One
-// MCP server instance, holding the read tools, serves every session; the calling
+// MCP server instance, holding the tools, serves every session; the calling
 // user is carried per request on the bearer token, not on the server.
 //
 // DisableLocalhostProtection is deliberate. The go-sdk auto-enables a DNS-rebinding
