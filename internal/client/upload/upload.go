@@ -885,7 +885,7 @@ func (c *Client) chunk(ctx context.Context, sessionID, offset int64, data []byte
 		}
 		return chunkResult{storedBytes: r.StoredBytes, conflict: true}, nil
 	default:
-		return chunkResult{}, fmt.Errorf("chunk: server returned %d: %s", resp.StatusCode, strings.TrimSpace(string(payload)))
+		return chunkResult{}, newResponseStatusError("chunk", resp.StatusCode, payload)
 	}
 }
 
@@ -943,7 +943,7 @@ func (c *Client) putBody(ctx context.Context, enc *casenc.Encoder, sha, contentT
 		return fmt.Errorf("read upload response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("upload blob %s: server returned %d: %s", sha, resp.StatusCode, strings.TrimSpace(string(payload)))
+		return newResponseStatusError("upload blob "+sha, resp.StatusCode, payload)
 	}
 	return nil
 }
@@ -981,7 +981,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, out any)
 		return fmt.Errorf("read %s response: %w", path, err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("%s %s: server returned %d: %s", method, path, resp.StatusCode, strings.TrimSpace(string(payload)))
+		return newResponseStatusError(method+" "+path, resp.StatusCode, payload)
 	}
 	if out != nil {
 		if err := json.Unmarshal(payload, out); err != nil {

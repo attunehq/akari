@@ -10,17 +10,18 @@ import "time"
 type Agent string
 
 const (
-	AgentClaude Agent = "claude"
-	AgentCodex  Agent = "codex"
-	AgentPi     Agent = "pi"
-	AgentCursor Agent = "cursor"
-	AgentGrok   Agent = "grok"
+	AgentClaude   Agent = "claude"
+	AgentCodex    Agent = "codex"
+	AgentPi       Agent = "pi"
+	AgentCursor   Agent = "cursor"
+	AgentGrok     Agent = "grok"
+	AgentOpenCode Agent = "opencode"
 )
 
 // Agents lists every supported format. Validation outside the parser (the announce
 // endpoint) derives from it, so this enum stays the one owner of "which agent
 // formats exist" and a format the parser handles is never rejected at announce.
-var Agents = []Agent{AgentClaude, AgentCodex, AgentPi, AgentCursor, AgentGrok}
+var Agents = []Agent{AgentClaude, AgentCodex, AgentPi, AgentCursor, AgentGrok, AgentOpenCode}
 
 // Session is the parsed projection of one session file.
 type Session struct {

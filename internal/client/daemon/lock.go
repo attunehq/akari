@@ -1,4 +1,4 @@
-// Package daemon runs the watch loop as a background process and enforces a
+// Package daemon runs a background process and enforces a
 // single running instance per machine. The lock is a real OS advisory file lock
 // (flock on unix, LockFileEx on Windows) held for the process lifetime, so it is
 // released automatically if the process dies and is immune to pid reuse. The

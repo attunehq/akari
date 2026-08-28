@@ -19,10 +19,11 @@ does not assume the reader has seen any other tool.
 ## Goals
 
 - Back up agent sessions (full text, plus binary attachments where present) from
-  Claude Code, Codex, pi, Cursor (the cursor-agent CLI), and Grok (the Grok
-  CLI). Cursor is transcript-only: its CLI persists no model, token usage, tool
-  results, or reasoning, so its sessions parse without a usage ledger and stay
-  outside the money and thinking panels.
+  Claude Code, Codex, pi, Cursor (the cursor-agent CLI), Grok (the Grok CLI),
+  and OpenCode. Cursor is transcript-only: its CLI persists no model, token
+  usage, tool results, or reasoning, so its sessions parse without a usage ledger
+  and stay outside the money and thinking panels. OpenCode stores sessions in
+  SQLite; the client materializes JSONL from that database before upload.
 - Normalize sessions to a project by **git remote**, so the same repository is
   one project regardless of local path, branch, or worktree, and regardless of
   which machine or user it came from.
@@ -54,9 +55,10 @@ does not assume the reader has seen any other tool.
 ```
   developer machine (xN)                         server (Linux)
   ----------------------                         --------------
-  ~/.claude/projects/*.jsonl  ┐
-  ~/.codex/sessions/*.jsonl   ├─ discover ─┐
-  ~/.pi/agent/sessions/*.jsonl┘            │
+  ~/.claude/projects/*.jsonl     ┐
+  ~/.codex/sessions/*.jsonl      ├─ discover ─┐
+  ~/.pi/agent/sessions/*.jsonl   │            │
+  ~/.local/share/opencode/*.db   ┘            │
                                            ▼
                                     resolve git remote
                                     (cwd -> repo -> remote)
@@ -704,6 +706,12 @@ Per-agent specifics the parser must handle:
   input and `cache_read` (cached) before storing.
 - **pi** (`~/.pi/agent/sessions/<encoded-cwd>/<id>.jsonl`): first line is a
   `type: "session"` header carrying `cwd`; subsequent lines are messages.
+- **OpenCode** (`~/.local/share/opencode/opencode.db`): SQLite `session`,
+  `message`, and `part` tables. The client materializes one JSONL file per
+  session (a `type: "session"` header, then one `type: "message"` line per turn
+  with its parts nested). Subagent rows set `parent_id` on the child; each
+  session keeps its own token ledger. Token usage is per assistant message
+  (`data.tokens`); reasoning may be plaintext, an encrypted xAI blob, or both.
 
 Token usage is normalized across agents into one shape: input, output,
 cache-write (cache creation), cache-read, reasoning.
@@ -1278,6 +1286,8 @@ variables of its own (see Config):
 - Cursor: `~/.cursor/projects/*/agent-transcripts/*/*.jsonl` (no documented
   override).
 - Grok: `~/.grok/sessions/<url-encoded cwd>/*/updates.jsonl`, `GROK_HOME`.
+- OpenCode: `~/.local/share/opencode/opencode.db`, `OPENCODE_DATA_DIR` or
+  `OPENCODE_DB` (and `XDG_DATA_HOME/opencode` when that is set).
 
 Extra or non-standard roots are added through the config file, not through new
 environment variables.
@@ -1359,10 +1369,9 @@ Drive the ingest protocol above, statelessly, once per file each time it is
 visited:
 
 - Announce the session, learn `stored_bytes` and the server's `prefix_sha256`.
-- Verify: confirm the local file's first `stored_bytes` bytes hash to
-  `prefix_sha256`, advancing the cached digest over only the newly stored bytes
-  rather than re-hashing the whole prefix. On mismatch (or a local file shorter
-  than `stored_bytes`), call reset and re-upload from zero; otherwise resume at
+- Verify: re-derive the transformed local prefix represented by `stored_bytes`
+  and compare it with `prefix_sha256`. On mismatch (or a local file shorter than
+  `stored_bytes`), call reset and re-upload from zero; otherwise resume at
   `stored_bytes`.
 - Stream the gap in boundary-aligned chunks (~1 MiB, growing to fit one oversized
   message up to the cap), scanning only newly appended bytes for the next
@@ -1378,11 +1387,11 @@ the connection stalls. Caller cancellation still interrupts every phase. The
 small JSON control requests (announce, existence checks, reset, and finalize)
 keep a 60-second total deadline in addition to the idle window.
 
-The client persists nothing to disk; its per-file cursor and digest live only in
-memory. If the local file already matches the server (size equals `stored_bytes`,
-hashes agree), the announce is the only call and no bytes move. Restarts, crashes,
-and a fresh machine all recover by simply re-announcing, paying one re-hash to
-rebuild the cache; divergence is always decided by the server's `prefix_sha256`.
+The client persists nothing to disk; its per-file cursor and pending tail live
+only in memory. Every visit re-derives the accepted prefix so an in-place rewrite
+cannot hide behind unchanged metadata. If the prefix matches and no tail was
+appended, no bytes move. Restarts, crashes, and a fresh machine recover by
+re-announcing; divergence is always decided by the server's `prefix_sha256`.
 
 ### Watch mode (default)
 
@@ -1394,9 +1403,12 @@ rebuild the cache; divergence is always decided by the server's `prefix_sha256`.
 - Debounce events (about 500 ms) and coalesce bursts, then upload the changed
   files.
 - Fall back to periodic polling (a few seconds) for roots the OS watcher cannot
-  cover (resource exhaustion such as too many watches, or network filesystems),
-  and a slow full rescan on a long timer (for example every 15 minutes) as a
-  safety net.
+  cover (resource exhaustion such as too many watches, or network filesystems).
+  A slower rediscovery pass re-adds watches and queues only new files or files
+  whose metadata changed. It does not revisit the unchanged historical corpus.
+- Pause the whole queue for 30 seconds after a network failure, a retryable HTTP
+  status, or process-capacity exhaustion. Requeue the failed file before the
+  pause so recovery does not depend on another filesystem event.
 - Log incomplete discovery passes with their error count. Files from complete
   portions still sync, and the next discovery pass retries failed roots or
   subtrees.
@@ -1423,24 +1435,29 @@ finish on a detached context. A second Ctrl-C exits the process outright.
 ### Daemon management
 
 `akari watch` is the foreground loop. `akari daemon {start|stop|status}` manages
-the same loop as a detached per-user process. A single advisory file lock ensures
-only one client instance runs per machine. Its pidfile records both the PID and a
-random per-run token; the token authenticates local control and distinguishes a
-replacement process that reused the same PID.
+a detached per-user process that runs `sync` (5 minute time limit) on start and every
+10 minutes after each pass completes. On macOS, `akari daemon install` writes a
+per-user LaunchAgent that runs that same worker at Aqua login; launchd is the
+parent, so the process dies with the login session and comes back at the next
+one. `daemon start` remains the detached, session-independent form on every OS.
+A single advisory file lock ensures only one client instance runs per machine.
+Its pidfile records both the PID and a random per-run token; the token
+authenticates local control and distinguishes a replacement process that reused
+the same PID.
 
 `daemon stop` requests graceful shutdown over a user-only Unix-domain socket on
-Unix or a random per-run named event on Windows. The watcher cancels its normal
+Unix or a random per-run named event on Windows. The process cancels its normal
 run context, completes cleanup, and releases the advisory lock. The command does
 not report success until it observes that release, so a successful stop is also
-proof that another watcher can acquire the lock. Both the graceful wait and the
+proof that another daemon can acquire the lock. Both the graceful wait and the
 post-termination confirmation wait are bounded (10 seconds by default).
 
-A timeout leaves the watcher running and returns an error. `--force` explicitly
+A timeout leaves the daemon running and returns an error. `--force` explicitly
 permits escalation after the graceful path fails; immediately before terminating
 the process, the command verifies that the lock is still held and the pidfile
 still contains the instance it originally contacted. A changed identity fails
 closed, so this recheck shrinks the window for PID reuse or a replacement
-watcher to redirect the escalation down to the instant between validation and
+process to redirect the escalation down to the instant between validation and
 signal delivery, which is as tight as portable APIs allow.
 
 The detached client owns a size-rotating log writer rather than inheriting an
@@ -1593,7 +1610,7 @@ cmd/
   akari/            # client binary
   akari-server/     # server binary (plus sweep, reparse, dev-seed subcommands)
 internal/
-  parser/           # claude, codex, pi, cursor, grok parsers + normalized types (shared)
+  parser/           # claude, codex, pi, cursor, grok, opencode parsers + normalized types (shared)
   casenc/           # client-side CAS body encoder (zstd policy, deterministic)
   gitremote/        # remote URL canonicalization
   pricing/          # compiled-in rate table + cost computation

@@ -326,7 +326,8 @@
               "codex",
               "pi",
               "cursor",
-              "grok"
+              "grok",
+              "opencode"
             ],
             "type": "string"
           },

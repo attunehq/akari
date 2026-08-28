@@ -73,7 +73,7 @@ func ResolveMachine(cfg Client, env func(string) string, hostname func() (string
 
 // ExtraRoot is a user-configured session directory for one agent.
 type ExtraRoot struct {
-	Agent string `toml:"agent"` // claude | codex | pi
+	Agent string `toml:"agent"` // claude | codex | pi | cursor | grok | opencode
 	Path  string `toml:"path"`
 	// FollowRootLink opts this root into resolving a symlink or, on Windows, a
 	// directory junction at the root itself before walking, for when Path is
@@ -157,9 +157,9 @@ func LoadClient(path string) (Client, error) {
 			return Client{}, fmt.Errorf("config %s: extra_roots[%d] needs both agent and path", resolved, i)
 		}
 		switch r.Agent {
-		case "claude", "codex", "pi", "cursor", "grok":
+		case "claude", "codex", "pi", "cursor", "grok", "opencode":
 		default:
-			return Client{}, fmt.Errorf("config %s: extra_roots[%d].agent must be claude, codex, pi, cursor, or grok", resolved, i)
+			return Client{}, fmt.Errorf("config %s: extra_roots[%d].agent must be claude, codex, pi, cursor, grok, or opencode", resolved, i)
 		}
 	}
 	return c, nil

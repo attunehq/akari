@@ -147,6 +147,7 @@ const thinkingBytesPerToken: Record<string, number> = {
   codex: 14.2,
   pi: 4.0,
   grok: 4.0,
+  opencode: 4.0,
 };
 
 export function thinkingBytesPerTokenFor(agent: string): number {

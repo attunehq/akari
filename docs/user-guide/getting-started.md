@@ -87,7 +87,7 @@ When it looks right, push for real:
 akari sync
 ```
 
-`akari sync` discovers the session logs Claude Code, Codex, pi, Cursor, and Grok leave in their
+`akari sync` discovers the session logs Claude Code, Codex, pi, Cursor, Grok, and OpenCode leave in their
 standard locations, resolves each to its git project, and streams the new bytes to
 the server in one pass, then exits. Uploads resume from the server's cursor, so a
 re-run only sends what is new.
@@ -102,25 +102,29 @@ akari sync --time-limit 30s     # grab a quick sample, then stop
 
 ## 4. Keep it flowing
 
-`sync` is one-shot. To keep pushing as your agents work, run the watcher, which
-uploads sessions as they change:
+`sync` is one-shot. To keep pushing as your agents work, run the daemon, which
+runs that same sync every 10 minutes:
 
 ```sh
-akari watch                # foreground; Ctrl-C to stop
-```
-
-Or run the same loop in the background and manage it as a per-user daemon:
-
-```sh
-akari daemon start         # launch watch in the background; prints its PID and log path
+akari daemon start         # background; prints its PID and log path
 akari daemon status        # is it running?
 akari daemon stop          # stop it and confirm the single-instance lock is free
 ```
 
-Run `akari daemon start` once and the watcher keeps uploading in the background.
+Run `akari daemon start` once and the daemon keeps uploading in the background.
 `daemon stop` waits up to 10 seconds for graceful cleanup. If it times out, it
-leaves the watcher running and exits non-zero; use `--timeout <duration>` to wait
+leaves the process running and exits non-zero; use `--timeout <duration>` to wait
 longer or `--force` to permit termination after the graceful attempt.
+
+On macOS, start that daemon at login as well:
+
+```sh
+akari daemon install       # start now, and again at every login
+akari daemon uninstall     # stop starting at login
+```
+
+`akari watch` stays in the foreground and uploads as files change, until you
+Ctrl-C.
 
 ## 5. Read what you pushed
 
