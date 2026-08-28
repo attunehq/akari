@@ -94,7 +94,9 @@ A bot is a shared passwordless account created by a user. It uses API tokens
 and follows the same token scopes and data visibility rules as a user, but the
 password and proxy login paths reject it. This gives shared automation, such as
 CI review jobs, a separate identity in usage reports. Every user can manage its
-tokens or delete it. Deletion cascades through its tokens and sessions.
+tokens or delete it. Deletion hides the bot and revokes its credentials, but
+keeps its sessions and usage history. Creating the same username restores the
+existing bot identity without restoring its credentials.
 
 Each user holds one or more **API tokens**, and each token has a scope:
 

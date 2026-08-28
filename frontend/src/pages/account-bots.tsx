@@ -87,7 +87,7 @@ function BotCard({ bot, refresh }: { bot: AccountBot; refresh: () => void }) {
           onClick={async () => {
             if (
               !window.confirm(
-                `Delete ${bot.username} and all sessions attributed to it?`,
+                `Delete ${bot.username} and revoke all of its tokens? Its sessions will remain.`,
               )
             )
               return;

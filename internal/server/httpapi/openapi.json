@@ -4456,13 +4456,13 @@
                 }
               }
             },
-            "description": "Bot account deleted"
+            "description": "Bot account soft-deleted"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
         },
-        "summary": "Delete a bot account and its credentials",
+        "summary": "Soft-delete a bot account and revoke its credentials",
         "tags": [
           "Account"
         ]

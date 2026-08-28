@@ -133,18 +133,34 @@ func TestBotAccountLifecycle(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("delete bot = %d, want 200", response.StatusCode)
 	}
-	if _, err := st.UserByID(t.Context(), botID); err == nil {
-		t.Fatal("deleted bot still exists")
+	deletedBot, err := st.UserByID(t.Context(), botID)
+	if err != nil || !deletedBot.IsBot() {
+		t.Fatalf("soft-deleted bot = (%+v, %v), want retained bot identity", deletedBot, err)
 	}
 	if _, _, err := st.TokenAuth(t.Context(), auth.HashToken(replacementSecret)); err == nil {
 		t.Fatal("deleted bot token still authenticates")
+	}
+	response, account = doJSON(t, owner, http.MethodGet, server.URL+"/api/v1/app/account", nil)
+	bots, ok = account["bots"].([]any)
+	if response.StatusCode != http.StatusOK || !ok || len(bots) != 0 {
+		t.Fatalf("account after bot deletion: status=%d body=%v", response.StatusCode, account)
 	}
 	var sessions int
 	if err := st.Pool.QueryRow(t.Context(), "SELECT count(*) FROM sessions WHERE user_id = $1", botID).Scan(&sessions); err != nil {
 		t.Fatal(err)
 	}
-	if sessions != 0 {
-		t.Fatalf("deleted bot retains %d sessions", sessions)
+	if sessions != 1 {
+		t.Fatalf("soft-deleted bot has %d sessions, want 1", sessions)
+	}
+
+	response, restored := doJSON(t, owner, http.MethodPost, server.URL+"/api/v1/app/account/bots", map[string]string{
+		"username": "ci-review",
+	})
+	if response.StatusCode != http.StatusCreated || int64(restored["id"].(float64)) != botID {
+		t.Fatalf("restore bot: status=%d body=%v", response.StatusCode, restored)
+	}
+	if _, _, err := st.TokenAuth(t.Context(), auth.HashToken(replacementSecret)); err == nil {
+		t.Fatal("restored bot reactivated a revoked token")
 	}
 }
 
@@ -202,7 +218,12 @@ func TestBotManagementIsSharedAcrossUsers(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("other user deleting bot = %d, want 200", response.StatusCode)
 	}
-	if _, err := st.UserByID(t.Context(), botID); err == nil {
-		t.Fatal("shared bot still exists after another user deleted it")
+	if _, err := st.UserByID(t.Context(), botID); err != nil {
+		t.Fatalf("shared bot identity removed after another user deleted it: %v", err)
+	}
+	response, account = doJSON(t, otherClient, http.MethodGet, server.URL+"/api/v1/app/account", nil)
+	bots, ok = account["bots"].([]any)
+	if response.StatusCode != http.StatusOK || !ok || len(bots) != 0 {
+		t.Fatalf("shared bot remains listed after deletion: status=%d body=%v", response.StatusCode, account)
 	}
 }

@@ -88,7 +88,7 @@ describe("BotSection", () => {
     );
   });
 
-  it("confirms that deleting a bot also deletes its sessions", async () => {
+  it("confirms that deletion revokes tokens but keeps sessions", async () => {
     const refresh = vi.fn();
     const confirm = vi.fn(() => true);
     const fetchMock = vi.fn(async () => Response.json({ deleted: true }));
@@ -100,7 +100,7 @@ describe("BotSection", () => {
 
     await vi.waitFor(() => expect(refresh).toHaveBeenCalledOnce());
     expect(confirm).toHaveBeenCalledWith(
-      "Delete ci-review and all sessions attributed to it?",
+      "Delete ci-review and revoke all of its tokens? Its sessions will remain.",
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/app/account/bots/7",

@@ -53,9 +53,10 @@ Bots have no password and cannot sign in through the login form or trusted proxy
 Every user sees the same bots and can create or revoke their tokens, or delete
 the bot. Bot credentials cannot create or delete bots, or manage other bots.
 
-Deleting a bot invalidates all of its tokens and deletes every session attributed
-to it. Use token revocation when you only need to replace a credential and want to
-keep the bot's history.
+Deleting a bot invalidates all of its tokens and removes it from bot management.
+Its sessions and usage history remain attributed to the bot. Creating the same
+username later restores the bot, but its revoked tokens stay revoked. Use token
+revocation when you only need to replace one credential.
 
 ## API tokens
 

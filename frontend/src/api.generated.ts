@@ -91,7 +91,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete a bot account and its credentials */
+        /** Soft-delete a bot account and revoke its credentials */
         delete: {
             parameters: {
                 query?: never;
@@ -103,7 +103,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Bot account deleted */
+                /** @description Bot account soft-deleted */
                 200: {
                     headers: {
                         [name: string]: unknown;
