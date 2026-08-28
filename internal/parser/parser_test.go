@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/tidwall/gjson"
 )
 
 func loadFixture(t *testing.T, name string) []byte {
@@ -262,6 +264,63 @@ func TestParseCodexContext(t *testing.T) {
 	}
 	if users != 2 {
 		t.Errorf("user messages = %d, want 2", users)
+	}
+}
+
+// TestParseCodexToolError pins that a failing exec result lands as status
+// "error". Codex rollouts carry no structural error field on *_output items,
+// so the exec banner's exit marker is the signal (codexResultIsErr).
+func TestParseCodexToolError(t *testing.T) {
+	s, err := Parse(AgentCodex, loadFixture(t, "codex_toolerr.jsonl"))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(s.ToolCalls) != 1 {
+		t.Fatalf("tool calls = %d, want 1", len(s.ToolCalls))
+	}
+	tc := s.ToolCalls[0]
+	if tc.ResultStatus != "error" {
+		t.Errorf("result status = %q, want %q", tc.ResultStatus, "error")
+	}
+	// The recorded body is the banner-wrapped text unchanged: the status is
+	// derived from it, not carved out of it.
+	if !strings.HasPrefix(tc.ResultBody, "Exit code: 1\n") {
+		t.Errorf("result body = %q, want the banner preserved", tc.ResultBody)
+	}
+}
+
+// TestCodexResultIsErr covers the direct, unified-exec, and code-mode banner
+// shapes plus guards that keep ordinary bodies at status ok.
+func TestCodexResultIsErr(t *testing.T) {
+	cases := []struct {
+		name string
+		json string
+		want bool
+	}{
+		{"direct banner ok", `"Exit code: 0\nWall time: 0.1 seconds\nOutput:\nok"`, false},
+		{"direct banner fail", `"Exit code: 2\nWall time: 0.1 seconds\nOutput:\nboom"`, true},
+		{"direct banner negative code", `"Exit code: -1\nWall time: 0.1 seconds\nOutput:\nkilled"`, true},
+		{"unified banner fail", `"Wall time: 0.4 seconds\nProcess exited with code 1\nOriginal token count: 5\nOutput:\nboom"`, true},
+		{"unified banner ok", `"Wall time: 0.4 seconds\nProcess exited with code 0\nOutput:\nfine"`, false},
+		{"code mode failed", `[{"type":"input_text","text":"Script failed\nWall time 0.0 seconds\nOutput:\n"},{"type":"input_text","text":"Script error:\nboom"}]`, true},
+		{"code mode terminated", `"Script terminated\nWall time 1.2 seconds\nOutput:\ninterrupted"`, true},
+		{"code mode completed", `"Script completed\nWall time 0.4 seconds\nOutput:\nfine"`, false},
+		{"timeout", `"command timed out after 5000 milliseconds\npartial output"`, true},
+		{"timeout prose", `"command timed out after the configured limit"`, false},
+		{"plain body", `"auth.go\nmain.go"`, false},
+		{"empty", `""`, false},
+		{"marker quoted after the separator", `"Exit code: 0\nOutput:\nProcess exited with code 1"`, false},
+		{"marker without a banner", `"Exit code: 2\nnot banner furniture"`, false},
+		{"bannerless body quoting a marker deep in", `"line one\nline two\nline three\nline four\nline five\nline six\nline seven\nline eight\nProcess exited with code 1"`, false},
+		{"content items", `[{"type":"input_text","text":"Exit code: 3\nWall time: 0.1 seconds\nOutput:"},{"type":"input_text","text":"boom"}]`, true},
+		{"object body (MCP-style)", `{"message":"Wait timed out.","timed_out":true}`, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := codexResultIsErr(gjson.Parse(c.json)); got != c.want {
+				t.Errorf("codexResultIsErr = %v, want %v", got, c.want)
+			}
+		})
 	}
 }
 

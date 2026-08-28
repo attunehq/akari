@@ -1,0 +1,5 @@
+{"type":"session_meta","timestamp":"2024-02-01T09:00:00Z","payload":{"id":"def-456","cwd":"/home/ada/code/my-api","originator":"user","git":{"branch":"dev"}}}
+{"type":"response_item","timestamp":"2024-02-01T09:00:01Z","payload":{"role":"user","content":[{"type":"input_text","text":"Run the tests"}]}}
+{"type":"response_item","timestamp":"2024-02-01T09:00:04Z","payload":{"type":"function_call","name":"shell_command","call_id":"call_1","arguments":"{\"cmd\":\"go test ./...\"}"}}
+{"type":"response_item","timestamp":"2024-02-01T09:00:06Z","payload":{"type":"function_call_output","call_id":"call_1","output":"Exit code: 1\nWall time: 0.3 seconds\nOutput:\nFAIL: TestRateLimit"}}
+{"type":"response_item","timestamp":"2024-02-01T09:00:08Z","payload":{"role":"assistant","model":"gpt-5-codex","content":[{"type":"output_text","text":"One test fails; fixing it."}]}}
