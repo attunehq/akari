@@ -450,6 +450,11 @@ func (r *Resolver) localRoot(ctx context.Context, cwd string) string {
 		dir = filepath.Join(cwd, dir)
 	}
 	dir = filepath.Clean(dir)
+	// Git can return a physical path for linked worktrees while cwd retains a
+	// symlinked spelling. Resolve existing links so both forms produce one key.
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = resolved
+	}
 	// The common dir is "<main-worktree>/.git" for a normal repo, so its parent is
 	// the main worktree: the friendlier key and display root. A bare repo has no
 	// such parent, so its common dir stands as the key.
