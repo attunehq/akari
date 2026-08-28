@@ -391,6 +391,11 @@ func (s *Server) handleAPIAccount(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "load tokens")
 		return
 	}
+	bots, err := s.Store.ListBots(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "load bots")
+		return
+	}
 	grants, err := s.Store.ListOAuthGrants(r.Context(), p.UserID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "load connections")
@@ -412,7 +417,7 @@ func (s *Server) handleAPIAccount(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, accountResponse{
 		User: appViewer{Authenticated: true, UserID: user.ID, Username: user.Username,
 			IsAdmin: user.IsAdmin, OverviewPublic: user.OverviewPublic},
-		Projects: accountProjectDTOs(projects), Tokens: accountTokenDTOs(tokens),
+		Bots: accountBotDTOs(bots), Projects: accountProjectDTOs(projects), Tokens: accountTokenDTOs(tokens),
 		Connections: oauthGrantDTOs(grants), Invites: accountInviteDTOs(invites),
 		Reparse: s.worker.FleetStatus(r.Context()),
 	})

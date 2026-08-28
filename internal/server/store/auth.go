@@ -39,6 +39,9 @@ type User struct {
 // empty hash.
 func (u User) HasPassword() bool { return u.PasswordHash != "" }
 
+// IsBot reports whether the account is a shared, passwordless bot.
+func (u User) IsBot() bool { return u.AuthSource == authSourceBot }
+
 // APIToken is a stored client token (the secret itself is never stored, only its
 // hash).
 type APIToken struct {
@@ -169,15 +172,15 @@ func (s *Store) UserByID(ctx context.Context, id int64) (User, error) {
 // the race between two concurrent first requests for the same user: whichever
 // loses the insert still reads the row back.
 //
-// An existing username is adopted regardless of its auth_source, including a local
-// password account or an admin: in this deployment the proxy is the authority on
-// identity, so an assertion for "grace" is grace. The insert never rewrites an
-// existing row, so adopting a local account does not strip its password or flip
-// its source. Operators who do not want that overlap keep the local and federated
-// namespaces disjoint (the deployment notes in docs/development.md spell this out).
+// An existing local or federated username is adopted because the proxy is the
+// authority on human identity in this deployment. The insert never rewrites an
+// existing row. Bot usernames are refused because bots cannot log in.
 func (s *Store) UpsertProxyUser(ctx context.Context, username string) (User, error) {
 	u, err := s.UserByUsername(ctx, username)
 	if err == nil {
+		if u.IsBot() {
+			return User{}, ErrNotFound
+		}
 		return u, nil
 	}
 	if !errors.Is(err, ErrNotFound) {
@@ -191,6 +194,9 @@ func (s *Store) UpsertProxyUser(ctx context.Context, username string) (User, err
 	u, err = s.UserByUsername(ctx, username)
 	if err != nil {
 		return User{}, fmt.Errorf("read back provisioned proxy user: %w", err)
+	}
+	if u.IsBot() {
+		return User{}, ErrNotFound
 	}
 	return u, nil
 }

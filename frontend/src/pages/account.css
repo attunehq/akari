@@ -49,6 +49,37 @@
   margin-top: 12px;
 }
 
+.bot-list {
+  margin-top: 14px;
+  gap: 12px;
+}
+.bot-card {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.bot-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.bot-card-head > div {
+  display: flex;
+  flex-direction: column;
+}
+.bot-card-head span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.bot-token-form,
+.bot-token-list,
+.bot-token-empty {
+  margin-top: 12px;
+}
+
 /* Below the width where .settings-section itself stacks to one column,
    .inline-form's row of select/input/button no longer fits: each child
    shrinks to its min-content width instead, so the last one runs past the

@@ -9,6 +9,7 @@ function accountResponse(
   tokens: Token[] = [],
 ): AccountResponse {
   return {
+    bots: [],
     connections: [],
     invites: [],
     projects,

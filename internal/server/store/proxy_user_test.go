@@ -2,9 +2,11 @@ package store_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/jssblck/akari/internal/server/auth"
+	"github.com/jssblck/akari/internal/server/store"
 	"github.com/jssblck/akari/internal/server/storetest"
 )
 
@@ -44,6 +46,22 @@ func TestUpsertProxyUserProvisions(t *testing.T) {
 	}
 	if len(users) != 1 {
 		t.Fatalf("expected exactly one account, got %d", len(users))
+	}
+}
+
+func TestUpsertProxyUserRefusesBotAccount(t *testing.T) {
+	t.Parallel()
+	st := storetest.NewStore(t)
+	ctx := context.Background()
+	owner, err := st.Register(ctx, "grace", mustHashPW(t, "hopper-1906"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.CreateBot(ctx, owner.ID, "ci-review"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertProxyUser(ctx, "ci-review"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("proxy bot resolution error = %v, want not found", err)
 	}
 }
 

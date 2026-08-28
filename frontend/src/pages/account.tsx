@@ -22,6 +22,7 @@ import type {
 } from "../types";
 import "./account.css";
 import { absoluteURL, withBase } from "../base";
+import { BotSection } from "./account-bots";
 
 export function AccountPage() {
   const [revision, setRevision] = useState(0);
@@ -43,6 +44,7 @@ export function AccountPage() {
         {(data) => (
           <div className="account-sections">
             <TokenSection tokens={data.tokens} refresh={refresh} />
+            <BotSection bots={data.bots} refresh={refresh} />
             <PublicationSection user={data.user} refresh={refresh} />
             <ProjectPublicationSection
               projects={data.projects}

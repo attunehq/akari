@@ -11,6 +11,16 @@
         },
         "description": "The request is invalid."
       },
+      "Conflict": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "The requested identity already exists."
+      },
       "Forbidden": {
         "content": {
           "application/json": {
@@ -63,6 +73,35 @@
       }
     },
     "schemas": {
+      "AccountBot": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "tokens": {
+            "items": {
+              "$ref": "#/components/schemas/AccountToken"
+            },
+            "type": "array"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "created_at",
+          "id",
+          "tokens",
+          "username"
+        ],
+        "type": "object"
+      },
       "AccountInvite": {
         "additionalProperties": false,
         "properties": {
@@ -152,6 +191,12 @@
       "AccountResponse": {
         "additionalProperties": false,
         "properties": {
+          "bots": {
+            "items": {
+              "$ref": "#/components/schemas/AccountBot"
+            },
+            "type": "array"
+          },
           "connections": {
             "items": {
               "$ref": "#/components/schemas/OAuthGrant"
@@ -184,6 +229,7 @@
           }
         },
         "required": [
+          "bots",
           "connections",
           "invites",
           "projects",
@@ -704,6 +750,18 @@
         ],
         "type": "object"
       },
+      "CreateBot": {
+        "additionalProperties": false,
+        "properties": {
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "username"
+        ],
+        "type": "object"
+      },
       "CreateInvite": {
         "additionalProperties": false,
         "properties": {
@@ -851,6 +909,18 @@
           "Day",
           "Input",
           "Output"
+        ],
+        "type": "object"
+      },
+      "DeletedBotResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
         ],
         "type": "object"
       },
@@ -4325,7 +4395,161 @@
             "description": "Account read model"
           }
         },
-        "summary": "Read account tokens, connections, invites, and rebuild state",
+        "summary": "Read account bots, tokens, connections, invites, and rebuild state",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/api/v1/app/account/bots": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBot"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountBot"
+                }
+              }
+            },
+            "description": "Bot account created"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "summary": "Create a bot account",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/api/v1/app/account/bots/{bot_id}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "bot_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedBotResponse"
+                }
+              }
+            },
+            "description": "Bot account deleted"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "summary": "Delete a bot account and its credentials",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/api/v1/app/account/bots/{bot_id}/tokens": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "bot_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateToken"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedTokenResponse"
+                }
+              }
+            },
+            "description": "Bot token created; the plaintext secret is returned once"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "summary": "Create an API token for a bot account",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/api/v1/app/account/bots/{bot_id}/tokens/{token_id}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "bot_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "token_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokedResponse"
+                }
+              }
+            },
+            "description": "Bot token revoked"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "summary": "Revoke a bot account API token",
         "tags": [
           "Account"
         ]

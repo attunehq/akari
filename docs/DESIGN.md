@@ -82,12 +82,19 @@ can be improved and re-run against stored raw bytes without re-pushing.
 
 ## Core concepts and identity
 
-### Users
+### Users and bots
 
-A user is a real account: a username and a password. The first account created
-bootstraps the server and becomes the admin. After that signup is closed: a new
-user can register only by presenting an invite token that an admin issued. Admin
-status gates issuing invites, and nothing about data visibility.
+A user is an interactive account. Local users sign in with a username and
+password, while federated users sign in through the trusted proxy. The first
+local account bootstraps the server and becomes the admin. After that signup is
+closed: a new local user can register only with an invite token from an admin.
+Admin status gates issuing invites, and nothing about data visibility.
+
+A bot is a shared passwordless account created by a user. It uses API tokens
+and follows the same token scopes and data visibility rules as a user, but the
+password and proxy login paths reject it. This gives shared automation, such as
+CI review jobs, a separate identity in usage reports. Every user can manage its
+tokens or delete it. Deletion cascades through its tokens and sessions.
 
 Each user holds one or more **API tokens**, and each token has a scope:
 
@@ -739,8 +746,8 @@ zero-priced models under `Other` without a separate completeness marker.
 CREATE TABLE users (
   id            BIGSERIAL PRIMARY KEY,
   username      TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,            -- argon2id PHC string: embeds a
-                                          -- per-user random salt + cost params
+  password_hash TEXT,                     -- argon2id PHC string for local users
+  auth_source   TEXT NOT NULL,            -- password | proxy | bot
   is_admin      BOOLEAN NOT NULL DEFAULT FALSE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );

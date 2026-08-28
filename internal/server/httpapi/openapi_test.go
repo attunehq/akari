@@ -53,7 +53,7 @@ func TestOpenAPICoreBoundarySchemasAreClosed(t *testing.T) {
 		t.Fatalf("decode embedded OpenAPI document: %v", err)
 	}
 	for _, name := range []string{
-		"Error", "Publication", "Login", "Register", "CreateToken",
+		"Error", "Publication", "Login", "Register", "CreateBot", "CreateToken",
 		"CreateInvite", "AnnounceSession", "Viewer", "ProjectionRebuild",
 	} {
 		schema := document.Components.Schemas[name]

@@ -1,6 +1,6 @@
 ---
 title: Accounts and sharing
-summary: Registration and invites, the three token scopes, and publishing a session or your usage overview.
+summary: User and bot accounts, API token scopes, and sharing usage.
 order: 5
 ---
 
@@ -24,7 +24,8 @@ server:
   the new teammate, who enters it when registering. An invalid, already-redeemed,
   or expired token is rejected.
 - **Admins** can mint invites, force a [reparse](./self-hosting.md#reparse), and
-  delete any session. A normal user manages only their own sessions and tokens.
+  delete any session. A normal user manages their own sessions and tokens. Bot
+  accounts are shared by every user.
 
 You sign in with a username and password; a successful login sets an
 `HttpOnly`, `SameSite=Lax` session cookie (marked `Secure` unless the server is
@@ -39,13 +40,30 @@ queue wait also fails as invalid credentials. Registration uses the same worker
 pool and returns a retryable unavailable response when it cannot admit password
 work.
 
+## Bot accounts
+
+A bot account gives CI or another shared automation process its own usage
+identity. Create bots from the Account page, then create API tokens for each bot.
+Sessions uploaded with a bot token belong to that bot, so usage reports can show
+CI spend separately from each person's spend.
+
+Bots use the same token scopes and data access rules as user accounts. A full bot
+token can read everything on the server, while an ingest token can only upload.
+Bots have no password and cannot sign in through the login form or trusted proxy.
+Every user sees the same bots and can create or revoke their tokens, or delete
+the bot. Bot credentials cannot create or delete bots, or manage other bots.
+
+Deleting a bot invalidates all of its tokens and deletes every session attributed
+to it. Use token revocation when you only need to replace a credential and want to
+keep the bot's history.
+
 ## API tokens
 
 Beyond the browser session, akari issues **API tokens**: bearer credentials for
 machines. Every token has one of three **scopes**, and the scope alone determines
-what the token can do. Create and revoke them from the Account page; the plaintext is
-shown once, at creation, then only its metadata (name, scope, last used) is
-visible.
+what the token can do. Create and revoke tokens for your account or a bot from the
+Account page. The plaintext is shown once, at creation, then only its metadata
+(name, scope, last used) is visible.
 
 | Capability | `ingest` | `read` | `full` |
 | --- | --- | --- | --- |

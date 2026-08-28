@@ -11,7 +11,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read account tokens, connections, invites, and rebuild state */
+        /** Read account bots, tokens, connections, invites, and rebuild state */
         get: {
             parameters: {
                 query?: never;
@@ -35,6 +35,169 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/app/account/bots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a bot account */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateBot"];
+                };
+            };
+            responses: {
+                /** @description Bot account created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AccountBot"];
+                    };
+                };
+                409: components["responses"]["Conflict"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/app/account/bots/{bot_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a bot account and its credentials */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    bot_id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Bot account deleted */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DeletedBotResponse"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/app/account/bots/{bot_id}/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create an API token for a bot account */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    bot_id: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateToken"];
+                };
+            };
+            responses: {
+                /** @description Bot token created; the plaintext secret is returned once */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreatedTokenResponse"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/app/account/bots/{bot_id}/tokens/{token_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke a bot account API token */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    bot_id: number;
+                    token_id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Bot token revoked */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RevokedResponse"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -1596,6 +1759,14 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AccountBot: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            id: number;
+            tokens: components["schemas"]["AccountToken"][];
+            username: string;
+        };
         AccountInvite: {
             /** Format: date-time */
             CreatedAt: string;
@@ -1615,6 +1786,7 @@ export interface components {
             remote_key: string;
         };
         AccountResponse: {
+            bots: components["schemas"]["AccountBot"][];
             connections: components["schemas"]["OAuthGrant"][];
             invites: components["schemas"]["AccountInvite"][];
             projects: components["schemas"]["AccountProject"][];
@@ -1776,6 +1948,9 @@ export interface components {
             /** Format: int64 */
             Tokens: number;
         };
+        CreateBot: {
+            username: string;
+        };
         CreateInvite: {
             expires_hours?: number;
             note?: string;
@@ -1820,6 +1995,9 @@ export interface components {
             Input: number;
             /** Format: int64 */
             Output: number;
+        };
+        DeletedBotResponse: {
+            deleted: boolean;
         };
         DeletedSessionResponse: {
             deleted: boolean;
@@ -2654,6 +2832,15 @@ export interface components {
     responses: {
         /** @description The request is invalid. */
         BadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The requested identity already exists. */
+        Conflict: {
             headers: {
                 [name: string]: unknown;
             };

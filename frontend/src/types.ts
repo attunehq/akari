@@ -54,6 +54,7 @@ export type SubagentStats = Schema["SubagentStats"];
 export type Trends = Schema["Trends"];
 
 export type Token = Schema["AccountToken"];
+export type AccountBot = Schema["AccountBot"];
 export type Connection = Schema["OAuthGrant"];
 export type Invite = Schema["AccountInvite"];
 export type FacetCount = Schema["FacetCount"];

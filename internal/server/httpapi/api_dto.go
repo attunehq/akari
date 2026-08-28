@@ -80,11 +80,19 @@ type transcriptResponse struct {
 
 type accountResponse struct {
 	User        appViewer           `json:"user"`
+	Bots        []accountBotDTO     `json:"bots"`
 	Projects    []accountProjectDTO `json:"projects"`
 	Tokens      []accountTokenDTO   `json:"tokens"`
 	Connections []oauthGrantDTO     `json:"connections"`
 	Invites     []accountInviteDTO  `json:"invites"`
 	Reparse     parse.Status        `json:"reparse"`
+}
+
+type accountBotDTO struct {
+	ID        int64             `json:"id"`
+	Username  string            `json:"username"`
+	CreatedAt time.Time         `json:"created_at"`
+	Tokens    []accountTokenDTO `json:"tokens"`
 }
 
 type accountProjectDTO struct {
@@ -164,6 +172,10 @@ type sessionPublicationResponse struct {
 type deletedSessionResponse struct {
 	Deleted   bool  `json:"deleted"`
 	ProjectID int64 `json:"project_id"`
+}
+
+type deletedBotResponse struct {
+	Deleted bool `json:"deleted"`
 }
 
 type revokedResponse struct {
@@ -251,6 +263,21 @@ func accountTokenDTOs(tokens []store.APIToken) []accountTokenDTO {
 			ID: token.ID, Name: token.Name, Scope: token.Scope,
 			CreatedAt: token.CreatedAt, LastUsedAt: token.LastUsedAt, RevokedAt: token.RevokedAt,
 		}
+	}
+	return out
+}
+
+func accountBotDTOFrom(bot store.Bot) accountBotDTO {
+	return accountBotDTO{
+		ID: bot.ID, Username: bot.Username, CreatedAt: bot.CreatedAt,
+		Tokens: accountTokenDTOs(bot.Tokens),
+	}
+}
+
+func accountBotDTOs(bots []store.Bot) []accountBotDTO {
+	out := make([]accountBotDTO, len(bots))
+	for i, bot := range bots {
+		out[i] = accountBotDTOFrom(bot)
 	}
 	return out
 }

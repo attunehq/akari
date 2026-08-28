@@ -172,6 +172,19 @@ func (s *Server) requireFull(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// requireUserAccount rejects bot credentials from user-managed account settings.
+func (s *Server) requireUserAccount(next http.HandlerFunc) http.HandlerFunc {
+	return s.requireFull(func(w http.ResponseWriter, r *http.Request) {
+		p, _ := principalFrom(r.Context())
+		u, err := s.Store.UserByID(r.Context(), p.UserID)
+		if err != nil || u.IsBot() {
+			writeError(w, http.StatusForbidden, "user account required")
+			return
+		}
+		next(w, r)
+	})
+}
+
 // requireAdmin demands a full-scope credential owned by an admin.
 func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 	return s.requireFull(func(w http.ResponseWriter, r *http.Request) {
@@ -371,19 +384,8 @@ type createTokenRequest struct {
 
 func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	p, _ := principalFrom(r.Context())
-	var req createTokenRequest
-	if !decodeJSON(w, r, &req) {
-		return
-	}
-	if req.Scope == "" {
-		req.Scope = scopeIngest
-	}
-	if !isValidScope(req.Scope) {
-		writeError(w, http.StatusBadRequest, "scope must be 'ingest', 'read', or 'full'")
-		return
-	}
-	if strings.TrimSpace(req.Name) == "" {
-		writeError(w, http.StatusBadRequest, "token name is required")
+	req, ok := decodeCreateTokenRequest(w, r)
+	if !ok {
 		return
 	}
 	token, err := auth.NewToken()
