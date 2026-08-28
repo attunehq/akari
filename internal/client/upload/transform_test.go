@@ -405,6 +405,47 @@ func TestTransformBigAndSmallEquivalent(t *testing.T) {
 	}
 }
 
+func TestTransformCodexErrorKeepsStatus(t *testing.T) {
+	bulk := strings.Repeat("failure detail ", 400)
+	content := `{"type":"response_item","payload":{"type":"custom_tool_call","name":"exec","call_id":"c1","input":"run tests"}}` + "\n" +
+		`{"type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"c1","output":[{"type":"input_text","text":"Script failed\nWall time 0.0 seconds\nOutput:\n"},{"type":"input_text","text":"Script error:\n` + bulk + `"}]}}` + "\n"
+	f, size := openTemp(t, content)
+
+	setBigLineThreshold(t, 1<<20)
+	small := runTransform(t, f, 0, size, "codex", true)
+	setBigLineThreshold(t, 256)
+	big := runTransform(t, f, 0, size, "codex", true)
+
+	if string(small.data) != string(big.data) {
+		t.Fatalf("big vs small transform differ:\n small=%q\n big  =%q", small.data, big.data)
+	}
+	if strings.Contains(string(big.data), bulk) {
+		t.Fatal("result body remains inline")
+	}
+	if !strings.Contains(string(big.data), `"status":"error"`) {
+		t.Fatalf("result sentinel lost the error status: %s", big.data)
+	}
+
+	parsed, err := parser.Parse(parser.AgentCodex, big.data)
+	if err != nil {
+		t.Fatalf("parse transformed transcript: %v", err)
+	}
+	if len(parsed.ToolCalls) != 1 || parsed.ToolCalls[0].ResultStatus != "error" {
+		t.Fatalf("parsed result status = %+v, want error", parsed.ToolCalls)
+	}
+
+	h, orig, ok, err := transformPrefixDigest(context.Background(), f, "codex", size, int64(len(big.data)), casenc.New())
+	if err != nil || !ok {
+		t.Fatalf("cold prefix digest: ok=%v err=%v", ok, err)
+	}
+	if orig != size {
+		t.Fatalf("recovered original base = %d, want %d", orig, size)
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); got != hexSHA(string(big.data)) {
+		t.Fatal("cold prefix digest dropped the result status")
+	}
+}
+
 // TestTransformBigInputKeepsFilePath confirms the streaming big-line path carries a
 // JSON tool input's projected fields (file_path and detail) onto its sentinel
 // byte-identically to the buffered path, for both input encodings: a raw JSON
