@@ -336,6 +336,13 @@ func TestCostSelectsDatedWindow(t *testing.T) {
 	}
 }
 
+func TestCostIsArchitectureStable(t *testing.T) {
+	got := Cost("claude-sonnet-4-20250514", anytime, 1500, 120, 0, 6000, 0)
+	if got != 0.0081 {
+		t.Errorf("cost = %.18f, want exact rounded value %.18f", got, 0.0081)
+	}
+}
+
 func TestCacheSavings(t *testing.T) {
 	// Opus 4.8: Input 5, CacheRead 0.50, CacheWrite 6.25 per million.
 	// A cache read saves the full input-minus-read gap; a cache write costs the

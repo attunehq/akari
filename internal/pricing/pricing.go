@@ -382,9 +382,10 @@ func Cost(model string, at time.Time, input, output, cacheWrite, cacheRead, reas
 	if reasoning != 0 {
 		cost += float64(reasoning) / million * r.Reasoning
 	}
-	// Round below the table's precision so compiler FMA choices cannot change
-	// stored costs or golden projections across architectures.
-	return math.Round(cost*1e15) / 1e15
+	// Floating-point multiply-add behavior differs slightly across architectures.
+	// Round to one trillionth of a dollar so one projection produces identical stored
+	// costs and golden snapshots on every supported platform.
+	return math.Round(cost*1e12) / 1e12
 }
 
 // CacheSavings returns the USD that prompt caching saved versus paying the full
