@@ -1433,24 +1433,29 @@ finish on a detached context. A second Ctrl-C exits the process outright.
 ### Daemon management
 
 `akari watch` is the foreground loop. `akari daemon {start|stop|status}` manages
-the same loop as a detached per-user process. A single advisory file lock ensures
-only one client instance runs per machine. Its pidfile records both the PID and a
-random per-run token; the token authenticates local control and distinguishes a
-replacement process that reused the same PID.
+a detached per-user process that runs `sync` (5 minute time limit) on start and every
+10 minutes after each pass completes. On macOS, `akari daemon install` writes a
+per-user LaunchAgent that runs that same worker at Aqua login; launchd is the
+parent, so the process dies with the login session and comes back at the next
+one. `daemon start` remains the detached, session-independent form on every OS.
+A single advisory file lock ensures only one client instance runs per machine.
+Its pidfile records both the PID and a random per-run token; the token
+authenticates local control and distinguishes a replacement process that reused
+the same PID.
 
 `daemon stop` requests graceful shutdown over a user-only Unix-domain socket on
-Unix or a random per-run named event on Windows. The watcher cancels its normal
+Unix or a random per-run named event on Windows. The process cancels its normal
 run context, completes cleanup, and releases the advisory lock. The command does
 not report success until it observes that release, so a successful stop is also
-proof that another watcher can acquire the lock. Both the graceful wait and the
+proof that another daemon can acquire the lock. Both the graceful wait and the
 post-termination confirmation wait are bounded (10 seconds by default).
 
-A timeout leaves the watcher running and returns an error. `--force` explicitly
+A timeout leaves the daemon running and returns an error. `--force` explicitly
 permits escalation after the graceful path fails; immediately before terminating
 the process, the command verifies that the lock is still held and the pidfile
 still contains the instance it originally contacted. A changed identity fails
 closed, so this recheck shrinks the window for PID reuse or a replacement
-watcher to redirect the escalation down to the instant between validation and
+process to redirect the escalation down to the instant between validation and
 signal delivery, which is as tight as portable APIs allow.
 
 The detached client owns a size-rotating log writer rather than inheriting an
