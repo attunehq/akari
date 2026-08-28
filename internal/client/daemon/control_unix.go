@@ -5,11 +5,14 @@ package daemon
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,10 +25,20 @@ type localControl struct {
 	once     sync.Once
 }
 
-func controlPath(pidfile string) string { return pidfile + ".sock" }
+func controlPath(pidfile string) string {
+	dir := filepath.Join(os.TempDir(), "akari-"+strconv.Itoa(os.Getuid()))
+	sum := sha256.Sum256([]byte(filepath.Clean(pidfile)))
+	return filepath.Join(dir, fmt.Sprintf("%x.sock", sum[:16]))
+}
 
 func startControl(pidfile string, inst instance, cancel context.CancelFunc) (*localControl, error) {
 	path := controlPath(pidfile)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, fmt.Errorf("create daemon control directory: %w", err)
+	}
+	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
+		return nil, fmt.Errorf("secure daemon control directory: %w", err)
+	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("remove stale daemon control socket: %w", err)
 	}

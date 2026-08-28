@@ -7,12 +7,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
 
-func TestStopConfirmsGracefulShutdownAndLockRelease(t *testing.T) {
-	paths := Paths{Pidfile: filepath.Join(t.TempDir(), "akari.pid")}
+func TestStopConfirmsGracefulShutdownAndLockReleaseWithLongPidfile(t *testing.T) {
+	paths := Paths{Pidfile: filepath.Join(t.TempDir(), strings.Repeat("long", 30), "akari.pid")}
 	lock, err := Acquire(paths.Pidfile)
 	if err != nil {
 		t.Fatal(err)
@@ -195,7 +196,9 @@ func runHungDaemonHelper() {
 		os.Exit(11)
 	}
 	<-ctx.Done()
-	select {}
+	for {
+		time.Sleep(time.Hour)
+	}
 }
 
 func waitForHelper(t *testing.T, pidfile string, pid int) {
