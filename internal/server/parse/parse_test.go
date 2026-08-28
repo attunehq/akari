@@ -2,6 +2,7 @@ package parse
 
 import (
 	"context"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,28 @@ import (
 	"github.com/jssblck/akari/internal/server/store"
 	"github.com/jssblck/akari/internal/server/storetest"
 )
+
+func TestPiGLM53FlashProviderPricing(t *testing.T) {
+	raw := []byte(`{"type":"message","id":"glm-turn","timestamp":"2026-08-28T12:00:00Z","message":{"role":"assistant","provider":"zai","model":"glm-5.3-flash","usage":{"input":1000000,"output":1000000,"cacheRead":1000000,"cacheWrite":0},"content":[{"type":"text","text":"Done."}]}}` + "\n")
+	r, err := newSessionReducer("pi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Feed(raw, 0); err != nil {
+		t.Fatal(err)
+	}
+	delta := r.Finish()
+	if len(delta.Usage) != 1 {
+		t.Fatalf("usage rows = %d, want 1", len(delta.Usage))
+	}
+	u := delta.Usage[0]
+	if u.Model != "zai/glm-5.3-flash" {
+		t.Errorf("model = %q", u.Model)
+	}
+	if math.Abs(u.CostUSD-0.34) > 1e-9 {
+		t.Errorf("cost = %v, want 0.34", u.CostUSD)
+	}
+}
 
 // The three lines of a minimal Claude session: one user turn, one assistant turn
 // with a tool use and token usage, then a user turn carrying only the tool

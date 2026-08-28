@@ -71,7 +71,7 @@ func (r *reducer) reduceOpenCodeMessage(e gjson.Result, offset int64) {
 	case "assistant":
 		ord := r.nextOrdinal
 		r.nextOrdinal++
-		model := data.Get("modelID").String()
+		model := providerModel(data.Get("providerID").String(), data.Get("modelID").String())
 		op := MessageOp{Ordinal: ord, Role: RoleAssistant, Model: model, Timestamp: ts}
 		var textParts, thinkParts []string
 		callIndex := 0

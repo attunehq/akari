@@ -714,13 +714,16 @@ Per-agent specifics the parser must handle:
   `last_token_usage` with a combined input that must be split into uncached
   input and `cache_read` (cached) before storing.
 - **pi** (`~/.pi/agent/sessions/<encoded-cwd>/<id>.jsonl`): first line is a
-  `type: "session"` header carrying `cwd`; subsequent lines are messages.
+  `type: "session"` header carrying `cwd`; subsequent lines are messages. Each
+  assistant message carries its provider and model, which form the pricing
+  identity.
 - **OpenCode** (`~/.local/share/opencode/opencode.db`): SQLite `session`,
   `message`, and `part` tables. The client materializes one JSONL file per
   session (a `type: "session"` header, then one `type: "message"` line per turn
   with its parts nested). Subagent rows set `parent_id` on the child; each
   session keeps its own token ledger. Token usage is per assistant message
-  (`data.tokens`); reasoning may be plaintext, an encrypted xAI blob, or both.
+  (`data.tokens`); `providerID` and `modelID` form the pricing identity.
+  Reasoning may be plaintext, an encrypted xAI blob, or both.
 
 Token usage is normalized across agents into one shape: input, output,
 cache-write (cache creation), cache-read, reasoning.
@@ -728,13 +731,14 @@ cache-write (cache creation), cache-read, reasoning.
 ### Cost
 
 Cost is computed server-side at parse time from a pricing table compiled into the
-binary: a map of canonical model ID to per-million-token rates for input, output,
-cache-write, and cache-read. Matching is exact (a key prices only its own model,
-never a family), and each model maps to a list of date-effective rates so one ID can
-price pre-change and post-change usage differently (an introductory promo that
-reverts, a mid-life reprice); the usage event's time selects the window in effect
-when it occurred. There is no runtime catalog or refresh endpoint; updating prices
-means a new build. The computed cost is stored on each usage event.
+binary. The table maps a pricing identity to per-million-token rates for input,
+output, reasoning, cache-write, and cache-read. pi and OpenCode identities use
+`provider/model` because one model can have different rates through different
+providers. Matching is exact, and each identity maps to a list of date-effective
+rates so one route can price pre-change and post-change usage differently. The
+usage event's time selects the active window. There is no runtime catalog or
+refresh endpoint; updating prices means a new build. The computed cost is stored
+on each usage event.
 
 A turn whose model is not in the table records its token usage with a zero cost.
 Zero is the application-wide representation for an unknown price; it does not mean

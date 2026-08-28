@@ -407,7 +407,7 @@ func TestParsePi(t *testing.T) {
 		t.Errorf("message 0 = %+v", s.Messages[0])
 	}
 	a := s.Messages[1]
-	if a.Content != "Looking at auth." || a.Model != "claude-opus-4-20250514" {
+	if a.Content != "Looking at auth." || a.Model != "anthropic/claude-opus-4-20250514" {
 		t.Errorf("message 1 = %+v", a)
 	}
 	if !a.HasThinking || a.ThinkingText != "Inspect the auth package" {
@@ -438,7 +438,7 @@ func TestParsePi(t *testing.T) {
 		t.Fatalf("usage events = %d, want 1", len(s.UsageEvent))
 	}
 	u := s.UsageEvent[0]
-	if u.Input != 100 || u.Output != 50 || u.Model != "claude-opus-4-20250514" {
+	if u.Input != 100 || u.Output != 50 || u.CacheRead != 30 || u.CacheWrite != 10 || u.Model != "anthropic/claude-opus-4-20250514" {
 		t.Errorf("usage = %+v", u)
 	}
 	if u.DedupKey != "e2" {

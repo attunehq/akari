@@ -27,6 +27,7 @@ import (
 type Rate struct {
 	Input      float64
 	Output     float64
+	Reasoning  float64
 	CacheWrite float64 // cache creation
 	CacheRead  float64
 }
@@ -50,6 +51,12 @@ func flat(r Rate) []DatedRate { return []DatedRate{{Rate: r}} }
 // $3/$15 sticker rate takes over. It is a UTC-midnight boundary so it aligns with the
 // day buckets the aggregate cache-savings paths price against (see store/analytics_cache.go).
 var sonnet5Sticker = time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+
+// glm53FlashSticker is the first whole UTC day after Z.AI's 50% launch promotion.
+// The provider ends the promotion at 2026-09-10 00:00 UTC+8. Pricing windows align
+// to UTC day buckets, so Akari keeps the discounted rate through the remaining
+// eight hours of September 9 UTC rather than splitting that aggregate day.
+var glm53FlashSticker = time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
 
 // table maps a canonical model ID to its date-effective rates. Matching is EXACT, not
 // by prefix: a key prices only the model whose ID it is, never a whole family or major
@@ -117,7 +124,7 @@ var table = map[string][]DatedRate{
 	"claude-haiku-4-5": flat(Rate{Input: 1, Output: 5, CacheWrite: 1.25, CacheRead: 0.10}),
 	"claude-3-5-haiku": flat(Rate{Input: 0.80, Output: 4, CacheWrite: 1, CacheRead: 0.08}),
 
-	// OpenAI GPT-5 family, current generation (July 2026).
+	// OpenAI GPT-5 family as served through Codex.
 	//
 	// GPT-5.6 is a three-tier family: sol is the flagship, terra the mini-class
 	// balance tier, luna the nano-class throughput tier (Codex's models.json and the
@@ -154,19 +161,95 @@ var table = map[string][]DatedRate{
 	// with no discounted cached read to price. Their cached-input column on the
 	// pricing page reads "not available", not a number. Leave CacheRead unset; a
 	// cached read never reaches a -pro model.
-	"gpt-5.5":       flat(Rate{Input: 5, Output: 30, CacheRead: 0.50}),
-	"gpt-5.5-pro":   flat(Rate{Input: 30, Output: 180}),
-	"gpt-5.4":       flat(Rate{Input: 2.50, Output: 15, CacheRead: 0.25}),
-	"gpt-5.4-mini":  flat(Rate{Input: 0.75, Output: 4.50, CacheRead: 0.075}),
-	"gpt-5.4-nano":  flat(Rate{Input: 0.20, Output: 1.25, CacheRead: 0.02}),
-	"gpt-5.4-pro":   flat(Rate{Input: 30, Output: 180}),
-	"gpt-5.3-codex": flat(Rate{Input: 1.75, Output: 14, CacheRead: 0.175}),
+	"gpt-5.5":             flat(Rate{Input: 5, Output: 30, CacheRead: 0.50}),
+	"gpt-5.5-pro":         flat(Rate{Input: 30, Output: 180}),
+	"gpt-5.4":             flat(Rate{Input: 2.50, Output: 15, CacheRead: 0.25}),
+	"gpt-5.4-mini":        flat(Rate{Input: 0.75, Output: 4.50, CacheRead: 0.075}),
+	"gpt-5.4-nano":        flat(Rate{Input: 0.20, Output: 1.25, CacheRead: 0.02}),
+	"gpt-5.4-pro":         flat(Rate{Input: 30, Output: 180}),
+	"gpt-5.3-codex":       flat(Rate{Input: 1.75, Output: 14, CacheRead: 0.175}),
+	"gpt-5.3-codex-spark": flat(Rate{Input: 1.75, Output: 14, CacheRead: 0.175}),
 	// Prior generation (GPT-5, Aug 2025 launch). gpt-5-2025-08-07 normalizes to
 	// "gpt-5"; under exact matching that base key does not absorb gpt-5.4/gpt-5.5.
 	"gpt-5":       flat(Rate{Input: 1.25, Output: 10, CacheRead: 0.125}),
 	"gpt-5-codex": flat(Rate{Input: 1.25, Output: 10, CacheRead: 0.125}),
 	"gpt-5-mini":  flat(Rate{Input: 0.25, Output: 2, CacheRead: 0.025}),
 	"gpt-5-nano":  flat(Rate{Input: 0.05, Output: 0.40, CacheRead: 0.005}),
+
+	// The direct OpenAI, OpenCode Zen, and OpenRouter GPT-5.6 routes do not share
+	// Codex's rates. These are the base-context prices; Akari's per-turn usage
+	// projection does not retain the provider's long-context tier decision.
+	"openai/gpt-5.6":                  flat(Rate{Input: 4, Output: 20, Reasoning: 20, CacheWrite: 5, CacheRead: 0.40}),
+	"openai/gpt-5.6-sol":              flat(Rate{Input: 4, Output: 20, Reasoning: 20, CacheWrite: 5, CacheRead: 0.40}),
+	"openai/gpt-5.6-terra":            flat(Rate{Input: 2, Output: 12, Reasoning: 12, CacheWrite: 2.50, CacheRead: 0.20}),
+	"openai/gpt-5.6-luna":             flat(Rate{Input: 0.20, Output: 1.20, Reasoning: 1.20, CacheWrite: 0.25, CacheRead: 0.02}),
+	"opencode/gpt-5.6-sol":            flat(Rate{Input: 2, Output: 10, Reasoning: 10, CacheWrite: 2.50, CacheRead: 0.20}),
+	"opencode/gpt-5.6-terra":          flat(Rate{Input: 2.50, Output: 15, Reasoning: 15, CacheWrite: 3.125, CacheRead: 0.25}),
+	"opencode/gpt-5.6-luna":           flat(Rate{Input: 0.20, Output: 1.20, Reasoning: 1.20, CacheWrite: 0.25, CacheRead: 0.02}),
+	"openrouter/openai/gpt-5.6-sol":   flat(Rate{Input: 2, Output: 10, CacheWrite: 2.50, CacheRead: 0.20}),
+	"openrouter/openai/gpt-5.6-terra": flat(Rate{Input: 2, Output: 12, CacheWrite: 2.50, CacheRead: 0.20}),
+	"openrouter/openai/gpt-5.6-luna":  flat(Rate{Input: 0.20, Output: 1.20, CacheWrite: 0.25, CacheRead: 0.02}),
+
+	// Provider-qualified coding models shared by pi and OpenCode. These rates are
+	// the provider snapshots published through models.dev on 2026-08-28. Exact
+	// keys are required because the same underlying model can cost differently at
+	// each route. OpenCode reports reasoning separately from output and bills it at
+	// the output rate; RateAt applies that default to provider-qualified entries.
+	//
+	// Z.AI and OpenRouter's GLM-5.3-Flash routes use the 50% launch price through
+	// September 9, then return to the $0.15/$0.50 list price. OpenCode Go's catalog
+	// publishes the same token rates for its route.
+	"zai/glm-5.2": flat(Rate{Input: 1.40, Output: 4.40, CacheRead: 0.26}),
+	"zai/glm-5.3": flat(Rate{Input: 1.40, Output: 4.40, CacheRead: 0.26}),
+	"zai/glm-5.3-flash": {
+		{Rate: Rate{Input: 0.075, Output: 0.25, CacheRead: 0.015}},
+		{From: glm53FlashSticker, Rate: Rate{Input: 0.15, Output: 0.50, CacheRead: 0.03}},
+	},
+	"openrouter/z-ai/glm-5.2": flat(Rate{Input: 1.19, Output: 3.74, CacheRead: 0.221}),
+	"openrouter/z-ai/glm-5.3": flat(Rate{Input: 1.40, Output: 4.40, CacheRead: 0.26}),
+	"openrouter/z-ai/glm-5.3-flash": {
+		{Rate: Rate{Input: 0.075, Output: 0.25, CacheRead: 0.015}},
+		{From: glm53FlashSticker, Rate: Rate{Input: 0.15, Output: 0.50, CacheRead: 0.03}},
+	},
+	"opencode/glm-5.2":    flat(Rate{Input: 1.40, Output: 4.40, Reasoning: 4.40, CacheRead: 0.26}),
+	"opencode-go/glm-5.2": flat(Rate{Input: 1.40, Output: 4.40, Reasoning: 4.40, CacheRead: 0.26}),
+	"opencode-go/glm-5.3": flat(Rate{Input: 1.40, Output: 4.40, Reasoning: 4.40, CacheRead: 0.26}),
+	"opencode-go/glm-5.3-flash": {
+		{Rate: Rate{Input: 0.075, Output: 0.25, Reasoning: 0.25, CacheRead: 0.015}},
+		{From: glm53FlashSticker, Rate: Rate{Input: 0.15, Output: 0.50, Reasoning: 0.50, CacheRead: 0.03}},
+	},
+
+	// DeepSeek V4. OpenCode Zen matches the direct sticker rate for Flash but not
+	// its smaller direct cache-read rate. OpenCode Go and OpenRouter select
+	// different serving routes, so all four identities remain separate.
+	"deepseek/deepseek-v4-flash":            flat(Rate{Input: 0.14, Output: 0.28, Reasoning: 0.28, CacheRead: 0.0028}),
+	"deepseek/deepseek-v4-pro":              flat(Rate{Input: 0.435, Output: 0.87, Reasoning: 0.87, CacheRead: 0.003625}),
+	"opencode/deepseek-v4-flash":            flat(Rate{Input: 0.14, Output: 0.28, Reasoning: 0.28, CacheRead: 0.028}),
+	"opencode/deepseek-v4-pro":              flat(Rate{Input: 1.74, Output: 3.84, Reasoning: 3.84, CacheRead: 0.145}),
+	"opencode-go/deepseek-v4-flash":         flat(Rate{Input: 0.22, Output: 0.66, Reasoning: 0.66, CacheRead: 0.007}),
+	"opencode-go/deepseek-v4-pro":           flat(Rate{Input: 0.66, Output: 1.98, Reasoning: 1.98, CacheRead: 0.022}),
+	"openrouter/deepseek/deepseek-v4-flash": flat(Rate{Input: 0.0868, Output: 0.1736, CacheRead: 0.01736}),
+	"openrouter/deepseek/deepseek-v4-pro":   flat(Rate{Input: 0.772038, Output: 1.544076, CacheRead: 0.064337}),
+
+	// Other current coding models from the pi and OpenCode catalogs.
+	"moonshotai/kimi-k3":                    flat(Rate{Input: 3, Output: 15, CacheRead: 0.30}),
+	"kimi-coding/k3":                        flat(Rate{Input: 3, Output: 15, CacheRead: 0.30}),
+	"kimi-coding/kimi-for-coding":           flat(Rate{Input: 0.95, Output: 4, CacheRead: 0.19}),
+	"kimi-coding/kimi-for-coding-highspeed": flat(Rate{Input: 1.90, Output: 8, CacheRead: 0.38}),
+	"openrouter/moonshotai/kimi-k3":         flat(Rate{Input: 3, Output: 15, CacheRead: 0.30}),
+	"opencode/kimi-k3":                      flat(Rate{Input: 3, Output: 15, Reasoning: 15, CacheRead: 0.30}),
+	"opencode-go/kimi-k3":                   flat(Rate{Input: 3, Output: 15, Reasoning: 15, CacheRead: 0.30}),
+	"minimax/minimax-m2.7":                  flat(Rate{Input: 0.30, Output: 1.20, CacheWrite: 0.375, CacheRead: 0.06}),
+	"openrouter/minimax/minimax-m2.7":       flat(Rate{Input: 0.30, Output: 1.20, CacheRead: 0.06}),
+	"opencode/minimax-m2.7":                 flat(Rate{Input: 0.30, Output: 1.20, Reasoning: 1.20, CacheRead: 0.06}),
+	"opencode-go/minimax-m2.7":              flat(Rate{Input: 0.30, Output: 1.20, Reasoning: 1.20, CacheRead: 0.06}),
+	"google/gemini-3.7-flash":               flat(Rate{Input: 0.75, Output: 3.75, CacheRead: 0.075}),
+	"openrouter/google/gemini-3.7-flash":    flat(Rate{Input: 0.375, Output: 1.875, CacheWrite: 0.020833, CacheRead: 0.0375}),
+	"opencode/gemini-3.7-flash":             flat(Rate{Input: 1.50, Output: 7.50, Reasoning: 7.50, CacheRead: 0.15}),
+	"openrouter/qwen/qwen3.8-flash":         flat(Rate{Input: 0.15, Output: 0.47, CacheWrite: 0.20, CacheRead: 0.016}),
+	"openrouter/qwen/qwen3.8-max":           flat(Rate{Input: 2, Output: 6, CacheWrite: 2.50, CacheRead: 0.25}),
+	"opencode-go/qwen3.8-flash":             flat(Rate{Input: 0.15, Output: 0.47, Reasoning: 0.47, CacheWrite: 0.20, CacheRead: 0.016}),
+	"opencode-go/qwen3.8-max":               flat(Rate{Input: 2, Output: 6, Reasoning: 6, CacheWrite: 2.50, CacheRead: 0.25}),
 
 	// xAI Grok, as served through the Grok CLI (grok.com accounts). The rates are
 	// derived from the CLI's own per-turn billing telemetry rather than a price
@@ -177,8 +260,20 @@ var table = map[string][]DatedRate{
 	// the schema but zero on every observed turn, and no write rate is published
 	// or derivable until one is nonzero, so CacheWrite stays unset like the
 	// pre-5.6 OpenAI keys.
-	"grok-4.6": flat(Rate{Input: 2, Output: 6, CacheRead: 0.50}),
-	"grok-4.5": flat(Rate{Input: 2, Output: 6, CacheRead: 0.30}),
+	"grok-4.6":                 flat(Rate{Input: 2, Output: 6, CacheRead: 0.50}),
+	"grok-4.5":                 flat(Rate{Input: 2, Output: 6, CacheRead: 0.30}),
+	"opencode/grok-4.6":        flat(Rate{Input: 2, Output: 6, Reasoning: 6, CacheRead: 0.50}),
+	"opencode-go/grok-4.6":     flat(Rate{Input: 2, Output: 6, Reasoning: 6, CacheRead: 0.50}),
+	"openrouter/x-ai/grok-4.6": flat(Rate{Input: 2, Output: 6, CacheRead: 0.50}),
+}
+
+// directProviderFallbacks are transcript providers whose input, output, and
+// cache rates are already represented by Akari's legacy unqualified keys.
+// Router and gateway providers never inherit these direct rates.
+var directProviderFallbacks = map[string]bool{
+	"anthropic":    true,
+	"openai-codex": true,
+	"xai":          true,
 }
 
 // datedSnapshot matches a trailing release-date suffix in either the Anthropic
@@ -222,17 +317,27 @@ func RateAt(model string, at time.Time) (Rate, bool) {
 	if model == "" {
 		return Rate{}, false
 	}
+	qualified := strings.Contains(model, "/")
 	rates, ok := table[model]
+	if !ok {
+		if provider, unqualified, found := strings.Cut(model, "/"); found && directProviderFallbacks[provider] {
+			rates, ok = table[unqualified]
+		}
+	}
 	if !ok {
 		return Rate{}, false
 	}
-	return rateAt(rates, at), true
+	r := rateAt(rates, at)
+	if qualified && r.Reasoning == 0 {
+		r.Reasoning = r.Output
+	}
+	return r, true
 }
 
 // Cost returns the estimated USD cost for a token count under a model at the time
 // the usage occurred. Token counts are in tokens (not millions). An unknown model
 // returns zero. The time selects the date-effective rate window.
-func Cost(model string, at time.Time, input, output, cacheWrite, cacheRead int) float64 {
+func Cost(model string, at time.Time, input, output, cacheWrite, cacheRead, reasoning int) float64 {
 	r, ok := RateAt(model, at)
 	if !ok {
 		return 0
@@ -242,6 +347,9 @@ func Cost(model string, at time.Time, input, output, cacheWrite, cacheRead int) 
 		float64(output)/million*r.Output +
 		float64(cacheWrite)/million*r.CacheWrite +
 		float64(cacheRead)/million*r.CacheRead
+	if reasoning != 0 {
+		cost += float64(reasoning) / million * r.Reasoning
+	}
 	return cost
 }
 

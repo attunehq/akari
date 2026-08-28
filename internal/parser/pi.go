@@ -46,7 +46,8 @@ func (r *reducer) reducePi(region []byte, base int64) error {
 			case "assistant":
 				ord := r.nextOrdinal
 				r.nextOrdinal++
-				op := MessageOp{Ordinal: ord, Role: RoleAssistant, Model: msg.Get("model").String(), Timestamp: ts}
+				model := providerModel(msg.Get("provider").String(), msg.Get("model").String())
+				op := MessageOp{Ordinal: ord, Role: RoleAssistant, Model: model, Timestamp: ts}
 				var textParts, thinkParts []string
 				callIndex := 0
 				for _, b := range msg.Get("content").Array() {
@@ -86,6 +87,8 @@ func (r *reducer) reducePi(region []byte, base int64) error {
 						MessageOrdinal: &o, Model: op.Model,
 						Input:      int(u.Get("input").Int()),
 						Output:     int(u.Get("output").Int()),
+						CacheWrite: int(u.Get("cacheWrite").Int()),
+						CacheRead:  int(u.Get("cacheRead").Int()),
 						OccurredAt: ts, DedupKey: e.Get("id").String(),
 					}, offset)
 				}

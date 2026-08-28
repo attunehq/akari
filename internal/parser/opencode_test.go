@@ -35,7 +35,7 @@ func TestParseOpenCode(t *testing.T) {
 	if a1.Role != RoleAssistant || a1.Content != "Looking at the auth module" {
 		t.Errorf("message 1 content = %q", a1.Content)
 	}
-	if a1.Model != "grok-4.6" {
+	if a1.Model != "opencode/grok-4.6" {
 		t.Errorf("message 1 model = %q", a1.Model)
 	}
 	if !a1.HasThinking || a1.ThinkingText != "Consider the auth module" {
@@ -79,7 +79,7 @@ func TestParseOpenCode(t *testing.T) {
 	if u0.Input != 100 || u0.Output != 50 || u0.CacheWrite != 10 || u0.CacheRead != 30 || u0.Reasoning != 20 {
 		t.Errorf("usage 0 = %+v", u0)
 	}
-	if u0.Model != "grok-4.6" {
+	if u0.Model != "opencode/grok-4.6" {
 		t.Errorf("usage 0 model = %q", u0.Model)
 	}
 

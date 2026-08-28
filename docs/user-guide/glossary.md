@@ -101,15 +101,16 @@ Every turn records its token usage, split into classes akari tracks separately:
 
 - **Input** tokens fed to the model.
 - **Output** tokens the model generated.
+- **Reasoning** tokens the provider reports separately from visible output.
 - **Cache write** tokens written to the model's prompt cache.
 - **Cache read** tokens served from that cache.
 
 The server prices each session from a **compiled-in rate table**: a mapping from
-model to per-token rates, built into the binary. Parsing a session looks up its
-model and multiplies each token class by its rate to get a dollar cost. There is
-no runtime pricing feed; updating rates means a new server build (which, because
-pricing is part of parsing, reprices old sessions automatically on the next
-[reparse](#parsing-and-reparse)).
+model and provider identity to per-token rates, built into the binary. Parsing a
+session looks up that identity and multiplies each token class by its rate to get
+a dollar cost. There is no runtime pricing feed; updating rates means a new
+server build (which, because pricing is part of parsing, reprices old sessions
+automatically on the next [reparse](#parsing-and-reparse)).
 
 When a session uses a model the table does not know, its tokens are still recorded
 and its cost is stored as zero. Zero means Akari does not know the price; it does

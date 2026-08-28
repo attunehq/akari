@@ -185,7 +185,7 @@ func toProjectionDelta(p parser.Delta) store.ProjectionDelta {
 			CacheWrite:     u.CacheWrite,
 			CacheRead:      u.CacheRead,
 			Reasoning:      u.Reasoning,
-			CostUSD:        pricing.Cost(u.Model, u.OccurredAt, u.Input, u.Output, u.CacheWrite, u.CacheRead),
+			CostUSD:        pricing.Cost(u.Model, u.OccurredAt, u.Input, u.Output, u.CacheWrite, u.CacheRead, u.Reasoning),
 			OccurredAt:     u.OccurredAt,
 			DedupKey:       u.DedupKey,
 			SourceOffset:   u.SourceOffset,

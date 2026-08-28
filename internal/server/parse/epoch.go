@@ -307,4 +307,13 @@ package parse
 // and recognize code-mode failures. Buffered and streaming transforms use the
 // same banner rule. Existing sentinels remain ok until a current client syncs
 // the source transcript again.
-const Epoch = 25
+//
+// Epoch 25 -> 26: preserve the provider in pi and OpenCode model identities and
+// price current shared coding models by their exact provider route. Existing pi
+// and OpenCode projections rebuild from ambiguous model slugs such as
+// "grok-4.6" to qualified identities such as "opencode/grok-4.6". The pricing
+// table adds provider-specific GPT 5.6 routes, GPT-5.3 Codex Spark, GLM 5.2,
+// GLM 5.3, GLM 5.3 Flash, DeepSeek V4, Kimi K3, MiniMax M2.7, Gemini 3.7 Flash,
+// and Qwen3.8 routes. pi cache reads and writes now reach pricing. OpenCode's
+// separately reported reasoning tokens now price at each route's reasoning rate.
+const Epoch = 26

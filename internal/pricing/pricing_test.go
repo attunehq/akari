@@ -151,6 +151,7 @@ func TestRateAtGPT(t *testing.T) {
 		{"gpt-5.4-nano", 0.20, 1.25},
 		{"gpt-5.4-pro", 30, 180},
 		{"gpt-5.3-codex", 1.75, 14},
+		{"gpt-5.3-codex-spark", 1.75, 14},
 		// Prior generation, including a dated base snapshot that normalizes to gpt-5.
 		{"gpt-5", 1.25, 10},
 		{"gpt-5-2025-08-07", 1.25, 10},
@@ -163,6 +164,60 @@ func TestRateAtGPT(t *testing.T) {
 		if !ok || r.Input != c.input || r.Output != c.output {
 			t.Errorf("%s rate = %+v (ok=%v), want input %v / output %v", c.model, r, ok, c.input, c.output)
 		}
+	}
+}
+
+func TestProviderSpecificRates(t *testing.T) {
+	cases := []struct {
+		model                 string
+		input, output, cached float64
+	}{
+		{"deepseek/deepseek-v4-flash", 0.14, 0.28, 0.0028},
+		{"opencode/deepseek-v4-flash", 0.14, 0.28, 0.028},
+		{"opencode-go/deepseek-v4-flash", 0.22, 0.66, 0.007},
+		{"openrouter/deepseek/deepseek-v4-flash", 0.0868, 0.1736, 0.01736},
+		{"openai/gpt-5.6-sol", 4, 20, 0.40},
+		{"opencode/gpt-5.6-sol", 2, 10, 0.20},
+	}
+	for _, c := range cases {
+		r, ok := RateAt(c.model, anytime)
+		if !ok || r.Input != c.input || r.Output != c.output || r.Reasoning != c.output || r.CacheRead != c.cached {
+			t.Errorf("%s rate = %+v (ok=%v), want %v/%v cached %v", c.model, r, ok, c.input, c.output, c.cached)
+		}
+	}
+}
+
+func TestGLM53FlashPromotion(t *testing.T) {
+	for _, model := range []string{
+		"zai/glm-5.3-flash",
+		"openrouter/z-ai/glm-5.3-flash",
+		"opencode-go/glm-5.3-flash",
+	} {
+		promo, ok := RateAt(model, time.Date(2026, 8, 28, 0, 0, 0, 0, time.UTC))
+		if !ok || promo.Input != 0.075 || promo.Output != 0.25 || promo.CacheRead != 0.015 {
+			t.Errorf("%s promo rate = %+v (ok=%v)", model, promo, ok)
+		}
+		sticker, ok := RateAt(model, glm53FlashSticker)
+		if !ok || sticker.Input != 0.15 || sticker.Output != 0.50 || sticker.CacheRead != 0.03 {
+			t.Errorf("%s sticker rate = %+v (ok=%v)", model, sticker, ok)
+		}
+	}
+}
+
+func TestDirectProviderFallback(t *testing.T) {
+	r, ok := RateAt("anthropic/claude-opus-4-8", anytime)
+	if !ok || r.Input != 5 || r.Output != 25 {
+		t.Errorf("direct Anthropic rate = %+v (ok=%v)", r, ok)
+	}
+	if r.Reasoning != r.Output {
+		t.Errorf("provider-qualified Anthropic reasoning rate = %v, want output rate %v", r.Reasoning, r.Output)
+	}
+	r, ok = RateAt("openai-codex/gpt-5.3-codex-spark", anytime)
+	if !ok || r.Input != 1.75 || r.Output != 14 {
+		t.Errorf("Codex provider rate = %+v (ok=%v)", r, ok)
+	}
+	if _, ok := RateAt("unlisted-router/claude-opus-4-8", anytime); ok {
+		t.Error("an unlisted router must not inherit the direct Anthropic rate")
 	}
 }
 
@@ -219,31 +274,37 @@ func TestRateAtUnknown(t *testing.T) {
 
 func TestCost(t *testing.T) {
 	// 1M input + 1M output on Sonnet 4.0 (dated ID) at 3 + 15 per million.
-	cost := Cost("claude-sonnet-4-20250514", anytime, 1_000_000, 1_000_000, 0, 0)
+	cost := Cost("claude-sonnet-4-20250514", anytime, 1_000_000, 1_000_000, 0, 0, 0)
 	if math.Abs(cost-18.0) > 1e-9 {
 		t.Errorf("cost = %v, want 18", cost)
 	}
 
 	// All four token classes contribute.
-	cost = Cost("claude-sonnet-4-5", anytime, 1_000_000, 0, 1_000_000, 1_000_000)
+	cost = Cost("claude-sonnet-4-5", anytime, 1_000_000, 0, 1_000_000, 1_000_000, 0)
 	want := 3.0 + 3.75 + 0.30
 	if math.Abs(cost-want) > 1e-9 {
 		t.Errorf("cost = %v, want %v", cost, want)
 	}
 
-	if got := Cost("mystery-model", anytime, 100, 100, 0, 0); got != 0 {
+	if got := Cost("mystery-model", anytime, 100, 100, 0, 0, 0); got != 0 {
 		t.Errorf("unknown model cost = %v, want 0", got)
+	}
+
+	// OpenCode records reasoning apart from output and bills both at the model's
+	// output rate. One million of each on the Zen Grok route costs $12 total.
+	if got := Cost("opencode/grok-4.6", anytime, 0, 1_000_000, 0, 0, 1_000_000); got != 12 {
+		t.Errorf("OpenCode output plus reasoning cost = %v, want 12", got)
 	}
 }
 
 func TestCostSelectsDatedWindow(t *testing.T) {
 	// The same 1M input + 1M output on Sonnet 5 prices at the intro rate inside the
 	// promo window and the sticker rate after it.
-	intro := Cost("claude-sonnet-5", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), 1_000_000, 1_000_000, 0, 0)
+	intro := Cost("claude-sonnet-5", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), 1_000_000, 1_000_000, 0, 0, 0)
 	if math.Abs(intro-12.0) > 1e-9 {
 		t.Errorf("intro cost = %v, want 12 (2 + 10)", intro)
 	}
-	sticker := Cost("claude-sonnet-5", sonnet5Sticker, 1_000_000, 1_000_000, 0, 0)
+	sticker := Cost("claude-sonnet-5", sonnet5Sticker, 1_000_000, 1_000_000, 0, 0, 0)
 	if math.Abs(sticker-18.0) > 1e-9 {
 		t.Errorf("sticker cost = %v, want 18 (3 + 15)", sticker)
 	}

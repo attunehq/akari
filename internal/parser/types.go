@@ -4,7 +4,10 @@
 // can be improved and re-run against stored raw bytes.
 package parser
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Agent identifies which on-disk format a session uses.
 type Agent string
@@ -22,6 +25,18 @@ const (
 // endpoint) derives from it, so this enum stays the one owner of "which agent
 // formats exist" and a format the parser handles is never rejected at announce.
 var Agents = []Agent{AgentClaude, AgentCodex, AgentPi, AgentCursor, AgentGrok, AgentOpenCode}
+
+// providerModel keeps the serving provider in the model identity when an agent
+// records it. Provider-qualified IDs let pricing distinguish two routes that use
+// the same model slug at different rates.
+func providerModel(provider, model string) string {
+	provider = strings.TrimSpace(provider)
+	model = strings.TrimSpace(model)
+	if provider == "" || model == "" {
+		return model
+	}
+	return provider + "/" + model
+}
 
 // Session is the parsed projection of one session file.
 type Session struct {

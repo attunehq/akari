@@ -17,7 +17,7 @@
       "Content": "Looking at the auth module",
       "ThinkingText": "Consider the auth module",
       "ThinkingBytes": 24,
-      "Model": "grok-4.6",
+      "Model": "opencode/grok-4.6",
       "HasThinking": true,
       "HasToolUse": true,
       "Timestamp": "2024-03-01T12:00:02Z"
@@ -39,7 +39,7 @@
       "Content": "The build fails before the tests run.",
       "ThinkingText": "",
       "ThinkingBytes": 0,
-      "Model": "grok-4.6",
+      "Model": "opencode/grok-4.6",
       "HasThinking": false,
       "HasToolUse": true,
       "Timestamp": "2024-03-01T12:01:41Z"
@@ -136,13 +136,13 @@
   "Usage": [
     {
       "MessageOrdinal": 1,
-      "Model": "grok-4.6",
+      "Model": "opencode/grok-4.6",
       "Input": 100,
       "Output": 50,
       "CacheWrite": 10,
       "CacheRead": 30,
       "Reasoning": 20,
-      "CostUSD": 0.000515,
+      "CostUSD": 0.000635,
       "OccurredAt": "2024-03-01T12:00:02Z",
       "DedupKey": "msg_a1",
       "SourceOffset": 510,
@@ -150,7 +150,7 @@
     },
     {
       "MessageOrdinal": 3,
-      "Model": "grok-4.6",
+      "Model": "opencode/grok-4.6",
       "Input": 80,
       "Output": 20,
       "CacheWrite": 0,
