@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -33,7 +34,7 @@ func TestDaemonStatusCommandPropagatesProbeErrors(t *testing.T) {
 }
 
 func TestDaemonWatchRecordsStartupErrorsInRotatingLog(t *testing.T) {
-	configHome := t.TempDir()
+	configHome := daemonTestHome(t)
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	t.Setenv("AppData", configHome)
 	t.Setenv("HOME", configHome)
@@ -53,6 +54,23 @@ func TestDaemonWatchRecordsStartupErrorsInRotatingLog(t *testing.T) {
 	if !strings.Contains(string(data), "akari: "+err.Error()) {
 		t.Fatalf("daemon log %q does not contain startup error %q", data, err)
 	}
+}
+
+func daemonTestHome(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS != "darwin" {
+		return t.TempDir()
+	}
+	home, err := os.MkdirTemp("/tmp", "akari-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(home); err != nil {
+			t.Errorf("remove temporary home: %v", err)
+		}
+	})
+	return home
 }
 
 func TestDaemonStopCommandRejectsInvalidTimeout(t *testing.T) {

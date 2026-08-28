@@ -2,7 +2,10 @@ package parser
 
 import (
 	"encoding/json"
+	"io"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -140,7 +143,8 @@ func (r *reducer) reduceCodex(region []byte, base int64) error {
 
 			case itemType == "function_call_output",
 				itemType == "custom_tool_call_output":
-				r.applyResult(p.Get("call_id").String(), p.Get("output"), false)
+				out := p.Get("output")
+				r.applyResult(p.Get("call_id").String(), out, codexResultIsErr(out))
 
 			case itemType == "image_generation_call":
 				// The generated image rides inline as a base64 result; record it as an
@@ -453,4 +457,102 @@ func joinNonEmpty(a, b string) string {
 		return a
 	}
 	return a + "\n" + b
+}
+
+// codexExitMarkerRE matches the exit-status line of the exec output banner:
+// format_exec_output_for_model titles the result "Exit code: N"; the
+// unified_exec formatter streams "Process exited with code N".
+var codexExitMarkerRE = regexp.MustCompile(`^(?:Exit code:|Process exited with code)\s*(-?\d+)\s*$`)
+
+var codexTimeoutMarkerRE = regexp.MustCompile(`^command timed out after \d+ milliseconds$`)
+
+// codexBannerFurniture are the other lines the direct, unified-exec, and
+// code-mode banners contain. The status scan walks past them but stops at
+// anything else.
+var codexBannerFurniture = []string{
+	"Wall time:",
+	"Wall time ",
+	"Total output lines:",
+	"Original token count:",
+	"Warning: truncated output",
+	"Chunk ID:",
+}
+
+// codexBannerMaxLines bounds the banner scan; the real banner is a handful of
+// leading lines.
+const codexBannerMaxLines = 8
+
+const codexBannerMaxBytes = 4 << 10
+
+// codexResultIsErr derives a tool result's error status from the banner Codex
+// leaves in the output text. Codex rollouts do not serialize the harness's
+// internal success flag, so the banner is the durable signal. A complete banner
+// must reach its Output separator before an exit or script marker takes effect;
+// this keeps ordinary tool bodies that quote a marker at status ok. The client
+// records derived errors on CAS sentinels before it lifts the banner text.
+func codexResultIsErr(output gjson.Result) bool {
+	if ref, ok := asCASRef(output); ok {
+		return ref.IsError
+	}
+	return codexResultTextIsErr(blockText(output))
+}
+
+// codexResultReaderIsErr is the streaming twin of codexResultIsErr. The client
+// uses it before replacing a large result with a CAS sentinel, so the sentinel
+// keeps the status without buffering the result body.
+func codexResultReaderIsErr(r io.Reader) (bool, error) {
+	prefix, err := io.ReadAll(io.LimitReader(r, codexBannerMaxBytes))
+	if err != nil {
+		return false, err
+	}
+	return codexResultTextIsErr(string(prefix)), nil
+}
+
+func codexResultTextIsErr(text string) bool {
+	if text == "" {
+		return false
+	}
+	if len(text) > codexBannerMaxBytes {
+		text = text[:codexBannerMaxBytes]
+	}
+	lines := strings.SplitN(text, "\n", codexBannerMaxLines+1)
+	if codexTimeoutMarkerRE.MatchString(strings.TrimSuffix(lines[0], "\r")) {
+		return true
+	}
+
+	scriptFailed := false
+	exitCode := 0
+	hasExitCode := false
+	for i, line := range lines {
+		if i == codexBannerMaxLines {
+			break
+		}
+		line = strings.TrimSuffix(line, "\r")
+		if line == "Output:" {
+			return scriptFailed || hasExitCode && exitCode != 0
+		}
+		if i == 0 && (line == "Script failed" || line == "Script terminated") {
+			scriptFailed = true
+			continue
+		}
+		if m := codexExitMarkerRE.FindStringSubmatch(line); m != nil {
+			code, err := strconv.Atoi(m[1])
+			if err != nil {
+				return false
+			}
+			exitCode, hasExitCode = code, true
+			continue
+		}
+		furniture := false
+		for _, prefix := range codexBannerFurniture {
+			if strings.HasPrefix(line, prefix) {
+				furniture = true
+				break
+			}
+		}
+		if !furniture {
+			return false // not a banner: a plain body starts here
+		}
+	}
+	return false
 }
