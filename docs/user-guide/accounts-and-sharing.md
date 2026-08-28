@@ -52,7 +52,7 @@ visible.
 | Push sessions and blobs | yes | no | yes |
 | Read the web UI | no | no | yes |
 | Reach the [MCP](./agent-access.md) endpoint | no | yes | yes |
-| Pin an orphaned session onto a project | no | yes (MCP) | yes |
+| Pin an orphaned session onto a project | no | yes (MCP) | yes (MCP, HTTP, CLI) |
 | Publish / unpublish / delete, mint tokens | no | no | yes |
 
 The intent behind each:

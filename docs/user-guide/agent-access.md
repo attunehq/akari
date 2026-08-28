@@ -115,8 +115,8 @@ The MCP surface mirrors the web UI: the same sessions, the same visibility rule
 (every internal session, exactly what a signed-in user sees), plus `get_session_raw`
 for the ingested bytes, which the web UI does not surface. It exposes no account or
 token management and no way to publish or delete; those stay on the full-scope web
-surface. `assign_session_project` is the matching write on both surfaces: the HTTP
-API is `PUT /api/v1/app/sessions/{id}/project`.
+surface. `assign_session_project` is the matching write on the HTTP API
+(`PUT /api/v1/app/sessions/{id}/project`) and the CLI (`akari assign-project`).
 
 ---
 

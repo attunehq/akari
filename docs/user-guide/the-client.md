@@ -1,6 +1,6 @@
 ---
 title: The client
-summary: "The akari CLI in depth: login, sync, watch, the daemon, discovery, and the resumable upload."
+summary: "The akari CLI in depth: login, assign-project, sync, watch, the daemon, discovery, and the resumable upload."
 order: 3
 ---
 
@@ -17,6 +17,7 @@ This chapter is the reference for driving it.
 | Command | What it does |
 | --- | --- |
 | `akari login --server <url> --token <token>` | Write the client config (server URL and token). |
+| `akari assign-project --session <id> --project <id>` | Pin an orphaned session onto a project. |
 | `akari sync` | Discover and upload everything new, then exit. |
 | `akari watch` | Stay running and upload sessions as they change (foreground). |
 | `akari daemon start` \| `status` \| `stop` | Run and manage `watch` as a background process. |
@@ -44,6 +45,20 @@ to rotate a token or move servers does not wipe your discovery settings.
 session (see the `machine` config key below). Omit it to keep the OS hostname, or
 to leave an existing name untouched on a re-run; pass `--machine ""` to clear it
 back to the hostname.
+
+### assign-project
+
+```sh
+akari assign-project --session <id> --project <id>
+```
+
+`assign-project` pins an orphaned session onto a known project. Use it when a
+deleted worktree uploaded as orphaned but the git project is obvious. The pin
+survives a reparse and a later client announce that still reports the session as
+orphaned.
+
+The config token must be **full** scope. An ingest token is refused. Session and
+project ids are the numeric ids the web UI and MCP tools return.
 
 ### sync
 

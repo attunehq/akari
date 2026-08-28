@@ -198,8 +198,8 @@ on one machine and is pushed by one client, so there is never write contention
 on a single session from multiple clients.
 
 An orphaned session can also be pinned onto a project by hand (or by an agent)
-through `PUT /api/v1/app/sessions/{id}/project` and the MCP tool
-`assign_session_project`. That writes `sessions.project_id` and sets
+through `akari assign-project`, `PUT /api/v1/app/sessions/{id}/project`, and the
+MCP tool `assign_session_project`. That writes `sessions.project_id` and sets
 `project_pinned`. A projection rebuild never writes those columns, and a later
 announce that still classifies the session as local (the worktree is still gone)
 does not move it. The pin also holds against a later remote announce: the

@@ -34,6 +34,8 @@ func main() {
 		err = runDaemon(os.Args[2:])
 	case "login":
 		err = runLogin(os.Args[2:])
+	case "assign-project":
+		err = runAssignProject(ctx, os.Args[2:])
 	case "update":
 		err = runUpdate(ctx, os.Args[2:])
 	case "version", "--version", "-v":
@@ -62,6 +64,7 @@ Usage:
   akari daemon {start|status} [--config PATH]             manage the watch loop as a background process
   akari daemon stop [--timeout DUR] [--force]             stop it and confirm shutdown
   akari login --server URL --token TOKEN [--config PATH]  write the client config
+  akari assign-project --session ID --project ID [--config PATH]  pin an orphaned session onto a project
   akari update [--check]                                  update to the latest release in place
   akari version                                           print the build version and exit
 `)
