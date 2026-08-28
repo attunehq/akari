@@ -28,3 +28,9 @@ internal/server/web/*_templ.go
 # Local Claude Code agent worktree state. Shared agent config under .claude/
 # (such as .claude/skills/) is committed; this per-machine scratch state is not.
 /.claude/worktrees/
+
+# Bastion review runs are local state. Keep only the shared Pi model catalog.
+/.bastion/runs/
+/.bastion/*.jsonl
+/.bastion/pi-agent/*
+!/.bastion/pi-agent/models.json

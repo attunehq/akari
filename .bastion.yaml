@@ -1,0 +1,110 @@
+# Bastion reviewer registry. Every reviewer is a paid agent run, so enable one
+# only for a semantic invariant that a deterministic check cannot express.
+#
+# Reviewer choices come from Akari's pull request history. PR #124
+# found that projection consistency produced real findings on 11 of 20 audited
+# pull requests. Go correctness caught a database pool deadlock, a blob sweep
+# race, and a rolling-deploy projection downgrade. Later fixes cluster around
+# client upload convergence and daemon lifecycle. The active specialists cover
+# those recurring data and lifecycle risks.
+#
+attestations: true
+#
+# defaults:
+#   model: gpt-5.6-luna
+#   effort: xhigh
+#
+# Local review is `scripts/bastion.sh review --base origin/main --format jsonl`.
+# Set ZAI_API_KEY first. A green final run can then be attested for CI.
+reviewers:
+  - name: projection-consistency
+    trigger:
+      - 'internal/parser/**'
+      - 'internal/pricing/**'
+      - 'internal/server/parse/**'
+      - 'internal/server/store/**'
+      - 'migrations/**'
+    mode: gate
+    backend: pi
+    model: zai/glm-5.3-flash
+    effort: high
+    prompt: |
+      Review one concern: consistency between source data and every derived
+      representation. Akari rebuilds each session projection from raw bytes,
+      then derives rollups, signals, grades, caches, and public summaries.
+      Flag a changed write, reset, rebuild, or read path that can leave those
+      representations out of sync. Check that all token classes, pricing
+      versions, signal facts, prompt classifications, and thinking scalars
+      move together when the change affects them. Check that parse.Epoch is
+      bumped when stored parser or reducer output changes. Require a concrete
+      reachable write path that creates the drift. Do not flag formatting,
+      naming, or states that no writer can produce. Pass when every derived
+      value still reconciles with its source.
+
+  - name: client-sync-convergence
+    trigger:
+      - 'cmd/akari/**'
+      - 'internal/client/**'
+      - 'internal/parser/**'
+      - 'internal/server/httpapi/ingest.go'
+      - 'internal/server/httpapi/blob_upload.go'
+      - 'internal/server/store/ingest.go'
+    mode: gate
+    backend: pi
+    model: zai/glm-5.3-flash
+    effort: high
+    prompt: |
+      Review one concern: lossless, convergent transfer of agent sessions
+      from local discovery through upload and server parsing. Flag changes
+      that can merge distinct source sessions, omit or duplicate bytes,
+      transform buffered and streaming uploads differently, lose metadata
+      when content moves into CAS, or retry in a way that never converges.
+      Include real Claude, Codex, Cursor, Grok, OpenCode, and pi layouts and
+      interrupted uploads. Require a concrete input and failure sequence.
+      Do not review general performance or style. Pass when repeated syncs
+      preserve the source session and settle without further writes.
+
+  - name: concurrent-lifecycle
+    trigger:
+      - 'cmd/akari/**'
+      - 'cmd/akari-server/**'
+      - 'internal/client/daemon/**'
+      - 'internal/client/syncer/**'
+      - 'internal/client/upload/**'
+      - 'internal/client/watch/**'
+      - 'internal/server/parse/**'
+      - 'internal/server/store/**'
+    mode: gate
+    backend: pi
+    model: zai/glm-5.3-flash
+    effort: high
+    prompt: |
+      Review one concern: correctness under concurrent work, cancellation,
+      retry, and shutdown. Flag reachable races, deadlocks, lost wakeups,
+      goroutine leaks, overlapping daemon passes, unbounded retry loops, or
+      transactions that acquire session, parent, blob, and projection locks
+      in inconsistent orders. Check that cancellation stops new work and
+      that required work either finishes or reports failure before shutdown.
+      Name the competing operations and the sequence that fails. Do not flag
+      speculative concurrency or general code style. Pass when lifecycle and
+      lock ordering remain deterministic.
+
+  - name: fresh-eyes-correctness
+    trigger: ['**']
+    mode: gate
+    backend: pi
+    model: zai/glm-5.3-flash
+    effort: high
+    prompt: |
+      Read the commit messages to understand the intended change. Review the
+      complete changeset and the relevant surrounding code and tests for
+      correctness. Find concrete bugs, regressions, missed edge cases, unsafe
+      assumptions, and behavior that conflicts with the stated intent. Report
+      only actionable correctness findings supported by the code. Do not flag
+      style preferences, optional improvements, or speculative risks. Pass when
+      the change is correct.
+
+      Review by reading. Do not run the formatter, the linter, the typechecker,
+      the tests, or a build: the gate runs every check before this review and
+      stops on a failure, so a rerun here proves nothing and costs minutes.
+      Reach a verdict from the code and the tests as written.

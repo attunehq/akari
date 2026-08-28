@@ -1,0 +1,72 @@
+name: Bastion
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bastion-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Bastion
+    # Forks cannot read ZAI_API_KEY. Review same-repository pull requests and
+    # let the ordinary human review path handle external contributions.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          # An attestation binds to the pull request head, not GitHub's
+          # synthetic merge commit.
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Fetch the attestation notes ref
+        run: |
+          set -euo pipefail
+          set +e
+          git ls-remote --exit-code origin refs/notes/bastion >/dev/null
+          status=$?
+          set -e
+          case "$status" in
+            0) git fetch origin +refs/notes/bastion:refs/notes/bastion ;;
+            2) echo '::notice::no refs/notes/bastion on origin yet; skipping notes fetch' ;;
+            *) exit "$status" ;;
+          esac
+
+      - name: Install Bastion
+        run: >-
+          curl -sSfL
+          "https://github.com/attunehq/bastion/releases/download/v1.1.0/bastion-x86_64-unknown-linux-gnu.tar.gz"
+          | sudo tar -xz -C /usr/local/bin --strip-components 1
+          "bastion-x86_64-unknown-linux-gnu/bastion"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install Pi
+        run: |
+          set -euo pipefail
+          npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.84.3
+          pi --version
+
+      - name: Review
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          # Pi's built-in zai provider reads ZAI_API_KEY. PI_CODING_AGENT_DIR
+          # points at the committed Flash catalog instead of ~/.pi/agent.
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          PI_CODING_AGENT_DIR: ${{ github.workspace }}/.bastion/pi-agent
+        run: |
+          set -euo pipefail
+          if [ -z "${ZAI_API_KEY:-}" ]; then
+            echo '::error::ZAI_API_KEY is empty. Pi cannot authenticate with Z.AI.'
+            exit 1
+          fi
+          bastion review --base "$BASE_SHA"

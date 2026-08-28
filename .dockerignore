@@ -1,6 +1,7 @@
 .git
 .gitignore
 .gitattributes
+.bastion
 /build
 /frontend/node_modules
 *.md
