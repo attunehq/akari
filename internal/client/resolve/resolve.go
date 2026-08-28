@@ -450,6 +450,11 @@ func (r *Resolver) localRoot(ctx context.Context, cwd string) string {
 		dir = filepath.Join(cwd, dir)
 	}
 	dir = filepath.Clean(dir)
+	// Git can return a physical path for linked worktrees while cwd retains a
+	// symlinked spelling. Resolve existing links so both forms produce one key.
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = resolved
+	}
 	// The common dir is "<main-worktree>/.git" for a normal repo, so its parent is
 	// the main worktree: the friendlier key and display root. A bare repo has no
 	// such parent, so its common dir stands as the key.
@@ -670,6 +675,13 @@ func sessionSignature(agent string, e gjson.Result) bool {
 	case "grok":
 		// Every updates.jsonl line is an ACP session update wrapping the session id.
 		return e.Get("params.sessionId").Exists() && e.Get("params.update.sessionUpdate").Exists()
+	case "opencode":
+		// The client-materialized JSONL opens with a session header, then message
+		// lines that carry a role on their data object.
+		if e.Get("type").String() == "session" {
+			return e.Get("id").Exists()
+		}
+		return e.Get("type").String() == "message" && e.Get("data.role").Exists()
 	}
 	return false
 }
@@ -715,6 +727,16 @@ func applyHeaderLine(agent string, e gjson.Result, h *Header) {
 		}
 		// cwd is not in the file; the session directory's name encodes it (see
 		// grokPathHeader).
+	case "opencode":
+		if v := e.Get("directory").String(); v != "" {
+			h.Cwd = v
+		}
+		if v := e.Get("branch").String(); v != "" {
+			h.GitBranch = v
+		}
+		if v := e.Get("id").String(); v != "" {
+			h.sessionID = v
+		}
 	}
 }
 

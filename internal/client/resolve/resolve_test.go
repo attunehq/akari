@@ -45,6 +45,8 @@ func TestPeekHeader(t *testing.T) {
 		`{"type":"session_meta","payload":{"id":"x-9","cwd":"/home/grace/api","git":{"branch":"dev"}}}`+"\n")
 	pi := writeFile(t, dir, "pi.jsonl",
 		`{"type":"session","id":"p-7","cwd":"/home/grace/proj"}`+"\n")
+	opencode := writeFile(t, dir, "ses_1.jsonl",
+		`{"type":"session","id":"ses_1","directory":"/home/grace/app","branch":"main"}`+"\n")
 
 	cases := []struct {
 		agent, path                 string
@@ -53,6 +55,7 @@ func TestPeekHeader(t *testing.T) {
 		{"claude", claude, "/home/grace/app", "main", "c-123"},
 		{"codex", codex, "/home/grace/api", "dev", "x-9"},
 		{"pi", pi, "/home/grace/proj", "", "p-7"},
+		{"opencode", opencode, "/home/grace/app", "main", "ses_1"},
 	}
 	for _, c := range cases {
 		h, err := PeekHeader(discover.File{Agent: c.agent, Root: dir, Path: c.path})
@@ -688,7 +691,7 @@ func TestResolveRealWorktreeGroupsByCommonDir(t *testing.T) {
 			rMain.LocalRoot, rA.LocalRoot, rB.LocalRoot)
 	}
 	// And it is the main worktree, not a per-worktree path or a .git dir.
-	if want, err := filepath.Abs(main); err != nil {
+	if want, err := filepath.EvalSymlinks(main); err != nil {
 		t.Fatal(err)
 	} else if filepath.Clean(rMain.LocalRoot) != filepath.Clean(want) {
 		t.Errorf("local root = %q, want the main worktree %q", rMain.LocalRoot, want)

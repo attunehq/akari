@@ -203,6 +203,7 @@ describe("thinking bucket helpers", () => {
     expect(thinkingBytesPerTokenFor("codex")).toBeCloseTo(14.2);
     expect(thinkingBytesPerTokenFor("pi")).toBeCloseTo(4.0);
     expect(thinkingBytesPerTokenFor("grok")).toBeCloseTo(4.0);
+    expect(thinkingBytesPerTokenFor("opencode")).toBeCloseTo(4.0);
     expect(thinkingBytesPerTokenFor("unknown-agent")).toBeCloseTo(10.7);
   });
 });

@@ -59,6 +59,9 @@ func locateParity(t *testing.T, agent Agent, line string) {
 		if got[i].Detail != wantDetail {
 			t.Errorf("%s body %d: detail = %q, want %q", agent, i, got[i].Detail, wantDetail)
 		}
+		if got[i].IsError != want[i].isError {
+			t.Errorf("%s body %d: is_error = %v, want %v", agent, i, got[i].IsError, want[i].isError)
+		}
 	}
 }
 
@@ -101,6 +104,8 @@ func TestLocateCodexBodies(t *testing.T) {
 		// body), so the sentinel must carry the command.
 		`{"type":"response_item","payload":{"type":"function_call","name":"Bash","arguments":"{\"command\":\"make test\"}"}}`,
 		`{"type":"response_item","payload":{"type":"function_call_output","output":"total 0\n"}}`,
+		`{"type":"response_item","payload":{"type":"function_call_output","output":"Exit code: 2\nWall time: 0.1 seconds\nOutput:\nboom"}}`,
+		`{"type":"response_item","payload":{"type":"function_call_output","output":[{"type":"input_text","text":"Script failed\nWall time 0.0 seconds\nOutput:\n"},{"type":"input_text","text":"Script error:\nboom"}]}}`,
 		`{"type":"response_item","payload":{"type":"function_call_output","output":{"stdout":"x"}}}`,
 		`{"type":"response_item","payload":{"role":"user","content":[{"type":"input_text","text":"hi"}]}}`,
 		// A custom tool call's plain-string input is lifted like any tool input.
@@ -245,5 +250,20 @@ func TestLocateGrokBodies(t *testing.T) {
 	}
 	for _, c := range cases {
 		locateParity(t, AgentGrok, c)
+	}
+}
+
+// TestLocateOpenCodeBodies checks OpenCode tool part inputs and terminal
+// results against the oracle; a running tool lifts only its input.
+func TestLocateOpenCodeBodies(t *testing.T) {
+	cases := []string{
+		`{"type":"message","id":"m","data":{"role":"assistant"},"parts":[{"id":"p","data":{"type":"tool","tool":"read","callID":"c1","state":{"status":"completed","input":{"filePath":"/tmp/a.txt"},"output":"hello"}}}]}`,
+		`{"type":"message","id":"m","data":{"role":"assistant"},"parts":[{"id":"p","data":{"type":"tool","tool":"bash","callID":"c1","state":{"status":"error","input":{"command":"ls"},"error":"boom"}}}]}`,
+		`{"type":"message","id":"m","data":{"role":"assistant"},"parts":[{"id":"p","data":{"type":"tool","tool":"grep","callID":"c1","state":{"status":"running","input":{"pattern":"x"}}}}]}`,
+		`{"type":"session","id":"s","directory":"/home/grace"}`,
+		`{"type":"message","id":"m","data":{"role":"user"},"parts":[{"id":"p","data":{"type":"text","text":"no body"}}]}`,
+	}
+	for _, c := range cases {
+		locateParity(t, AgentOpenCode, c)
 	}
 }

@@ -31,7 +31,7 @@ func main() {
 	case "watch":
 		err = runWatch(ctx, os.Args[2:])
 	case "daemon":
-		err = runDaemon(os.Args[2:])
+		err = runDaemon(ctx, os.Args[2:])
 	case "login":
 		err = runLogin(os.Args[2:])
 	case "assign-project":
@@ -61,8 +61,10 @@ func usage() {
 Usage:
   akari sync [--config PATH] [--dry-run] [--time-limit DUR] [--concurrency N] [--finalize] discover and upload new session bytes, then exit
   akari watch [--config PATH]                             watch continuously and upload changes (foreground)
-  akari daemon {start|status} [--config PATH]             manage the watch loop as a background process
+  akari daemon {start|status} [--config PATH]             manage a background process that syncs every 10 minutes
   akari daemon stop [--timeout DUR] [--force]             stop it and confirm shutdown
+  akari daemon install [--config PATH]                    start the daemon at login (macOS)
+  akari daemon uninstall                                  remove the login agent (macOS)
   akari login --server URL --token TOKEN [--config PATH]  write the client config
   akari assign-project --session ID --project ID [--config PATH]  pin an orphaned session onto a project
   akari update [--check]                                  update to the latest release in place

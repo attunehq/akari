@@ -34,16 +34,16 @@ func readFull(f io.ReaderAt, buf []byte, off int64) error {
 // bytes the CAS stores (CanonicalBodyReader), so the streamed body is byte
 // identical to what the server records inline today. FilePath is the top-level
 // file_path string of a JSON tool input (empty otherwise), and Detail is the
-// input's short human-scannable summary (a command, pattern, URL, or description;
-// empty otherwise), both extracted here so the sentinel the caller builds carries
-// them, exactly as the buffered RewriteLine path does via sentinelFilePath and
-// sentinelDetail.
+// input's short human-scannable summary. IsError preserves a Codex result status
+// derived from its leading banner. These fields let the streaming and buffered
+// paths build byte-identical sentinels.
 type BodyLocation struct {
 	Span     ValueSpan
 	Kind     BodyKind
 	Media    string
 	FilePath string
 	Detail   string
+	IsError  bool
 }
 
 // LocateToolBodies enumerates the tool input and result bodies in one transcript
@@ -76,6 +76,8 @@ func LocateToolBodies(ctx context.Context, agent Agent, f io.ReaderAt, lineOff, 
 		return locateCursor(src, emit)
 	case AgentGrok:
 		return locateGrok(src, emit)
+	case AgentOpenCode:
+		return locateOpenCode(src, emit)
 	default:
 		return nil
 	}
@@ -389,7 +391,7 @@ func locateCodex(s *lineSource, emit func(BodyLocation) error) error {
 		case ptype == "custom_tool_call":
 			return s.locateSingle(payload("input"), BodyJSONString, "text/plain", emit)
 		case ptype == "function_call_output", ptype == "custom_tool_call_output":
-			return s.locateSingleResult(payload("output"), emit)
+			return s.locateCodexResult(payload("output"), emit)
 		case ptype == "image_generation_call":
 			return s.locateImage(payload("result"), emit)
 		default:
@@ -410,6 +412,26 @@ func locateCodex(s *lineSource, emit func(BodyLocation) error) error {
 		}
 	}
 	return nil
+}
+
+func (s *lineSource) locateCodexResult(path []Step, emit func(BodyLocation) error) error {
+	spans, err := s.locate([][]Step{path})
+	if err != nil {
+		return err
+	}
+	sp, ok := spans[0]
+	if !ok || sp.End <= sp.Start {
+		return nil
+	}
+	loc, ok, err := s.classifyResult(sp)
+	if err != nil || !ok {
+		return err
+	}
+	loc.IsError, err = codexResultReaderIsErr(CanonicalBodyReader(s.ctx, s.f, s.base, sp, loc.Kind))
+	if err != nil {
+		return fmt.Errorf("read codex result banner: %w", err)
+	}
+	return emit(loc)
 }
 
 // locateImage emits the base64 image at a single fixed path as a BodyBase64 body,
