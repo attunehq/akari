@@ -93,5 +93,5 @@ finally {
 
 Write-Host ""
 Write-Host "Next: point the client at your server and start syncing."
-Write-Host "  $bin login --server https://akari.example.com --token <ingest-token>"
+Write-Host "  $bin login --server https://akari.example.com   # prompts for your ingest token"
 Write-Host "  $bin sync"

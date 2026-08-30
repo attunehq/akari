@@ -35,7 +35,7 @@ func main() {
 	case "daemon":
 		err = runDaemon(ctx, os.Args[2:])
 	case "login":
-		err = runLogin(os.Args[2:])
+		err = runLogin(os.Args[2:], os.Stdin)
 	case "assign-project":
 		err = runAssignProject(ctx, os.Args[2:])
 	case "update":
@@ -68,7 +68,7 @@ Usage:
   akari daemon stop [--timeout DUR] [--force]             stop it and confirm shutdown
   akari daemon install [--config PATH]                    start the daemon at login (macOS)
   akari daemon uninstall                                  remove the login agent (macOS)
-  akari login --server URL --token TOKEN [--config PATH]  write the client config
+  akari login --server URL [--config PATH]                write the client config (prompts for the token)
   akari assign-project --session ID --project ID [--config PATH]  pin an orphaned session onto a project
   akari update [--check]                                  update to the latest release in place
   akari version                                           print the build version and exit

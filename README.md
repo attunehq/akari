@@ -64,7 +64,7 @@ After installing, mint an ingest token on the server's account page, then point
 the client at your server and start pushing:
 
 ```sh
-akari login --server https://akari.example.com --token <ingest-token>
+akari login --server https://akari.example.com   # prompts for the ingest token
 akari sync            # one-shot upload of everything new
 akari daemon start    # sync every 10 minutes in the background
 akari daemon install  # macOS: also start it at login

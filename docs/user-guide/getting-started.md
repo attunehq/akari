@@ -62,8 +62,14 @@ Mint one from the server's web UI:
 Then hand the server URL and token to `akari login`:
 
 ```sh
-akari login --server https://akari.example.com --token <ingest-token>
+akari login --server https://akari.example.com
 ```
+
+`login` prompts for the token and reads it without echo, so the credential never
+reaches your shell history. To script it, pipe the token in from wherever you
+keep it (`pass show akari/token | akari login --server https://akari.example.com`)
+rather than passing `--token`, which would put a live credential in the command
+line and the process table.
 
 This writes a small config file (server URL and token only) to your OS config
 directory, with owner-only permissions. That is the client's entire persistent

@@ -124,5 +124,5 @@ case ":$PATH:" in
 esac
 
 printf '\nNext: point the client at your server and start syncing.\n' >&2
-printf '  %s login --server https://akari.example.com --token <ingest-token>\n' "$BIN" >&2
+printf '  %s login --server https://akari.example.com   # prompts for your ingest token\n' "$BIN" >&2
 printf '  %s sync\n' "$BIN" >&2

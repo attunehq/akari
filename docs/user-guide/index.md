@@ -32,7 +32,7 @@ runs," here is the whole path, each step linked to its detail:
 
 1. **Install the client.** [Getting started](./getting-started.md#1-install-the-client).
 2. **Mint an ingest token** on the server's account page and run
-   `akari login --server <url> --token <token>`.
+   `akari login --server <url>`, which prompts for it.
    [Getting started](./getting-started.md#2-point-the-client-at-your-server).
 3. **Push once, then keep pushing.** `akari sync` uploads everything new; `akari
    watch` (or `akari daemon start`, which syncs every 10 minutes) keeps it flowing.

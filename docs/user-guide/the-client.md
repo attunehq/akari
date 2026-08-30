@@ -16,7 +16,7 @@ This chapter is the reference for driving it.
 
 | Command | What it does |
 | --- | --- |
-| `akari login --server <url> --token <token>` | Write the client config (server URL and token). |
+| `akari login --server <url>` | Write the client config (server URL and token). |
 | `akari assign-project --session <id> --project <id>` | Pin an orphaned session onto a project. |
 | `akari sync` | Discover and upload everything new, then exit. |
 | `akari ingest --root <dir>` | Discover and upload session files under one directory, then exit. |
@@ -33,7 +33,7 @@ finishes) and winds `watch` down gracefully; a second exits at once.
 ### login
 
 ```sh
-akari login --server https://akari.example.com --token <token> [--machine <name>]
+akari login --server https://akari.example.com [--machine <name>]
 ```
 
 `login` writes the server URL and API token to the config file and exits. The
@@ -42,6 +42,19 @@ token is minted out of band on the server (its account page) and passed in;
 or a **full**-scope token if the same credential also drives the web API. It
 preserves any `extra_roots` and `excludes` already in the config, so re-running it
 to rotate a token or move servers does not wipe your discovery settings.
+
+The token reaches `login` in one of three ways:
+
+- **Prompted.** With no `--token` and a terminal on stdin, `login` asks for the
+  token and reads it without echo. Use this by hand: nothing lands in your shell
+  history.
+- **From stdin.** With no `--token` and stdin redirected, `login` reads the token
+  from stdin and trims surrounding whitespace, so a secret manager or a file can
+  feed it: `pass show akari/token | akari login --server <url>`, or
+  `akari login --server <url> < token.txt`. This is the CI path.
+- **`--token <token>`.** Still supported, but it puts a live credential in your
+  shell history, in the process table for the lifetime of the command, and in any
+  CI log that echoes commands. Prefer one of the other two.
 
 `--machine <name>` sets the logical machine name this client reports for every
 session (see the `machine` config key below). Omit it to keep the OS hostname, or
