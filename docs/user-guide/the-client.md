@@ -278,9 +278,10 @@ excludes = ["**/scratch/**", "*.private.jsonl"]
 The keys:
 
 - **`server_url`** (required): the server's base URL, no trailing slash.
+  `AKARI_URL` overrides it per run.
 - **`token`** (required): the API token, used as a bearer credential. Ingest scope
   is the right choice for a push-only client. The file is written with owner-only
-  permissions, since it holds a credential.
+  permissions, since it holds a credential. `AKARI_TOKEN` overrides it per run.
 - **`machine`** (optional): the logical machine name reported for every session
   this client uploads. Empty falls back to the OS hostname. Set it to give a fleet
   of ephemeral or containerized hosts (CI jobs, autoscaled workers, throwaway dev
@@ -297,6 +298,22 @@ The keys:
   `sync` and `watch`. Patterns match the full path with `/` separators;
   `**/scratch/**` ignores any path with a `scratch` segment, `*.private.jsonl`
   excludes by suffix. Empty discovers everything.
+
+## Environment variables
+
+`AKARI_URL`, `AKARI_TOKEN`, and `AKARI_MACHINE` override the matching config keys
+when set. A blank variable falls through to the file rather than wiping it. Set
+`AKARI_URL` and `AKARI_TOKEN` together and you can skip the file: `sync`,
+`watch`, and `ingest` will run. That is the container and CI path. Extra roots
+and excludes still need the file.
+
+The macOS login agent does not inherit your shell environment, so
+`akari daemon install` still needs `server_url` and `token` in the config file.
+`akari daemon start` from a shell that already has the variables is fine; the
+child inherits them.
+
+The client also honors each agent's own root override for discovery
+(see [Discovery](#discovery)).
 
 ## Machine identity
 
@@ -319,9 +336,6 @@ three sources, highest priority first:
 The sessions still aggregate by project, user, and agent exactly as before; only
 the machine label changes, so an ephemeral fleet reporting as `ci` shows up as one
 machine rather than polluting the rail.
-
-`AKARI_MACHINE` is the only environment variable akari itself defines. The client
-also honors each agent's own root override for discovery (see below).
 
 ## Discovery
 

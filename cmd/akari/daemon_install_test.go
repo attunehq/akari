@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/jssblck/akari/internal/client/daemon"
+	"github.com/jssblck/akari/internal/config"
 )
 
 func TestDaemonInstallRequiresConfig(t *testing.T) {
@@ -17,6 +18,8 @@ func TestDaemonInstallRequiresConfig(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	t.Setenv("AppData", configHome)
 	t.Setenv("HOME", configHome)
+	t.Setenv(config.URLEnvVar, "https://from-env")
+	t.Setenv(config.TokenEnvVar, "env-token")
 
 	err := runDaemon(context.Background(), []string{"install"})
 	if err == nil {
@@ -24,6 +27,26 @@ func TestDaemonInstallRequiresConfig(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "akari login") && !strings.Contains(err.Error(), "no config") {
 		t.Fatalf("install error = %v, want a missing-config hint", err)
+	}
+}
+
+func TestDaemonInstallRequiresCredentialsInFile(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("AppData", configHome)
+	t.Setenv("HOME", configHome)
+	path := filepath.Join(configHome, "config.toml")
+	if err := os.WriteFile(path, []byte("server_url = \"https://a\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(config.TokenEnvVar, "env-token")
+
+	err := runDaemon(context.Background(), []string{"install", "--config", path})
+	if err == nil {
+		t.Fatal("install succeeded with token only in the environment")
+	}
+	if !strings.Contains(err.Error(), "must be in the file") {
+		t.Fatalf("install error = %v, want a file-credentials hint", err)
 	}
 }
 

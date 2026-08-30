@@ -88,7 +88,7 @@ eph down                # stop the stack (keeps data); eph clean drops the volum
 
 The server runs as `go run ./cmd/akari-server`, so a restart picks up source
 changes, and it applies its embedded migrations on boot. Point the client at the
-URL `eph status` reports (also exported as `AKARI_URL`).
+URL `eph status` reports (also exported as `AKARI_URL`, which the client reads).
 
 ### One-shot launch (preview/debug)
 

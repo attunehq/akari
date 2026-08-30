@@ -3,12 +3,27 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/jssblck/akari/internal/client/daemon"
 	"github.com/jssblck/akari/internal/config"
 )
 
 func runDaemonInstall(configPath string, paths daemon.Paths) error {
+	cfg, exists, err := config.ReadClient(configPath)
+	if err != nil {
+		return err
+	}
+	path := configPath
+	if path == "" {
+		path, _ = config.DefaultClientPath()
+	}
+	if !exists {
+		return fmt.Errorf("no config at %s: run `akari login` or create it", path)
+	}
+	if strings.TrimSpace(cfg.ServerURL) == "" || strings.TrimSpace(cfg.Token) == "" {
+		return fmt.Errorf("config %s: server_url and token must be in the file; the login agent does not inherit %s or %s", path, config.URLEnvVar, config.TokenEnvVar)
+	}
 	if _, err := config.LoadClient(configPath); err != nil {
 		return err
 	}

@@ -9,20 +9,31 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// MachineEnvVar overrides the machine identity a client reports for its sessions.
-// It is the only environment variable akari itself defines (the agent root
-// overrides discovery honors belong to the agents). It wins over the config's
-// machine field, which in turn wins over the OS hostname; see ResolveMachine.
-const MachineEnvVar = "AKARI_MACHINE"
+const (
+	// MachineEnvVar overrides the machine identity a client reports for its
+	// sessions. It wins over the config's machine field, which in turn wins over
+	// the OS hostname; see ResolveMachine.
+	MachineEnvVar = "AKARI_MACHINE"
+	// URLEnvVar overrides the client config's server_url. A non-empty value is
+	// enough to run without a config file when TokenEnvVar is also set.
+	URLEnvVar = "AKARI_URL"
+	// TokenEnvVar overrides the client config's token. A non-empty value is
+	// enough to run without a config file when URLEnvVar is also set.
+	TokenEnvVar = "AKARI_TOKEN"
+)
 
-// Client holds the akari client configuration. All of it lives in one TOML file
-// at the platform per-user config location; the client keeps no other on-disk
-// state and defines a single environment variable of its own (AKARI_MACHINE, see
-// ResolveMachine).
+// Client holds the akari client configuration. Durable settings live in one
+// TOML file at the platform per-user config location. AKARI_URL, AKARI_TOKEN,
+// and AKARI_MACHINE override the matching keys per run, and the first two can
+// supply credentials with no file at all (the container and CI path). Extra
+// roots and excludes still need the file. Agent root overrides belong to the
+// agents; see docs/DESIGN.md.
 type Client struct {
 	// ServerURL is the base URL of the akari server, e.g. https://akari.example.
+	// AKARI_URL overrides it per run.
 	ServerURL string `toml:"server_url"`
 	// Token is an API token (ingest or full scope) used as a Bearer credential.
+	// AKARI_TOKEN overrides it per run.
 	Token string `toml:"token"`
 	// Machine is the logical machine name reported for every session this client
 	// uploads. Empty falls back to the OS hostname. Set it (at login or by hand)
@@ -132,8 +143,10 @@ func ReadClient(path string) (cfg Client, exists bool, err error) {
 }
 
 // LoadClient reads and validates the client config. An empty path uses
-// DefaultClientPath. A missing file is a usable error directing the user to log
-// in.
+// DefaultClientPath. AKARI_URL and AKARI_TOKEN override the matching file
+// keys when set (blank falls through), so a missing file is fine when both
+// are present. Otherwise a missing file is a usable error directing the user
+// to log in or set those variables.
 func LoadClient(path string) (Client, error) {
 	resolved, err := resolveClientPath(path)
 	if err != nil {
@@ -143,14 +156,15 @@ func LoadClient(path string) (Client, error) {
 	if err != nil {
 		return Client{}, err
 	}
-	if !exists {
-		return Client{}, fmt.Errorf("no config at %s: run `akari login` or create it", resolved)
+	applyClientEnv(&c, os.Getenv)
+	if !exists && c.ServerURL == "" && c.Token == "" {
+		return Client{}, fmt.Errorf("no config at %s: run `akari login` or set %s and %s", resolved, URLEnvVar, TokenEnvVar)
 	}
 	if c.ServerURL == "" {
-		return Client{}, fmt.Errorf("config %s: server_url is required", resolved)
+		return Client{}, fmt.Errorf("config %s: server_url is required (or set %s)", resolved, URLEnvVar)
 	}
 	if c.Token == "" {
-		return Client{}, fmt.Errorf("config %s: token is required", resolved)
+		return Client{}, fmt.Errorf("config %s: token is required (or set %s)", resolved, TokenEnvVar)
 	}
 	for i, r := range c.ExtraRoots {
 		if r.Agent == "" || r.Path == "" {
@@ -163,6 +177,18 @@ func LoadClient(path string) (Client, error) {
 		}
 	}
 	return c, nil
+}
+
+// applyClientEnv overlays non-empty AKARI_URL and AKARI_TOKEN values onto c.
+// Blank or whitespace-only values fall through to whatever the file supplied,
+// matching ResolveMachine.
+func applyClientEnv(c *Client, env func(string) string) {
+	if v := strings.TrimSpace(env(URLEnvVar)); v != "" {
+		c.ServerURL = v
+	}
+	if v := strings.TrimSpace(env(TokenEnvVar)); v != "" {
+		c.Token = v
+	}
 }
 
 // SaveClient writes the config to path (creating parent directories) with

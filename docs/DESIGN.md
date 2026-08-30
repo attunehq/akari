@@ -1290,8 +1290,9 @@ persisting any state of its own.
 ### Discovery
 
 Enumerate session files for each agent from its known roots. Each agent's own
-documented override is honored when present; akari defines no environment
-variables of its own (see Config):
+documented override is honored when present; akari does not add discovery
+environment variables of its own (credentials and machine identity are separate,
+see Config):
 
 - Claude: `~/.claude/projects/**/*.jsonl` (and `subagents/`; not
   `subagents/workflows/wf_*/journal.jsonl`), `CLAUDE_PROJECTS_DIR`.
@@ -1490,8 +1491,12 @@ and retains three 5 MiB history files beside the 5 MiB active log.
   location (via Go's `os.UserConfigDir()`: `~/.config/akari/config.toml` on
   Linux, `~/Library/Application Support/akari/config.toml` on macOS,
   `%AppData%\akari\config.toml` on Windows). It holds the server URL, API token,
-  any extra session roots, and watch excludes. akari reads no environment
-  variables of its own; the only env it consults are the agents' own documented
+  any extra session roots, and watch excludes. Three environment variables
+  override matching keys when set: `AKARI_URL` (`server_url`), `AKARI_TOKEN`
+  (`token`), and `AKARI_MACHINE` (`machine`). A blank value falls through to the
+  file. `AKARI_URL` and `AKARI_TOKEN` together are enough to run with no file,
+  which is the container and CI path; extra roots and excludes still need the
+  file. The only other env the client consults are the agents' own documented
   overrides (`CLAUDE_PROJECTS_DIR`, `CODEX_SESSIONS_DIR`, `PI_DIR`) while
   locating their session roots.
 - There is no on-disk state. The git resolution cache (directory to remote) is
@@ -1542,11 +1547,12 @@ server startup (embedded SQL, forward-only). For production the server expects
 TLS termination in front of it (or a reverse proxy); signup is invite-only after
 the first admin account, so an exposed server is not openly registerable.
 
-The "no environment variables of our own" rule is a client policy: the client has
-a per-user home and uses a config file there. The server is a container workload
-with no such home, so it follows container convention and takes its
-configuration (`AKARI_DATABASE_URL`, `AKARI_LISTEN`, and similar) from the
-environment.
+The client prefers a config file because it has a per-user home. It also reads
+`AKARI_URL`, `AKARI_TOKEN`, and `AKARI_MACHINE` so a container or CI job can
+supply credentials and a machine name without writing that file. Extra discovery
+roots stay in the file. The server is a container workload with no such home, so
+it takes all of its configuration (`AKARI_DATABASE_URL`, `AKARI_LISTEN`, and
+similar) from the environment.
 
 ### Federated identity behind a trusted proxy
 

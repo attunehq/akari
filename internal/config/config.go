@@ -1,8 +1,9 @@
 // Package config loads akari-server configuration.
 //
 // The server is a container workload, so it reads its configuration from the
-// environment by convention. (The akari client, by contrast, uses a config file
-// and defines no environment variables of its own; see docs/DESIGN.md.)
+// environment by convention. The client prefers a config file and also reads
+// AKARI_URL, AKARI_TOKEN, and AKARI_MACHINE as per-run overrides; see
+// docs/DESIGN.md.
 package config
 
 import (

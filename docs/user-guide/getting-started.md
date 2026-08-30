@@ -76,6 +76,18 @@ directory, with owner-only permissions. That is the client's entire persistent
 state; it keeps no session bookkeeping of its own. [The client](./the-client.md#configuration)
 covers the config file and its options in full.
 
+In CI or a container you can skip the file and export the same values instead:
+
+```sh
+export AKARI_URL=https://akari.example.com
+export AKARI_TOKEN=akari_ingest_...
+akari sync
+```
+
+`AKARI_URL` and `AKARI_TOKEN` override the matching config keys when set, so a
+one-shot job never has to write a credential to disk. A workstation still wants
+`akari login`, because the login agent reads the file.
+
 ## 3. Push your sessions
 
 Do a dry run first to see what the client found and where each session would be
