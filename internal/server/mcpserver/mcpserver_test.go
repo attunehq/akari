@@ -70,6 +70,15 @@ func seedSession(t *testing.T, st *store.Store) seeded {
 		t.Fatalf("tool_call: %v", err)
 	}
 
+	// One session event, so every get_session assertion below exercises the event
+	// path: attrs is a jsonb object, and the tool's output schema has to agree.
+	if _, err := st.Pool.Exec(ctx,
+		`INSERT INTO session_events (session_id, seq, message_ordinal, kind, attrs, occurred_at)
+		 VALUES ($1,0,1,'compaction',$2,now())`,
+		sessionID, []byte(`{"trigger":"auto","pre_tokens":152000}`)); err != nil {
+		t.Fatalf("session_events: %v", err)
+	}
+
 	raw := "{\"type\":\"user\"}\n{\"type\":\"assistant\"}\n"
 	if _, err := st.Pool.Exec(ctx,
 		`INSERT INTO session_raw (session_id, byte_len, content_sha256) VALUES ($1,$2,$3)`,
@@ -204,6 +213,35 @@ func TestToolsReturnSeededData(t *testing.T) {
 	}
 	if rawOut["truncated"] != false {
 		t.Fatalf("get_session_raw should not be truncated: %+v", rawOut)
+	}
+}
+
+// TestGetSessionEventsCarryObjectAttrs pins the wire shape of transcript events.
+// attrs is a jsonb object at rest, so it has to reach the caller as a JSON object;
+// a byte-slice-typed DTO field would reflect an "array" output schema and the SDK
+// would reject every response carrying an event before it left the server.
+func TestGetSessionEventsCarryObjectAttrs(t *testing.T) {
+	t.Parallel()
+	st := storetest.NewStore(t)
+	fx := seedSession(t, st)
+	sess := connect(t, st)
+
+	detail := callJSON(t, sess, "get_session", map[string]any{"session_id": fx.sessionID})
+	events, _ := detail["transcript"].(map[string]any)["events"].([]any)
+	if len(events) != 1 {
+		t.Fatalf("get_session events = %+v", detail["transcript"])
+	}
+	event := events[0].(map[string]any)
+	attrs, ok := event["attrs"].(map[string]any)
+	if !ok {
+		t.Fatalf("event attrs is %T, want an object: %+v", event["attrs"], event)
+	}
+	if event["kind"] != "compaction" || attrs["trigger"] != "auto" || attrs["pre_tokens"].(float64) != 152000 {
+		t.Fatalf("event = %+v", event)
+	}
+	// The integers the parser wrote stay integers on the wire.
+	if raw := rawToolResult(t, sess, "get_session", map[string]any{"session_id": fx.sessionID}); !strings.Contains(raw, `"pre_tokens":152000`) {
+		t.Fatalf("event attrs JSON = %s", raw)
 	}
 }
 

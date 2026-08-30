@@ -1,6 +1,7 @@
 package mcpserver
 
 import (
+	"bytes"
 	"encoding/json"
 	"time"
 
@@ -498,20 +499,40 @@ func toolCallToDTO(c store.ToolCallView) toolCallDTO {
 	}
 }
 
+// sessionEventDTO carries attrs as a decoded map, not the store's json.RawMessage.
+// The tool's output schema is reflected off this struct, and a []byte field
+// reflects to "array" while the encoder emits the raw object it holds, so a
+// RawMessage attrs makes every response with an event fail output validation.
 type sessionEventDTO struct {
-	MessageOrdinal *int64          `json:"message_ordinal"`
-	Kind           string          `json:"kind"`
-	Attrs          json.RawMessage `json:"attrs"`
-	OccurredAt     time.Time       `json:"occurred_at"`
+	MessageOrdinal *int64         `json:"message_ordinal"`
+	Kind           string         `json:"kind"`
+	Attrs          map[string]any `json:"attrs"`
+	OccurredAt     time.Time      `json:"occurred_at"`
 }
 
 func sessionEventToDTO(event store.SessionEvent) sessionEventDTO {
 	return sessionEventDTO{
 		MessageOrdinal: event.MessageOrdinal,
 		Kind:           event.Kind,
-		Attrs:          event.Attrs,
+		Attrs:          eventAttrs(event.Attrs),
 		OccurredAt:     event.OccurredAt,
 	}
+}
+
+// eventAttrs decodes one event's attrs object, never returning nil: the schema
+// says object, and a nil map would encode as null. Numbers decode to json.Number
+// so token counts and durations re-encode exactly as the parser wrote them.
+func eventAttrs(raw json.RawMessage) map[string]any {
+	attrs := map[string]any{}
+	if len(raw) == 0 {
+		return attrs
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	if err := dec.Decode(&attrs); err != nil || attrs == nil {
+		return map[string]any{}
+	}
+	return attrs
 }
 
 type attachmentDTO struct {

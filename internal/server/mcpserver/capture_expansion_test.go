@@ -42,7 +42,26 @@ func TestCaptureExpansionDTOs(t *testing.T) {
 		Attrs:          json.RawMessage(`{"message":"retrying"}`),
 		OccurredAt:     occurred,
 	})
-	if event.MessageOrdinal == nil || *event.MessageOrdinal != ordinal || event.Kind != "api_error" || string(event.Attrs) != `{"message":"retrying"}` || !event.OccurredAt.Equal(occurred) {
+	if event.MessageOrdinal == nil || *event.MessageOrdinal != ordinal || event.Kind != "api_error" || event.Attrs["message"] != "retrying" || !event.OccurredAt.Equal(occurred) {
 		t.Fatalf("event DTO = %+v", event)
+	}
+}
+
+// TestEventAttrsAlwaysObject pins the two properties the tool's output schema
+// depends on: attrs is never nil (a nil map encodes as null, which "object"
+// rejects) and its numbers survive the decode without turning into floats.
+func TestEventAttrsAlwaysObject(t *testing.T) {
+	for _, raw := range []json.RawMessage{nil, json.RawMessage(""), json.RawMessage("null"), json.RawMessage("{"), json.RawMessage("{}")} {
+		if got := eventAttrs(raw); got == nil || len(got) != 0 {
+			t.Fatalf("eventAttrs(%q) = %#v, want empty non-nil map", raw, got)
+		}
+	}
+	attrs := eventAttrs(json.RawMessage(`{"pre_tokens":9007199254740993,"trigger":"auto"}`))
+	b, err := json.Marshal(attrs)
+	if err != nil {
+		t.Fatalf("marshal attrs: %v", err)
+	}
+	if string(b) != `{"pre_tokens":9007199254740993,"trigger":"auto"}` {
+		t.Fatalf("attrs round trip = %s", b)
 	}
 }
