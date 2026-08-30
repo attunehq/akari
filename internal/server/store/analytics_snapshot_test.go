@@ -156,7 +156,7 @@ func TestAnalyticsSnapshotSkipsDuringRebuild(t *testing.T) {
 	}
 
 	// While the announced session sits behind the running epoch, the snapshot declines.
-	if _, ok, err := st.AnalyticsSnapshot(ctx, filter); err != nil || ok {
+	if _, ok, err := st.PublicAnalyticsSnapshot(ctx, filter); err != nil || ok {
 		t.Fatalf("snapshot mid-rebuild: ok=%v err=%v, want ok=false", ok, err)
 	}
 
@@ -164,7 +164,7 @@ func TestAnalyticsSnapshotSkipsDuringRebuild(t *testing.T) {
 	rebuildWith(t, st, ann.SessionID, store.ProjectionDelta{})
 
 	// With every session at the running epoch, the snapshot returns the analytics.
-	a, ok, err := st.AnalyticsSnapshot(ctx, filter)
+	a, ok, err := st.PublicAnalyticsSnapshot(ctx, filter)
 	if err != nil || !ok {
 		t.Fatalf("snapshot after rebuild: ok=%v err=%v, want ok=true", ok, err)
 	}
@@ -188,7 +188,7 @@ func TestAnalyticsSnapshotSkipsDuringRebuild(t *testing.T) {
 		"UPDATE session_raw SET parser_epoch = $1 WHERE session_id = $2", testEpoch-1, ann.SessionID); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, err := st.AnalyticsSnapshot(ctx, filter); err != nil || !ok {
+	if _, ok, err := st.PublicAnalyticsSnapshot(ctx, filter); err != nil || !ok {
 		t.Fatalf("snapshot with a failed-at-current-epoch session: ok=%v err=%v, want ok=true (gate must not wedge)", ok, err)
 	}
 
@@ -199,7 +199,7 @@ func TestAnalyticsSnapshotSkipsDuringRebuild(t *testing.T) {
 	if _, err := st.AppendChunk(ctx, ann.SessionID, int64(len("bad bytes\n")), []byte("more bytes\n")); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, err := st.AnalyticsSnapshot(ctx, filter); err != nil || ok {
+	if _, ok, err := st.PublicAnalyticsSnapshot(ctx, filter); err != nil || ok {
 		t.Fatalf("snapshot after appending to the failed session: ok=%v err=%v, want ok=false (a current-epoch rebuild is pending)", ok, err)
 	}
 }

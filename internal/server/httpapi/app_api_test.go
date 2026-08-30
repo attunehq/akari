@@ -155,11 +155,9 @@ func TestApplicationAPIFlow(t *testing.T) {
 	}
 }
 
-// The public project API publishes aggregate usage only. The by-user cost
-// split names the accounts that ran in a repo and how much each spent, so it
-// must never reach an anonymous caller even though the client would not
-// render it; the signed-in project API keeps the breakdown.
-func TestPublicProjectAPIOmitsUserBreakdown(t *testing.T) {
+// The public project API publishes aggregate usage without account names or
+// undisclosed model identifiers. The signed-in project API keeps both.
+func TestPublicProjectAPIOmitsPrivateBreakdowns(t *testing.T) {
 	t.Parallel()
 	server, st := newTestServer(t)
 	client := registerAdmin(t, server.URL)
@@ -190,7 +188,13 @@ func TestPublicProjectAPIOmitsUserBreakdown(t *testing.T) {
 		Usage: []store.ProjUsage{{
 			MessageOrdinal: &ordinal, Model: "claude-fable-5",
 			Input: 100, Output: 50, CostUSD: cost,
-			OccurredAt: time.Now().UTC(), DedupKey: "public-users-split-0",
+			CostSource: store.CostSourceRateTable, ModelNamePublic: true,
+			OccurredAt: time.Now().UTC(), DedupKey: "public-users-split-0", SourceOffset: 1,
+		}, {
+			MessageOrdinal: &ordinal, Model: "claude-mythos-preview",
+			Input: 25, Output: 5, CostUSD: 0.5,
+			CostSource: store.CostSourceRateTable, ModelNamePublic: false,
+			OccurredAt: time.Now().UTC(), DedupKey: "public-users-split-1", SourceOffset: 2,
 		}},
 	})
 	if err := st.PublishProjectOverview(ctx, projectID); err != nil {
@@ -205,6 +209,21 @@ func TestPublicProjectAPIOmitsUserBreakdown(t *testing.T) {
 		users, _ := analytics["Users"].([]any)
 		return users
 	}
+	modelLabelsOf := func(body map[string]any) map[string]bool {
+		t.Helper()
+		analytics, ok := body["analytics"].(map[string]any)
+		if !ok {
+			t.Fatalf("response has no analytics object: %v", body)
+		}
+		models, _ := analytics["Models"].([]any)
+		labels := make(map[string]bool, len(models))
+		for _, value := range models {
+			model, _ := value.(map[string]any)
+			label, _ := model["Label"].(string)
+			labels[label] = true
+		}
+		return labels
+	}
 
 	response, private := doJSON(t, client, http.MethodGet, server.URL+"/api/v1/app/projects/"+strconvFormat(projectID), nil)
 	if response.StatusCode != http.StatusOK {
@@ -213,6 +232,9 @@ func TestPublicProjectAPIOmitsUserBreakdown(t *testing.T) {
 	if len(usersOf(private)) == 0 {
 		t.Fatal("signed-in project API lost the by-user breakdown; the fixture should produce one row")
 	}
+	if labels := modelLabelsOf(private); !labels["claude-mythos-preview"] {
+		t.Fatalf("signed-in project API hid the private model name: %v", labels)
+	}
 
 	response, public := doJSON(t, http.DefaultClient, http.MethodGet, server.URL+"/api/v1/app/public/projects/"+strconvFormat(projectID), nil)
 	if response.StatusCode != http.StatusOK {
@@ -220,6 +242,9 @@ func TestPublicProjectAPIOmitsUserBreakdown(t *testing.T) {
 	}
 	if users := usersOf(public); len(users) != 0 {
 		t.Fatalf("public project API leaked the by-user breakdown: %v", users)
+	}
+	if labels := modelLabelsOf(public); labels["claude-mythos-preview"] || !labels["Other"] {
+		t.Fatalf("public project API model disclosure = %v, want the private model folded into Other", labels)
 	}
 }
 

@@ -71,16 +71,18 @@ func ingestSession(t *testing.T, st *store.Store, userID, projectID int64, agent
 	d := store.ProjectionDelta{Messages: msgs}
 	for _, u := range usage {
 		d.Usage = append(d.Usage, store.ProjUsage{
-			Model:        u.Model,
-			Input:        int(u.In),
-			Output:       int(u.Out),
-			CacheRead:    int(u.CR),
-			CacheWrite:   int(u.CW),
-			CostUSD:      u.Cost,
-			OccurredAt:   u.At,
-			DedupKey:     u.DedupKey,
-			SourceOffset: u.SourceOffset,
-			SourceIndex:  u.SourceIndex,
+			Model:           u.Model,
+			Input:           int(u.In),
+			Output:          int(u.Out),
+			CacheRead:       int(u.CR),
+			CacheWrite:      int(u.CW),
+			CostUSD:         u.Cost,
+			CostSource:      store.CostSourceRateTable,
+			ModelNamePublic: true,
+			OccurredAt:      u.At,
+			DedupKey:        u.DedupKey,
+			SourceOffset:    u.SourceOffset,
+			SourceIndex:     u.SourceIndex,
 		})
 	}
 	rebuildWith(t, st, ann.SessionID, d)

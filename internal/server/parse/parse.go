@@ -179,23 +179,30 @@ func toProjectionDelta(p parser.Delta) store.ProjectionDelta {
 	}
 
 	for _, u := range p.Usage {
-		cost := pricing.Cost(u.Model, u.OccurredAt, u.Input, u.Output, u.CacheWrite, u.CacheRead, u.Reasoning)
-		if u.CostUSD != nil {
-			cost = *u.CostUSD
+		cost, known := pricing.Cost(u.Model, u.OccurredAt, u.Input, u.Output, u.CacheWrite, u.CacheRead, u.Reasoning)
+		costSource := store.CostSourceUnknown
+		if known {
+			costSource = store.CostSourceRateTable
+		}
+		if u.ReportedCostUSD != nil {
+			cost = *u.ReportedCostUSD
+			costSource = store.CostSourceProvider
 		}
 		pu := store.ProjUsage{
-			MessageOrdinal: u.MessageOrdinal,
-			Model:          u.Model,
-			Input:          u.Input,
-			Output:         u.Output,
-			CacheWrite:     u.CacheWrite,
-			CacheRead:      u.CacheRead,
-			Reasoning:      u.Reasoning,
-			CostUSD:        cost,
-			OccurredAt:     u.OccurredAt,
-			DedupKey:       u.DedupKey,
-			SourceOffset:   u.SourceOffset,
-			SourceIndex:    u.SourceIndex,
+			MessageOrdinal:  u.MessageOrdinal,
+			Model:           u.Model,
+			Input:           u.Input,
+			Output:          u.Output,
+			CacheWrite:      u.CacheWrite,
+			CacheRead:       u.CacheRead,
+			Reasoning:       u.Reasoning,
+			CostUSD:         cost,
+			CostSource:      costSource,
+			ModelNamePublic: pricing.ModelNamePublic(u.Model),
+			OccurredAt:      u.OccurredAt,
+			DedupKey:        u.DedupKey,
+			SourceOffset:    u.SourceOffset,
+			SourceIndex:     u.SourceIndex,
 		}
 		d.Usage = append(d.Usage, pu)
 	}

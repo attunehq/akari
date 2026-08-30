@@ -80,17 +80,19 @@ func TestTableWindowsSorted(t *testing.T) {
 	// Every model's windows must be From-ascending with a zero-From first window, the
 	// shape rateAt relies on: it seeds from the first window and keeps the last whose
 	// From is at or before the event time.
-	for model, rates := range table {
-		if len(rates) == 0 {
-			t.Errorf("%s: no rate windows", model)
-			continue
-		}
-		if !rates[0].From.IsZero() {
-			t.Errorf("%s: first window From = %v, want the zero value (in effect from the beginning)", model, rates[0].From)
-		}
-		for i := 1; i < len(rates); i++ {
-			if !rates[i].From.After(rates[i-1].From) {
-				t.Errorf("%s: window %d From %v is not after window %d From %v", model, i, rates[i].From, i-1, rates[i-1].From)
+	for _, catalog := range []map[string][]DatedRate{table, undisclosedRates} {
+		for model, rates := range catalog {
+			if len(rates) == 0 {
+				t.Errorf("%s: no rate windows", model)
+				continue
+			}
+			if !rates[0].From.IsZero() {
+				t.Errorf("%s: first window From = %v, want the zero value (in effect from the beginning)", model, rates[0].From)
+			}
+			for i := 1; i < len(rates); i++ {
+				if !rates[i].From.After(rates[i-1].From) {
+					t.Errorf("%s: window %d From %v is not after window %d From %v", model, i, rates[i].From, i-1, rates[i-1].From)
+				}
 			}
 		}
 	}
@@ -104,16 +106,18 @@ func TestDatedWindowsStartAtUTCMidnight(t *testing.T) {
 	// across two windows and make the two disagree. This pins that invariant at the table so a
 	// future dated rate cannot silently break it; a genuine midday change would need the
 	// aggregate paths reworked to bucket on the exact window first.
-	for model, rates := range table {
-		for i, dr := range rates {
-			if dr.From.IsZero() {
-				continue // the open first window is in effect from the beginning, no boundary
-			}
-			if dr.From.Location() != time.UTC {
-				t.Errorf("%s window %d From %v is not in UTC", model, i, dr.From)
-			}
-			if !dr.From.Equal(dr.From.Truncate(24 * time.Hour)) {
-				t.Errorf("%s window %d From %v is not on a UTC-midnight boundary", model, i, dr.From)
+	for _, catalog := range []map[string][]DatedRate{table, undisclosedRates} {
+		for model, rates := range catalog {
+			for i, dr := range rates {
+				if dr.From.IsZero() {
+					continue // the open first window is in effect from the beginning, no boundary
+				}
+				if dr.From.Location() != time.UTC {
+					t.Errorf("%s window %d From %v is not in UTC", model, i, dr.From)
+				}
+				if !dr.From.Equal(dr.From.Truncate(24 * time.Hour)) {
+					t.Errorf("%s window %d From %v is not on a UTC-midnight boundary", model, i, dr.From)
+				}
 			}
 		}
 	}
@@ -298,27 +302,47 @@ func TestRateAtUnknown(t *testing.T) {
 	}
 }
 
+func TestModelNamePublicIsExactAndFailClosed(t *testing.T) {
+	cases := []struct {
+		model string
+		want  bool
+	}{
+		{"claude-opus-4-8", true},
+		{"claude-opus-4-8-20260115", true},
+		{"anthropic/claude-opus-4-8", true},
+		{"claude-mythos-preview", false},
+		{"gpt-5.6-secret-eap", false},
+		{"<synthetic>", false},
+		{"", false},
+	}
+	for _, tt := range cases {
+		if got := ModelNamePublic(tt.model); got != tt.want {
+			t.Errorf("ModelNamePublic(%q) = %v, want %v", tt.model, got, tt.want)
+		}
+	}
+}
+
 func TestCost(t *testing.T) {
 	// 1M input + 1M output on Sonnet 4.0 (dated ID) at 3 + 15 per million.
-	cost := Cost("claude-sonnet-4-20250514", anytime, 1_000_000, 1_000_000, 0, 0, 0)
-	if math.Abs(cost-18.0) > 1e-9 {
+	cost, known := Cost("claude-sonnet-4-20250514", anytime, 1_000_000, 1_000_000, 0, 0, 0)
+	if !known || math.Abs(cost-18.0) > 1e-9 {
 		t.Errorf("cost = %v, want 18", cost)
 	}
 
 	// All four token classes contribute.
-	cost = Cost("claude-sonnet-4-5", anytime, 1_000_000, 0, 1_000_000, 1_000_000, 0)
+	cost, known = Cost("claude-sonnet-4-5", anytime, 1_000_000, 0, 1_000_000, 1_000_000, 0)
 	want := 3.0 + 3.75 + 0.30
-	if math.Abs(cost-want) > 1e-9 {
+	if !known || math.Abs(cost-want) > 1e-9 {
 		t.Errorf("cost = %v, want %v", cost, want)
 	}
 
-	if got := Cost("mystery-model", anytime, 100, 100, 0, 0, 0); got != 0 {
-		t.Errorf("unknown model cost = %v, want 0", got)
+	if got, known := Cost("mystery-model", anytime, 100, 100, 0, 0, 0); known || got != 0 {
+		t.Errorf("unknown model cost = %v (known=%v), want 0 and false", got, known)
 	}
 
 	// OpenCode records reasoning apart from output and bills both at the model's
 	// output rate. One million of each on the Zen Grok route costs $12 total.
-	if got := Cost("opencode/grok-4.6", anytime, 0, 1_000_000, 0, 0, 1_000_000); got != 12 {
+	if got, known := Cost("opencode/grok-4.6", anytime, 0, 1_000_000, 0, 0, 1_000_000); !known || got != 12 {
 		t.Errorf("OpenCode output plus reasoning cost = %v, want 12", got)
 	}
 }
@@ -326,18 +350,18 @@ func TestCost(t *testing.T) {
 func TestCostSelectsDatedWindow(t *testing.T) {
 	// The same 1M input + 1M output on Sonnet 5 prices at the intro rate inside the
 	// promo window and the sticker rate after it.
-	intro := Cost("claude-sonnet-5", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), 1_000_000, 1_000_000, 0, 0, 0)
+	intro, _ := Cost("claude-sonnet-5", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), 1_000_000, 1_000_000, 0, 0, 0)
 	if math.Abs(intro-12.0) > 1e-9 {
 		t.Errorf("intro cost = %v, want 12 (2 + 10)", intro)
 	}
-	sticker := Cost("claude-sonnet-5", sonnet5Sticker, 1_000_000, 1_000_000, 0, 0, 0)
+	sticker, _ := Cost("claude-sonnet-5", sonnet5Sticker, 1_000_000, 1_000_000, 0, 0, 0)
 	if math.Abs(sticker-18.0) > 1e-9 {
 		t.Errorf("sticker cost = %v, want 18 (3 + 15)", sticker)
 	}
 }
 
 func TestCostIsArchitectureStable(t *testing.T) {
-	got := Cost("claude-sonnet-4-20250514", anytime, 1500, 120, 0, 6000, 0)
+	got, _ := Cost("claude-sonnet-4-20250514", anytime, 1500, 120, 0, 6000, 0)
 	if got != 0.0081 {
 		t.Errorf("cost = %.18f, want exact rounded value %.18f", got, 0.0081)
 	}

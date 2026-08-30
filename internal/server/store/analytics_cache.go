@@ -101,7 +101,7 @@ func foldCacheRows(rows pgx.Rows) (CacheStats, error) {
 // folded per model in Go because pricing is compiled into the binary, not in the
 // database, so the rate gap that defines a saving is not a column to sum.
 //
-// It reads on its own pooled connection. The snapshot path (AnalyticsSnapshot) instead
+// It reads on its own pooled connection. The snapshot path (PublicAnalyticsSnapshot) instead
 // threads its transaction through cacheStats, so the Cache tile and the token totals come
 // from one MVCC snapshot and one connection rather than two.
 func (s *Store) CacheStats(ctx context.Context, f AnalyticsFilter) (CacheStats, error) {

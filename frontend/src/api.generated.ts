@@ -1856,6 +1856,7 @@ export interface components {
             /** Format: int64 */
             CacheWrite: number;
             CostUSD: number;
+            CostKnown: boolean;
             /** Format: int64 */
             Input: number;
             Label: string;

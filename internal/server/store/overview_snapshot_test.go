@@ -24,7 +24,7 @@ func TestProjectOverviewSnapshotCarriesSharedPublicAndAuthenticatedShape(t *test
 	sessionID := seedSessionWithStats(t, st, u.ID, projectID, "codex", "shared-overview", 1.5, 120, 80)
 	seedUsage(t, st, sessionID, "gpt-5.5", 1.5, 120, 80, 1, "shared-overview-usage")
 
-	analytics, insights, err := st.ProjectOverviewSnapshot(ctx, store.AnalyticsFilter{
+	analytics, insights, err := st.PublicProjectOverviewSnapshot(ctx, store.AnalyticsFilter{
 		ProjectID: projectID,
 		Since:     time.Now().AddDate(0, 0, -30),
 		Until:     endOfTodayUTC(),

@@ -134,7 +134,7 @@ func TestCacheStatsReconcilesWithSnapshotTotals(t *testing.T) {
 	sB := seedSessionWithStats(t, st, admin.ID, proj, "codex", "b", 0, 0, 0)
 	seedUsageCache(t, st, sB, "gpt-5.5", 1, 500_000, 300_000, 500_000, 20_000, 1, "b-1")
 
-	a, ok, err := st.AnalyticsSnapshot(ctx, store.AnalyticsFilter{ProjectID: proj})
+	a, ok, err := st.PublicAnalyticsSnapshot(ctx, store.AnalyticsFilter{ProjectID: proj})
 	if err != nil {
 		t.Fatalf("analytics snapshot: %v", err)
 	}

@@ -44,8 +44,8 @@ func deriveRollups(t *testing.T, st *store.Store, sessionID int64) {
 func seedUsage(t *testing.T, st *store.Store, sessionID int64, model string, cost float64, in, out int64, daysAgo int, dedup string) {
 	t.Helper()
 	_, err := st.Pool.Exec(context.Background(),
-		`INSERT INTO usage_events (session_id, model, input_tokens, output_tokens, cost_usd, occurred_at, dedup_key)
-		 VALUES ($1,$2,$3,$4,$5, now() - make_interval(days => $6), $7)`,
+		`INSERT INTO usage_events (session_id, model, input_tokens, output_tokens, cost_usd, cost_source, model_name_public, occurred_at, dedup_key)
+		 VALUES ($1,$2,$3,$4,$5, 'rate_table', true, now() - make_interval(days => $6), $7)`,
 		sessionID, model, in, out, cost, daysAgo, dedup)
 	if err != nil {
 		t.Fatalf("seed usage: %v", err)
@@ -59,8 +59,8 @@ func seedUsage(t *testing.T, st *store.Store, sessionID int64, model string, cos
 func seedUsageCache(t *testing.T, st *store.Store, sessionID int64, model string, cost float64, in, out, cacheRead, cacheWrite int64, daysAgo int, dedup string) {
 	t.Helper()
 	_, err := st.Pool.Exec(context.Background(),
-		`INSERT INTO usage_events (session_id, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, occurred_at, dedup_key)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7, now() - make_interval(days => $8), $9)`,
+		`INSERT INTO usage_events (session_id, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, cost_source, model_name_public, occurred_at, dedup_key)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7, 'rate_table', true, now() - make_interval(days => $8), $9)`,
 		sessionID, model, in, out, cacheRead, cacheWrite, cost, daysAgo, dedup)
 	if err != nil {
 		t.Fatalf("seed usage cache: %v", err)
@@ -75,8 +75,8 @@ func seedUsageCache(t *testing.T, st *store.Store, sessionID int64, model string
 func seedUsageUndated(t *testing.T, st *store.Store, sessionID int64, model string, cost float64, in, out int64, dedup string) {
 	t.Helper()
 	_, err := st.Pool.Exec(context.Background(),
-		`INSERT INTO usage_events (session_id, model, input_tokens, output_tokens, cost_usd, dedup_key)
-		 VALUES ($1,$2,$3,$4,$5,$6)`,
+		`INSERT INTO usage_events (session_id, model, input_tokens, output_tokens, cost_usd, cost_source, model_name_public, dedup_key)
+		 VALUES ($1,$2,$3,$4,$5, 'rate_table', true, $6)`,
 		sessionID, model, in, out, cost, dedup)
 	if err != nil {
 		t.Fatalf("seed undated usage: %v", err)
@@ -90,8 +90,8 @@ func seedUsageUndated(t *testing.T, st *store.Store, sessionID int64, model stri
 func seedUsageAt(t *testing.T, st *store.Store, sessionID int64, model string, cost float64, in, out int64, at time.Time, dedup string) {
 	t.Helper()
 	_, err := st.Pool.Exec(context.Background(),
-		`INSERT INTO usage_events (session_id, model, input_tokens, output_tokens, cost_usd, occurred_at, dedup_key)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+		`INSERT INTO usage_events (session_id, model, input_tokens, output_tokens, cost_usd, cost_source, model_name_public, occurred_at, dedup_key)
+		 VALUES ($1,$2,$3,$4,$5, 'rate_table', true, $6,$7)`,
 		sessionID, model, in, out, cost, at, dedup)
 	if err != nil {
 		t.Fatalf("seed usage at: %v", err)
@@ -106,8 +106,8 @@ func seedUsageAt(t *testing.T, st *store.Store, sessionID int64, model string, c
 func seedUsageCacheAt(t *testing.T, st *store.Store, sessionID int64, model string, in, out, cacheRead, cacheWrite int64, at time.Time, dedup string) {
 	t.Helper()
 	_, err := st.Pool.Exec(context.Background(),
-		`INSERT INTO usage_events (session_id, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, occurred_at, dedup_key)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+		`INSERT INTO usage_events (session_id, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_source, model_name_public, occurred_at, dedup_key)
+		 VALUES ($1,$2,$3,$4,$5,$6, 'rate_table', true, $7,$8)`,
 		sessionID, model, in, out, cacheRead, cacheWrite, at, dedup)
 	if err != nil {
 		t.Fatalf("seed usage cache at: %v", err)
@@ -120,11 +120,23 @@ func seedUsageCacheAt(t *testing.T, st *store.Store, sessionID int64, model stri
 func seedUsageUnpriced(t *testing.T, st *store.Store, sessionID int64, model string, in, out int64, dedup string) {
 	t.Helper()
 	_, err := st.Pool.Exec(context.Background(),
-		`INSERT INTO usage_events (session_id, model, input_tokens, output_tokens, cost_usd, occurred_at, dedup_key)
-		 VALUES ($1,$2,$3,$4, 0, now(), $5)`,
+		`INSERT INTO usage_events (session_id, model, input_tokens, output_tokens, cost_usd, cost_source, model_name_public, occurred_at, dedup_key)
+		 VALUES ($1,$2,$3,$4, 0, 'unknown', false, now(), $5)`,
 		sessionID, model, in, out, dedup)
 	if err != nil {
 		t.Fatalf("seed unpriced usage: %v", err)
+	}
+	deriveRollups(t, st, sessionID)
+}
+
+func seedUsageClassified(t *testing.T, st *store.Store, sessionID int64, model string, cost float64, source store.CostSource, public bool, in, out int64, dedup string) {
+	t.Helper()
+	_, err := st.Pool.Exec(context.Background(),
+		`INSERT INTO usage_events (session_id, model, input_tokens, output_tokens, cost_usd, cost_source, model_name_public, occurred_at, dedup_key)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,now(),$8)`,
+		sessionID, model, in, out, cost, source, public, dedup)
+	if err != nil {
+		t.Fatalf("seed classified usage: %v", err)
 	}
 	deriveRollups(t, st, sessionID)
 }
@@ -518,8 +530,11 @@ func TestAnalyticsRollups(t *testing.T) {
 	}
 }
 
-// Zero-priced models share one Other row in both overview scopes.
-func TestAnalyticsFoldsZeroPricedModelsIntoOther(t *testing.T) {
+// Public analytics disclose only exact catalog entries. The private analytics
+// retain every raw model identifier, while the public aggregation folds hidden
+// identifiers before counting distinct sessions. Price and disclosure remain
+// independent: a priced EAP model stays hidden and a released free turn stays named.
+func TestPublicAnalyticsHidesUndisclosedModels(t *testing.T) {
 	t.Parallel()
 	st := storetest.NewStore(t)
 	ctx := context.Background()
@@ -540,40 +555,68 @@ func TestAnalyticsFoldsZeroPricedModelsIntoOther(t *testing.T) {
 	sessionA := seedSessionWithStats(t, st, admin.ID, projectA, "codex", "a", 0, 0, 0)
 	sessionB := seedSessionWithStats(t, st, admin.ID, projectB, "codex", "b", 0, 0, 0)
 	seedUsage(t, st, sessionA, "gpt-5.5", 1, 100, 20, 0, "priced")
-	seedUsageUnpriced(t, st, sessionA, "unlisted-alpha", 30, 3, "unknown-a")
-	seedUsageUnpriced(t, st, sessionA, "unlisted-beta", 40, 4, "unknown-b")
-	seedUsageUnpriced(t, st, sessionB, "unlisted-gamma", 50, 5, "unknown-c")
+	seedUsageClassified(t, st, sessionA, "grok-4.6", 0, store.CostSourceProvider, true, 10, 1, "reported-free")
+	seedUsageClassified(t, st, sessionA, "claude-mythos-preview", 2, store.CostSourceRateTable, false, 30, 3, "priced-eap")
+	seedUsageUnpriced(t, st, sessionA, "<synthetic>", 40, 4, "unknown-a")
+	seedUsageUnpriced(t, st, sessionB, "unlisted-gamma", 50, 5, "unknown-b")
 
-	assertModels := func(scope string, got store.Analytics, wantTokens int64, wantSessions int) {
+	private, err := st.Analytics(ctx, store.AnalyticsFilter{ProjectID: projectA})
+	if err != nil {
+		t.Fatalf("private project analytics: %v", err)
+	}
+	privateModels := map[string]store.Breakdown{}
+	for _, model := range private.Models {
+		privateModels[model.Label] = model
+	}
+	for _, label := range []string{"gpt-5.5", "grok-4.6", "claude-mythos-preview", "<synthetic>"} {
+		if _, ok := privateModels[label]; !ok {
+			t.Errorf("private analytics missing %q: %+v", label, private.Models)
+		}
+	}
+	if free := privateModels["grok-4.6"]; free.CostUSD != 0 || !free.CostKnown {
+		t.Errorf("provider-reported free model = %+v, want known $0", free)
+	}
+
+	assertPublicModels := func(scope string, got store.Analytics, wantTokens int64, wantSessions int) {
 		t.Helper()
 		var other *store.Breakdown
+		var free *store.Breakdown
 		for i := range got.Models {
 			if got.Models[i].Label == "Other" {
 				other = &got.Models[i]
 			}
-			if strings.HasPrefix(got.Models[i].Label, "unlisted-") {
-				t.Errorf("%s leaked zero-priced model row: %+v", scope, got.Models[i])
+			if got.Models[i].Label == "grok-4.6" {
+				free = &got.Models[i]
+			}
+			if got.Models[i].Label == "claude-mythos-preview" || got.Models[i].Label == "<synthetic>" || strings.HasPrefix(got.Models[i].Label, "unlisted-") {
+				t.Errorf("%s leaked undisclosed model row: %+v", scope, got.Models[i])
 			}
 		}
 		if other == nil {
 			t.Fatalf("%s models missing Other row: %+v", scope, got.Models)
 		}
-		if other.CostUSD != 0 || other.Tokens() != wantTokens || other.Sessions != wantSessions {
-			t.Errorf("%s Other row = %+v, want zero cost, tokens=%d sessions=%d", scope, *other, wantTokens, wantSessions)
+		if other.CostUSD != 2 || other.Tokens() != wantTokens || other.Sessions != wantSessions || other.CostKnown {
+			t.Errorf("%s Other row = %+v, want cost=2, tokens=%d, sessions=%d, partially unpriced", scope, *other, wantTokens, wantSessions)
+		}
+		if free == nil {
+			t.Fatalf("%s models missing released free model: %+v", scope, got.Models)
+		}
+		if free.CostUSD != 0 || !free.CostKnown {
+			t.Errorf("%s released free model = %+v, want known $0", scope, *free)
 		}
 	}
 
-	project, err := st.Analytics(ctx, store.AnalyticsFilter{ProjectID: projectA})
+	project, err := st.PublicAnalytics(ctx, store.AnalyticsFilter{ProjectID: projectA})
 	if err != nil {
-		t.Fatalf("project analytics: %v", err)
+		t.Fatalf("public project analytics: %v", err)
 	}
-	assertModels("project", project, 77, 1)
+	assertPublicModels("project", project, 77, 1)
 
-	global, err := st.Analytics(ctx, store.AnalyticsFilter{})
+	global, err := st.PublicAnalytics(ctx, store.AnalyticsFilter{})
 	if err != nil {
-		t.Fatalf("global analytics: %v", err)
+		t.Fatalf("public global analytics: %v", err)
 	}
-	assertModels("global", global, 132, 2)
+	assertPublicModels("global", global, 132, 2)
 }
 
 // A non-empty userIDs scopes every rollup to the named users' sessions, leaving

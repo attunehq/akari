@@ -128,7 +128,7 @@ func (r *reducer) reduceGrok(region []byte, base int64) error {
 					DedupKey:   u.Get("prompt_id").String() + "/" + k,
 				}
 				if cost, ok := grokReportedCost(mu); ok {
-					row.CostUSD = grokCostPtr(cost)
+					row.ReportedCostUSD = grokCostPtr(cost)
 				}
 				rows = append(rows, row)
 			}
@@ -223,10 +223,11 @@ func grokReportedCost(v gjson.Result) (float64, bool) {
 
 // grokApplyTopLevelCost assigns a top-level costUsdTicks total across model
 // rows that have no per-row ticks. Rows that already carry reported cost keep
-// it. The unassigned remainder (clamped at zero so a row that overshoots the
-// total is not rewritten) is split across the unpriced rows by billed-token
-// share. When every unpriced row has zero tokens, the remainder splits evenly
-// so the top-level sum is still preserved.
+// it. If their sum exceeds the top-level total, the payload contradicts itself;
+// the missing rows stay unreported and retain the rate-table fallback. Otherwise
+// the unassigned remainder is split across them by billed-token share. When every
+// unpriced row has zero tokens, the remainder splits evenly so the top-level sum
+// is still preserved.
 func grokApplyTopLevelCost(usage gjson.Result, rows []Usage) {
 	top, ok := grokReportedCost(usage)
 	if !ok {
@@ -235,8 +236,8 @@ func grokApplyTopLevelCost(usage gjson.Result, rows []Usage) {
 	var assigned float64
 	unpriced := make([]int, 0, len(rows))
 	for i := range rows {
-		if rows[i].CostUSD != nil {
-			assigned += *rows[i].CostUSD
+		if rows[i].ReportedCostUSD != nil {
+			assigned += *rows[i].ReportedCostUSD
 			continue
 		}
 		unpriced = append(unpriced, i)
@@ -246,7 +247,7 @@ func grokApplyTopLevelCost(usage gjson.Result, rows []Usage) {
 	}
 	remainder := top - assigned
 	if remainder < 0 {
-		remainder = 0
+		return
 	}
 	shareTotal := 0
 	for _, i := range unpriced {
@@ -267,8 +268,8 @@ func grokApplyTopLevelCost(usage gjson.Result, rows []Usage) {
 		default:
 			cost = remainder / float64(n)
 		}
-		rows[i].CostUSD = grokCostPtr(cost)
-		allocated += *rows[i].CostUSD
+		rows[i].ReportedCostUSD = grokCostPtr(cost)
+		allocated += *rows[i].ReportedCostUSD
 	}
 }
 

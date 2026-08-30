@@ -743,14 +743,26 @@ runtime catalog or refresh endpoint; updating prices means a new build.
 The Grok CLI is the exception: when a `turn_completed` usage payload carries a
 non-negative `costUsdTicks` value (10^10 ticks is one USD), that billed amount is
 stored instead. The table remains the fallback for Grok turns that omit ticks,
-and for every other agent. The computed cost is stored on each usage event.
+and for every other agent. When explicit per-model amounts exceed Grok's
+top-level total, the payload is contradictory. Rows without an explicit amount
+stay unreported and use the rate-table fallback instead of inheriting a false
+reported zero.
 
-A turn whose model is not in the table records its token usage with a zero cost,
-unless a provider-reported cost filled the row. Zero is the application-wide
-representation for an unknown price; it does not mean the model was free. Dollar
-figures are best-effort estimates except where a transcript carries the billed
-amount, and analytics group zero-priced models under `Other` without a separate
-completeness marker.
+Each usage event stores both its numeric cost and its source: `rate_table`,
+`provider`, or `unknown`. An unknown rate stores zero with the `unknown` source.
+A provider-reported free turn stores the same numeric zero with the `provider`
+source. Analytics can therefore render a known `$0` separately from `not priced`.
+Positive totals remain best-effort when their aggregate also contains unpriced
+usage.
+
+Model-name disclosure is independent of pricing. The public pricing catalog is
+an exact allowlist of released identifiers. A separate private rate catalog can
+price an EAP model without making its name public, and a public-unpriced catalog
+can disclose a released model before Akari knows its price. Unknown identifiers
+fail closed. Signed-in analytics keep the recorded model names. Public user and
+project overviews, including their Open Graph cards, fold undisclosed names into
+`Other` before aggregation so token, cost, and distinct-session totals reconcile
+without exposing the identifiers.
 
 ### Postgres schema
 
@@ -960,6 +972,8 @@ CREATE TABLE usage_events (
   cache_read_tokens     INT NOT NULL DEFAULT 0,
   reasoning_tokens      INT NOT NULL DEFAULT 0,
   cost_usd              DOUBLE PRECISION,
+  cost_source           TEXT NOT NULL,     -- unknown | rate_table | provider
+  model_name_public     BOOLEAN NOT NULL,  -- exact compiled disclosure catalog
   occurred_at           TIMESTAMPTZ,
   dedup_key             TEXT NOT NULL DEFAULT '',
   source_offset         BIGINT,           -- raw byte offset of the originating line

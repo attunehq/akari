@@ -8,12 +8,11 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// ProjectOverviewSnapshot reads the usage panel and quality band from one
-// repeatable-read transaction. Public and unfiltered authenticated project views
-// share the completed result in the HTTP snapshot cache, so this refresh path favors
-// one immutable database generation over the ordinary Insights fan-out across
-// several imported snapshot transactions.
-func (s *Store) ProjectOverviewSnapshot(ctx context.Context, f AnalyticsFilter) (Analytics, Insights, error) {
+// PublicProjectOverviewSnapshot reads the disclosure-safe usage panel and quality
+// band from one repeatable-read transaction. This refresh path favors one immutable
+// database generation over the ordinary Insights fan-out across several imported
+// snapshot transactions.
+func (s *Store) PublicProjectOverviewSnapshot(ctx context.Context, f AnalyticsFilter) (Analytics, Insights, error) {
 	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return Analytics{}, Insights{}, fmt.Errorf("project overview snapshot: begin: %w", err)
@@ -22,7 +21,7 @@ func (s *Store) ProjectOverviewSnapshot(ctx context.Context, f AnalyticsFilter) 
 
 	analyticsFilter := f
 	analyticsFilter.Bucket = ""
-	analytics, err := s.analyticsFrom(ctx, tx, analyticsFilter)
+	analytics, err := s.analyticsFrom(ctx, tx, analyticsFilter, modelNamesPublic)
 	if err != nil {
 		return Analytics{}, Insights{}, fmt.Errorf("project overview snapshot: analytics: %w", err)
 	}

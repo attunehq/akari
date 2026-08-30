@@ -197,14 +197,15 @@ function BreakdownTable({ title, rows }: { title: string; rows: Breakdown[] }) {
           {rows.map((row, index) => {
             const tokens =
               row.Input + row.Output + row.CacheRead + row.CacheWrite;
+            const showCost = row.CostKnown || row.CostUSD !== 0;
             return (
               <div className="breakdown-row" key={row.Label}>
                 <div className="breakdown-head">
                   <span className="breakdown-label">
                     {row.Label || "unknown"}
                   </span>
-                  <span className={row.CostUSD === 0 ? "data muted" : "data"}>
-                    {row.CostUSD === 0 ? "not priced" : formatCost(row.CostUSD)}
+                  <span className={showCost ? "data" : "data muted"}>
+                    {showCost ? formatCost(row.CostUSD) : "not priced"}
                   </span>
                 </div>
                 <div className="breakdown-sub">
@@ -215,7 +216,7 @@ function BreakdownTable({ title, rows }: { title: string; rows: Breakdown[] }) {
                       cacheRead={row.CacheRead}
                       cacheWrite={row.CacheWrite}
                       reasoning={row.Reasoning}
-                      {...(row.CostUSD === 0 ? {} : { costUSD: row.CostUSD })}
+                      {...(showCost ? { costUSD: row.CostUSD } : {})}
                     />
                   </HoverTip>
                   <span>

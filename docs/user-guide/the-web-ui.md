@@ -25,7 +25,8 @@ and every figure on the panel follows it:
 - **A daily-activity heatmap**, one cell per day, so a busy stretch or a quiet one
   is visible at a glance.
 - **By-model and by-agent breakdowns** of where the usage went, plus a by-user
-  breakdown once more than one account has usage in the window.
+  breakdown once more than one account has usage in the window. A zero-dollar row
+  shows `$0` when its cost is known and `not priced` when no rate was available.
 
 You can also scope the overview to specific accounts.
 

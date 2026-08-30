@@ -326,7 +326,14 @@ package parse
 // estimate when a turn_completed usage payload carries a non-negative tick count
 // (issue #225). The compiled grok-4.6/4.5 rates remain the fallback for turns
 // that omit ticks. Per-model ticks win when present; a top-level total allocates
-// any unassigned remainder across unpriced model rows by token share. The grok
-// golden moves (fixture ticks were already in the raw JSON and previously
-// discarded). Other agent goldens are unchanged.
+// any unassigned remainder across unreported model rows by token share. If
+// explicit rows already exceed that total, missing rows retain the rate-table
+// fallback.
+//
+// Persist cost source separately from the numeric amount so provider-reported
+// free usage remains distinct from an unknown price. Persist the exact catalog
+// decision that controls whether each model identifier may appear on public user
+// and project overviews. This adds fields to every usage golden; the Grok golden
+// also moves because fixture ticks were already in the raw JSON and previously
+// discarded.
 const Epoch = 28

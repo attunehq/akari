@@ -20,7 +20,7 @@ func grokCostByModel(t *testing.T, usage string) map[string]*float64 {
 	}
 	got := make(map[string]*float64, len(s.UsageEvent))
 	for _, u := range s.UsageEvent {
-		got[u.Model] = u.CostUSD
+		got[u.Model] = u.ReportedCostUSD
 	}
 	return got
 }
@@ -82,6 +82,13 @@ func TestGrokReportedCost(t *testing.T) {
 				"grok-4.5": grokUSD(0.15),
 				"other":    grokUSD(0.45),
 			},
+		},
+		{
+			name: "contradictory top-level total leaves missing rows unreported",
+			usage: `{"costUsdTicks":10000000000,"modelUsage":{` +
+				`"grok-4.6-build":{"inputTokens":100,"outputTokens":0,"cachedReadTokens":0,"cacheCreationTokens":0,"reasoningTokens":0,"costUsdTicks":12000000000},` +
+				`"grok-4.5-build":{"inputTokens":300,"outputTokens":0,"cachedReadTokens":0,"cacheCreationTokens":0,"reasoningTokens":0}}}`,
+			want: map[string]*float64{"grok-4.6": grokUSD(1.2), "grok-4.5": nil},
 		},
 		{
 			name:  "zero ticks is reported free, not missing",

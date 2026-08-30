@@ -142,7 +142,7 @@ func TestProjectCardSnapshotReconcilesAnalyticsAndQuality(t *testing.T) {
 	insertScoredSignals(t, st, ctx, s1, 70, "C", false)
 	insertScoredSignals(t, st, ctx, s2, 90, "A", false)
 
-	a, avg, ok, err := st.ProjectCardSnapshot(ctx, f)
+	a, avg, ok, err := st.PublicProjectCardSnapshot(ctx, f)
 	if err != nil || !ok {
 		t.Fatalf("snapshot = (ok=%v, err=%v), want (true, nil)", ok, err)
 	}

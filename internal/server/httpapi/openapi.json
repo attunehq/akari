@@ -460,6 +460,9 @@
           "CostUSD": {
             "type": "number"
           },
+          "CostKnown": {
+            "type": "boolean"
+          },
           "Input": {
             "format": "int64",
             "type": "integer"
@@ -483,6 +486,7 @@
         "required": [
           "CacheRead",
           "CacheWrite",
+          "CostKnown",
           "CostUSD",
           "Input",
           "Label",

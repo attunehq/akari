@@ -540,7 +540,7 @@ func TestRebuildSessionCursorAndReplace(t *testing.T) {
 			{Ordinal: 0, Role: "user", Content: "x"},
 			{Ordinal: 1, Role: "assistant", Content: "y"},
 		},
-		Usage: []store.ProjUsage{{Model: "m", Input: 5, SourceOffset: 0, SourceIndex: 0}},
+		Usage: []store.ProjUsage{{Model: "m", Input: 5, CostSource: store.CostSourceUnknown, SourceOffset: 0, SourceIndex: 0}},
 	})
 
 	var mc, umc int
@@ -582,7 +582,7 @@ func TestRebuildSessionCursorAndReplace(t *testing.T) {
 	// usage, and every rollup reflects only the new delta.
 	rebuildWith(t, st, ann.SessionID, store.ProjectionDelta{
 		Messages: []store.MessageDelta{{Ordinal: 0, Role: "assistant", Content: "z"}},
-		Usage:    []store.ProjUsage{{Model: "m", Input: 7, SourceOffset: 0, SourceIndex: 0}},
+		Usage:    []store.ProjUsage{{Model: "m", Input: 7, CostSource: store.CostSourceUnknown, SourceOffset: 0, SourceIndex: 0}},
 	})
 	var rows int
 	if err := st.Pool.QueryRow(ctx, "SELECT count(*) FROM messages WHERE session_id=$1", ann.SessionID).Scan(&rows); err != nil {

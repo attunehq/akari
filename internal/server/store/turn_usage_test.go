@@ -55,11 +55,11 @@ func TestMessagesTurnUsageFolds(t *testing.T) {
 			{Ordinal: 1, Role: "assistant", Content: "b", Model: "gpt-5"},
 		},
 		Usage: []store.ProjUsage{
-			{MessageOrdinal: &ord0, Model: "gpt-5", Input: 1000, Output: 200, CacheRead: 5000, CacheWrite: 300, Reasoning: 40, CostUSD: cost(0.10), SourceOffset: 1, SourceIndex: 0},
-			{MessageOrdinal: &ord0, Model: "gpt-5", Input: 500, Output: 100, CacheRead: 2000, CacheWrite: 0, Reasoning: 10, CostUSD: cost(0.05), SourceOffset: 2, SourceIndex: 0},
-			{MessageOrdinal: &ord1, Model: "gpt-5", Input: 800, Output: 400, CacheRead: 100000, CacheWrite: 0, CostUSD: cost(0.30), SourceOffset: 3, SourceIndex: 0},
-			{MessageOrdinal: &ord1, Model: "mystery", Input: 100, Output: 50, CacheRead: 0, CacheWrite: 0, CostUSD: 0, SourceOffset: 4, SourceIndex: 0},
-			{MessageOrdinal: nil, Model: "gpt-5", Input: 999, Output: 999, CostUSD: cost(9.99), SourceOffset: 5, SourceIndex: 0},
+			{MessageOrdinal: &ord0, Model: "gpt-5", Input: 1000, Output: 200, CacheRead: 5000, CacheWrite: 300, Reasoning: 40, CostUSD: cost(0.10), CostSource: store.CostSourceRateTable, ModelNamePublic: true, SourceOffset: 1, SourceIndex: 0},
+			{MessageOrdinal: &ord0, Model: "gpt-5", Input: 500, Output: 100, CacheRead: 2000, CacheWrite: 0, Reasoning: 10, CostUSD: cost(0.05), CostSource: store.CostSourceRateTable, ModelNamePublic: true, SourceOffset: 2, SourceIndex: 0},
+			{MessageOrdinal: &ord1, Model: "gpt-5", Input: 800, Output: 400, CacheRead: 100000, CacheWrite: 0, CostUSD: cost(0.30), CostSource: store.CostSourceRateTable, ModelNamePublic: true, SourceOffset: 3, SourceIndex: 0},
+			{MessageOrdinal: &ord1, Model: "mystery", Input: 100, Output: 50, CacheRead: 0, CacheWrite: 0, CostUSD: 0, CostSource: store.CostSourceUnknown, SourceOffset: 4, SourceIndex: 0},
+			{MessageOrdinal: nil, Model: "gpt-5", Input: 999, Output: 999, CostUSD: cost(9.99), CostSource: store.CostSourceRateTable, ModelNamePublic: true, SourceOffset: 5, SourceIndex: 0},
 		},
 	}
 	rebuildWith(t, st, sid, delta)
@@ -110,7 +110,7 @@ func TestMessagesTurnUsageUnknownPrice(t *testing.T) {
 	rebuildWith(t, st, sid, store.ProjectionDelta{
 		Messages: []store.MessageDelta{{Ordinal: 0, Role: "assistant", Content: "a", Model: "mystery"}},
 		Usage: []store.ProjUsage{
-			{MessageOrdinal: &ord, Model: "mystery", Input: 100, Output: 50, CostUSD: 0, SourceOffset: 1, SourceIndex: 0},
+			{MessageOrdinal: &ord, Model: "mystery", Input: 100, Output: 50, CostUSD: 0, CostSource: store.CostSourceUnknown, SourceOffset: 1, SourceIndex: 0},
 		},
 	})
 	msgs, err := st.Messages(ctx, sid)
@@ -139,7 +139,7 @@ func TestMessagesTurnUsageNullOrdinalInvisible(t *testing.T) {
 	rebuildWith(t, st, sid, store.ProjectionDelta{
 		Messages: []store.MessageDelta{{Ordinal: 0, Role: "assistant", Content: "a", Model: "gpt-5"}},
 		Usage: []store.ProjUsage{
-			{MessageOrdinal: nil, Model: "gpt-5", Input: 999, Output: 999, CostUSD: cost(9.99), SourceOffset: 1, SourceIndex: 0},
+			{MessageOrdinal: nil, Model: "gpt-5", Input: 999, Output: 999, CostUSD: cost(9.99), CostSource: store.CostSourceRateTable, ModelNamePublic: true, SourceOffset: 1, SourceIndex: 0},
 		},
 	})
 	msgs, err := st.Messages(ctx, sid)
@@ -178,9 +178,9 @@ func TestMessagesTurnUsageDivergesFromContextFold(t *testing.T) {
 	delta := store.ProjectionDelta{
 		Messages: []store.MessageDelta{{Ordinal: 0, Role: "assistant", Content: "a", Model: "gpt-5"}},
 		Usage: []store.ProjUsage{
-			{MessageOrdinal: &ord0, Model: "gpt-5", CacheRead: 100000, CostUSD: 0, SourceOffset: 1, SourceIndex: 0},
-			{MessageOrdinal: &ord0, Model: "gpt-5", CacheRead: 1000, CostUSD: 0, SourceOffset: 2, SourceIndex: 0},
-			{MessageOrdinal: nil, Model: "gpt-5", CacheRead: 1000, CostUSD: 0, SourceOffset: 3, SourceIndex: 0},
+			{MessageOrdinal: &ord0, Model: "gpt-5", CacheRead: 100000, CostUSD: 0, CostSource: store.CostSourceRateTable, ModelNamePublic: true, SourceOffset: 1, SourceIndex: 0},
+			{MessageOrdinal: &ord0, Model: "gpt-5", CacheRead: 1000, CostUSD: 0, CostSource: store.CostSourceRateTable, ModelNamePublic: true, SourceOffset: 2, SourceIndex: 0},
+			{MessageOrdinal: nil, Model: "gpt-5", CacheRead: 1000, CostUSD: 0, CostSource: store.CostSourceRateTable, ModelNamePublic: true, SourceOffset: 3, SourceIndex: 0},
 		},
 	}
 	rebuildWith(t, st, sid, delta)
@@ -328,15 +328,15 @@ func TestMessageTurnUsageMatchesUsageEvents(t *testing.T) {
 		},
 		Usage: []store.ProjUsage{
 			// Turn 0: two streamed chunks, both priced (the rollup must sum them).
-			{MessageOrdinal: &ord0, Model: "gpt-5", Input: 1000, Output: 200, CacheRead: 5000, CacheWrite: 300, Reasoning: 40, CostUSD: cost(0.10), SourceOffset: 1, SourceIndex: 0},
-			{MessageOrdinal: &ord0, Model: "gpt-5", Input: 500, Output: 100, CacheRead: 2000, CacheWrite: 0, Reasoning: 10, CostUSD: cost(0.05), SourceOffset: 2, SourceIndex: 0},
+			{MessageOrdinal: &ord0, Model: "gpt-5", Input: 1000, Output: 200, CacheRead: 5000, CacheWrite: 300, Reasoning: 40, CostUSD: cost(0.10), CostSource: store.CostSourceRateTable, ModelNamePublic: true, SourceOffset: 1, SourceIndex: 0},
+			{MessageOrdinal: &ord0, Model: "gpt-5", Input: 500, Output: 100, CacheRead: 2000, CacheWrite: 0, Reasoning: 10, CostUSD: cost(0.05), CostSource: store.CostSourceRateTable, ModelNamePublic: true, SourceOffset: 2, SourceIndex: 0},
 			// Turn 1: one priced, one token-bearing row with an unknown rate.
-			{MessageOrdinal: &ord1, Model: "gpt-5", Input: 800, Output: 400, CacheRead: 100000, CostUSD: cost(0.30), SourceOffset: 3, SourceIndex: 0},
-			{MessageOrdinal: &ord1, Model: "mystery", Input: 100, Output: 50, CostUSD: 0, SourceOffset: 4, SourceIndex: 0},
+			{MessageOrdinal: &ord1, Model: "gpt-5", Input: 800, Output: 400, CacheRead: 100000, CostUSD: cost(0.30), CostSource: store.CostSourceRateTable, ModelNamePublic: true, SourceOffset: 3, SourceIndex: 0},
+			{MessageOrdinal: &ord1, Model: "mystery", Input: 100, Output: 50, CostUSD: 0, CostSource: store.CostSourceUnknown, SourceOffset: 4, SourceIndex: 0},
 			// Turn 2: all rates unknown, so cost is zero.
-			{MessageOrdinal: &ord2, Model: "mystery", Input: 70, Output: 30, CostUSD: 0, SourceOffset: 5, SourceIndex: 0},
+			{MessageOrdinal: &ord2, Model: "mystery", Input: 70, Output: 30, CostUSD: 0, CostSource: store.CostSourceUnknown, SourceOffset: 5, SourceIndex: 0},
 			// A NULL-ordinal row: attributable to no turn, so it folds into no rollup row.
-			{MessageOrdinal: nil, Model: "gpt-5", Input: 999, Output: 999, CostUSD: cost(9.99), SourceOffset: 6, SourceIndex: 0},
+			{MessageOrdinal: nil, Model: "gpt-5", Input: 999, Output: 999, CostUSD: cost(9.99), CostSource: store.CostSourceRateTable, ModelNamePublic: true, SourceOffset: 6, SourceIndex: 0},
 		},
 	}
 	rebuildWith(t, st, sid, delta)

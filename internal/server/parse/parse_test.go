@@ -15,24 +15,28 @@ import (
 func TestGrokProviderCostTakesPrecedence(t *testing.T) {
 	const tokens = `"inputTokens":1200,"outputTokens":80,"cachedReadTokens":700,"cacheCreationTokens":0,"reasoningTokens":30`
 	cases := []struct {
-		name  string
-		usage string
-		want  float64
+		name       string
+		usage      string
+		want       float64
+		wantSource store.CostSource
 	}{
 		{
-			name:  "reported ticks beat the rate table",
-			usage: `{"costUsdTicks":15300000,"modelUsage":{"grok-4.6-build":{` + tokens + `,"costUsdTicks":15300000}}}`,
-			want:  0.00153,
+			name:       "reported ticks beat the rate table",
+			usage:      `{"costUsdTicks":15300000,"modelUsage":{"grok-4.6-build":{` + tokens + `,"costUsdTicks":15300000}}}`,
+			want:       0.00153,
+			wantSource: store.CostSourceProvider,
 		},
 		{
-			name:  "missing ticks use the rate table",
-			usage: `{"modelUsage":{"grok-4.6-build":{` + tokens + `}}}`,
-			want:  0.00183,
+			name:       "missing ticks use the rate table",
+			usage:      `{"modelUsage":{"grok-4.6-build":{` + tokens + `}}}`,
+			want:       0.00183,
+			wantSource: store.CostSourceRateTable,
 		},
 		{
-			name:  "zero ticks is reported free",
-			usage: `{"costUsdTicks":0,"modelUsage":{"grok-4.6-build":{` + tokens + `,"costUsdTicks":0}}}`,
-			want:  0,
+			name:       "zero ticks is reported free",
+			usage:      `{"costUsdTicks":0,"modelUsage":{"grok-4.6-build":{` + tokens + `,"costUsdTicks":0}}}`,
+			want:       0,
+			wantSource: store.CostSourceProvider,
 		},
 	}
 	for _, tt := range cases {
@@ -51,6 +55,12 @@ func TestGrokProviderCostTakesPrecedence(t *testing.T) {
 			}
 			if math.Abs(delta.Usage[0].CostUSD-tt.want) > 1e-12 {
 				t.Errorf("cost = %v, want %v", delta.Usage[0].CostUSD, tt.want)
+			}
+			if delta.Usage[0].CostSource != tt.wantSource {
+				t.Errorf("cost source = %q, want %q", delta.Usage[0].CostSource, tt.wantSource)
+			}
+			if !delta.Usage[0].ModelNamePublic {
+				t.Error("released Grok model should be public")
 			}
 		})
 	}
