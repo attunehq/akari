@@ -100,6 +100,35 @@ func TestDiscoverDoesNotFollowDirectorySymlinkLoop(t *testing.T) {
 	}
 }
 
+func TestMatches(t *testing.T) {
+	cases := []struct {
+		agent, path string
+		want        bool
+	}{
+		{"claude", "proj/sess.jsonl", true},
+		{"claude", "proj/sess/subagents/agent-abc.jsonl", true},
+		{"claude", "proj/sess/subagents/workflows/wf_abc/agent-abc.jsonl", true},
+		{"claude", "proj/sess/subagents/workflows/wf_abc/journal.jsonl", false},
+		{"claude", "proj/journal.jsonl", true},
+		{"claude", "proj/subagents/workflows/not-wf/journal.jsonl", true},
+		{"claude", "notes.txt", false},
+		{"codex", "2024/rollout-abc.jsonl", true},
+		{"codex", "2024/other.jsonl", false},
+		{"grok", "sess/updates.jsonl", true},
+		{"grok", "sess/other.jsonl", false},
+		{"pi", "sess.jsonl", true},
+	}
+	for _, c := range cases {
+		if got := Matches(c.agent, c.path); got != c.want {
+			t.Errorf("Matches(%q, %q) = %v, want %v", c.agent, c.path, got, c.want)
+		}
+	}
+	native := filepath.FromSlash("proj/sess/subagents/workflows/wf_abc/journal.jsonl")
+	if Matches("claude", native) {
+		t.Errorf("Matches(claude, %q) = true, want false", native)
+	}
+}
+
 func TestDiscover(t *testing.T) {
 	dir := t.TempDir()
 	claudeDir := filepath.Join(dir, "claude")
@@ -162,6 +191,40 @@ func TestDiscover(t *testing.T) {
 		if fileRoot[name] != dir {
 			t.Errorf("%s: root %q, want %q", name, fileRoot[name], dir)
 		}
+	}
+}
+
+func TestDiscoverOmitsClaudeWorkflowJournals(t *testing.T) {
+	dir := t.TempDir()
+	sid := "4a7929e8-5b80-48e6-8ccc-a8919c89cd6d"
+	proj := filepath.Join(dir, "-home-ada-app")
+	main := filepath.Join(proj, sid+".jsonl")
+	sub := filepath.Join(proj, sid, "subagents", "agent-ac2d35a2e8e2aff8e.jsonl")
+	wfAgent := filepath.Join(proj, sid, "subagents", "workflows", "wf_1c721b08-534", "agent-a2a62fc9fa01c8ef3.jsonl")
+	wfJournal := filepath.Join(proj, sid, "subagents", "workflows", "wf_1c721b08-534", "journal.jsonl")
+	write(t, main)
+	write(t, sub)
+	write(t, wfAgent)
+	write(t, wfJournal)
+
+	files, _, err := Discover([]Root{{Agent: "claude", Dir: dir}}, Excluder{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, f := range files {
+		got[f.Path] = true
+	}
+	for _, path := range []string{main, sub, wfAgent} {
+		if !got[path] {
+			t.Errorf("missing session file %s", path)
+		}
+	}
+	if got[wfJournal] {
+		t.Errorf("discovered workflow journal %s", wfJournal)
+	}
+	if len(files) != 3 {
+		t.Fatalf("discovered %d files, want 3", len(files))
 	}
 }
 

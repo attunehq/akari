@@ -1291,7 +1291,8 @@ Enumerate session files for each agent from its known roots. Each agent's own
 documented override is honored when present; akari defines no environment
 variables of its own (see Config):
 
-- Claude: `~/.claude/projects/**/*.jsonl` (and `subagents/`), `CLAUDE_PROJECTS_DIR`.
+- Claude: `~/.claude/projects/**/*.jsonl` (and `subagents/`; not
+  `subagents/workflows/wf_*/journal.jsonl`), `CLAUDE_PROJECTS_DIR`.
 - Codex: `~/.codex/sessions/**/rollout-*.jsonl` and archived sessions,
   `CODEX_SESSIONS_DIR`.
 - pi: `~/.pi/agent/sessions/*/*.jsonl` (validated by a `type: "session"`

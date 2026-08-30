@@ -337,6 +337,11 @@ plus any `extra_roots` you configured:
 | Grok | `~/.grok/sessions` (one directory per session; `updates.jsonl` is the record) | `GROK_HOME` (sessions at `$GROK_HOME/sessions`) |
 | OpenCode | `~/.local/share/opencode` (`opencode.db`; the client materializes JSONL) | `OPENCODE_DATA_DIR` (data dir) or `OPENCODE_DB` (database file). Uses `$XDG_DATA_HOME/opencode` when `XDG_DATA_HOME` is set |
 
+Claude Code also writes workflow journals at
+`subagents/workflows/wf_*/journal.jsonl`. Those are orchestration logs, not
+session transcripts, so the client does not pick them up. The `agent-*.jsonl`
+files next to them are still discovered.
+
 Missing built-in roots are skipped without error because an unused agent normally
 has no session directory. A missing path supplied through an agent override or
 `extra_roots` is an error, as are permission failures and incomplete directory

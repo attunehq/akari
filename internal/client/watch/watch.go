@@ -338,7 +338,7 @@ func (w *Watcher) handleEvent(fsw *fsnotify.Watcher, ev fsnotify.Event, known ma
 }
 
 // fileFor classifies an event path: the root whose directory contains it gives
-// the agent, and the agent's filename pattern confirms it is a session file.
+// the agent, and the agent's session-file match confirms it is a session file.
 //
 // It resolves each root through discover.ResolveRoot rather than comparing
 // against r.Dir directly, because a root accepted via FollowRootLink is watched
@@ -356,13 +356,12 @@ func (w *Watcher) fileFor(path string) (discover.File, bool) {
 	if _, ok := statMeta(path); !ok {
 		return discover.File{}, false
 	}
-	base := filepath.Base(path)
 	for _, r := range w.roots {
 		dir, notice, err := discover.ResolveRoot(r)
 		if err != nil || notice != "" {
 			continue
 		}
-		if within(dir, path) && discover.Matches(r.Agent, base) {
+		if within(dir, path) && discover.Matches(r.Agent, path) {
 			return discover.File{Agent: r.Agent, Root: dir, Path: path}, true
 		}
 	}

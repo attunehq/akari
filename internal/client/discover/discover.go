@@ -178,17 +178,18 @@ func ErrorCount(err error) int {
 	return 1
 }
 
-// Matches reports whether a filename is a session file for the given agent.
+// Matches reports whether path is a session file for the given agent.
 // Codex files are named rollout-*.jsonl; Grok keeps several JSONL files per
 // session directory, of which updates.jsonl is the session record; Claude, pi,
-// Cursor, and materialized OpenCode transcripts use any *.jsonl. OpenCode's
-// on-disk source is SQLite, so Discover does not walk its data directory for
-// JSONL; it queries the database and writes cache files. This is only a name
-// gate: every agent's files are
-// further validated by a positive session-header signature at resolve time (see
-// resolve.sessionSignature), which is what keeps unrelated *.jsonl under a
-// custom extra_root from being ingested.
-func Matches(agent, name string) bool {
+// Cursor, and materialized OpenCode transcripts use any *.jsonl except Claude
+// Code's workflow journals (see claudeWorkflowJournal). OpenCode's on-disk
+// source is SQLite, so Discover does not walk its data directory for JSONL; it
+// queries the database and writes cache files. This is only a name and layout
+// gate: every agent's files are further validated by a positive session-header
+// signature at resolve time (see resolve.sessionSignature), which is what keeps
+// unrelated *.jsonl under a custom extra_root from being ingested.
+func Matches(agent, path string) bool {
+	name := filepath.Base(path)
 	if !strings.HasSuffix(name, ".jsonl") {
 		return false
 	}
@@ -197,8 +198,27 @@ func Matches(agent, name string) bool {
 		return strings.HasPrefix(name, "rollout-")
 	case "grok":
 		return name == "updates.jsonl"
+	case "claude":
+		return !claudeWorkflowJournal(path)
 	}
 	return true
+}
+
+// claudeWorkflowJournal reports Claude Code's workflow orchestration log:
+// <session>/subagents/workflows/wf_*/journal.jsonl. Those files record
+// started/result events for the agents a workflow spawned; they are not
+// transcripts. The agent-*.jsonl files beside them are the real child
+// sessions and still match.
+func claudeWorkflowJournal(path string) bool {
+	// Slash-normalized so a Windows walk still matches the Claude layout, which
+	// always uses these segment names.
+	parts := strings.Split(filepath.ToSlash(path), "/")
+	n := len(parts)
+	return n >= 4 &&
+		parts[n-1] == "journal.jsonl" &&
+		strings.HasPrefix(parts[n-2], "wf_") &&
+		parts[n-3] == "workflows" &&
+		parts[n-4] == "subagents"
 }
 
 // Discover walks every root and returns the session files it finds, de-duplicated
@@ -259,7 +279,7 @@ func Discover(roots []Root, ex Excluder) (files []File, notices []string, err er
 				}
 				return nil
 			}
-			if !Matches(root.Agent, d.Name()) {
+			if !Matches(root.Agent, path) {
 				return nil
 			}
 			if ex.Excluded(path) {
