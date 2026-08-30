@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -291,9 +292,59 @@ func truncateSessionFields(s *sessionDTO, budget int, fits func() bool) error {
 	return nil
 }
 
+// sessionsSummary is the list_sessions text channel. It names each row's
+// session_id and project_id (and the next_cursor when the page continues) so a
+// client that never sees structuredContent can still call get_session,
+// get_project, and the next list_sessions page.
 func sessionsSummary(out sessionsDTO) string {
-	if out.NextCursor != "" {
-		return fmt.Sprintf("list_sessions: %d sessions returned; more available via next_cursor. Full data is in structuredContent.", len(out.Sessions))
+	var b strings.Builder
+	fmt.Fprintf(&b, "list_sessions: %d sessions returned", len(out.Sessions))
+	for _, s := range out.Sessions {
+		b.WriteString("; session_id=")
+		b.WriteString(strconv.FormatInt(s.ID, 10))
+		if s.ProjectID != 0 {
+			b.WriteString(" project_id=")
+			b.WriteString(strconv.FormatInt(s.ProjectID, 10))
+		}
 	}
-	return fmt.Sprintf("list_sessions: %d sessions returned; no more pages. Full data is in structuredContent.", len(out.Sessions))
+	if out.NextCursor != "" {
+		b.WriteString("; more available via next_cursor=")
+		b.WriteString(out.NextCursor)
+	} else {
+		b.WriteString("; no more pages")
+	}
+	b.WriteString(". Full data is in structuredContent.")
+	return b.String()
+}
+
+// projectsSummary is the list_projects text channel. It names each project's
+// project_id so a client that never sees structuredContent can still call
+// get_project.
+func projectsSummary(out projectsDTO) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "list_projects: %d projects returned", len(out.Projects))
+	for _, p := range out.Projects {
+		b.WriteString("; project_id=")
+		b.WriteString(strconv.FormatInt(p.ID, 10))
+	}
+	b.WriteString(". Full data is in structuredContent.")
+	return b.String()
+}
+
+// overviewSummary is the overview text channel. It names each account's user_id
+// (and username) so a client that never sees structuredContent can still pass
+// user_ids into a later overview call.
+func overviewSummary(out overviewDTO) string {
+	var b strings.Builder
+	b.WriteString("overview: fleet usage loaded")
+	for _, u := range out.Users {
+		b.WriteString("; user_id=")
+		b.WriteString(strconv.FormatInt(u.ID, 10))
+		if u.Username != "" {
+			b.WriteByte(' ')
+			b.WriteString(u.Username)
+		}
+	}
+	b.WriteString(". Full data is in structuredContent.")
+	return b.String()
 }

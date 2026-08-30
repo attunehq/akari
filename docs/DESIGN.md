@@ -1218,12 +1218,14 @@ so coding agents can read the corpus without the UI. Two decisions shape it:
   as a preview plus a SHA-256-bound `resource_link`; `resources/read` resolves it
   from the message projection through the same bearer check. Token revocation,
   message deletion, or changed field content invalidates future reads. Structured
-  output carries the DTO and text content carries only a paging summary, avoiding
-  a second full JSON copy. When trimming a `list_sessions` page down to its last
-  candidate row still leaves that single row over budget (an outlier field like
-  `git_branch` alone exceeds it), the row is not dropped: its oversized string
-  fields are truncated in place, with a marker suffix, until it fits, so every
-  page always contains the row it advances the cursor past. A row that cannot fit
+  output carries the DTO. Text content is a compact paging summary that includes
+  the integer ids later tools require (`session_id`, `project_id`, `user_id`), so
+  a client that only sees text can still follow the list-then-get path. It is not
+  a second copy of the JSON payload. When trimming a `list_sessions` page down to
+  its last candidate row still leaves that single row over budget (an outlier
+  field like `git_branch` alone exceeds it), the row is not dropped: its oversized
+  string fields are truncated in place, with a marker suffix, until it fits, so
+  every page always contains the row it advances the cursor past. A row that cannot fit
   even fully truncated (unreachable at the 8 MiB configured floor) fails the call
   loudly rather than returning a silently empty page. The message hash columns
   (`content_sha256`, `thinking_text_sha256`, migration 0049) back the

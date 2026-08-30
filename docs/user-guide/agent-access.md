@@ -106,8 +106,10 @@ Parameters that govern paging through a large history:
   budget.
 
 Tool results carry the complete DTO in `structuredContent`. The text content is
-a compact status and paging summary, so clients do not receive a second copy of
-the full JSON payload.
+a compact status and paging summary that includes the integer ids later tools
+require (`session_id`, `project_id`, `user_id`). A client that only reads text
+can still go from a list to `get_session` or `get_project`. The text is not a
+second copy of the JSON payload.
 
 ## What the MCP sees
 

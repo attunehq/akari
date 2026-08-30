@@ -66,7 +66,7 @@ func registerTools(s *mcp.Server, st *store.Store, response responder) {
 			return nil, overviewDTO{}, err
 		}
 		out := overviewDTO{Window: windowLabel(in.Days), Analytics: analyticsToDTO(a), Users: usersToRefs(users)}
-		return jsonResult(response, "overview: fleet usage loaded. Full data is in structuredContent.", out, nil)
+		return jsonResult(response, overviewSummary(out), out, nil)
 	})
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -81,7 +81,7 @@ func registerTools(s *mcp.Server, st *store.Store, response responder) {
 		for _, p := range ps {
 			out.Projects = append(out.Projects, projectToDTO(p))
 		}
-		return jsonResult(response, fmt.Sprintf("list_projects: %d projects returned. Full data is in structuredContent.", len(out.Projects)), out, nil)
+		return jsonResult(response, projectsSummary(out), out, nil)
 	})
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -109,7 +109,7 @@ func registerTools(s *mcp.Server, st *store.Store, response responder) {
 			Analytics: analyticsToDTO(a),
 			Facets:    facetValuesDTO{Agents: f.Agents, Machines: f.Machines, Users: f.Users},
 		}
-		return jsonResult(response, "get_project: project details loaded. Full data is in structuredContent.", out, nil)
+		return jsonResult(response, fmt.Sprintf("get_project: project %d loaded. Full data is in structuredContent.", out.Project.ID), out, nil)
 	})
 
 	mcp.AddTool(s, &mcp.Tool{

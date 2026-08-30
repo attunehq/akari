@@ -3,6 +3,7 @@ package mcpserver_test
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -145,6 +146,31 @@ func rawToolResult(t *testing.T, sess *mcpsdk.ClientSession, name string, args a
 	return string(b)
 }
 
+func toolText(t *testing.T, res *mcpsdk.CallToolResult) string {
+	t.Helper()
+	if len(res.Content) == 0 {
+		t.Fatal("tool result has no content")
+	}
+	text, ok := res.Content[0].(*mcpsdk.TextContent)
+	if !ok {
+		t.Fatalf("content[0] is %T, want TextContent", res.Content[0])
+	}
+	return text.Text
+}
+
+func requiredLabeledInt(t *testing.T, text, key string) int64 {
+	t.Helper()
+	m := regexp.MustCompile(regexp.QuoteMeta(key) + `=(\d+)`).FindStringSubmatch(text)
+	if m == nil {
+		t.Fatalf("text %q missing %s", text, key)
+	}
+	n, err := strconv.ParseInt(m[1], 10, 64)
+	if err != nil {
+		t.Fatalf("parse %s from %q: %v", key, text, err)
+	}
+	return n
+}
+
 func TestToolsReturnSeededData(t *testing.T) {
 	t.Parallel()
 	st := storetest.NewStore(t)
@@ -242,6 +268,53 @@ func TestGetSessionEventsCarryObjectAttrs(t *testing.T) {
 	// The integers the parser wrote stay integers on the wire.
 	if raw := rawToolResult(t, sess, "get_session", map[string]any{"session_id": fx.sessionID}); !strings.Contains(raw, `"pre_tokens":152000`) {
 		t.Fatalf("event attrs JSON = %s", raw)
+	}
+}
+
+// TestListToolTextCarriesIdsForFollowUpCalls is the text-only client path:
+// list_sessions / list_projects / overview must put the integer ids later tools
+// take into the text channel, because some hosts drop structuredContent.
+func TestListToolTextCarriesIdsForFollowUpCalls(t *testing.T) {
+	t.Parallel()
+	st := storetest.NewStore(t)
+	fx := seedSession(t, st)
+	sess := connect(t, st)
+
+	projectsText := toolText(t, callResult(t, sess, "list_projects", map[string]any{}))
+	t.Logf("list_projects text: %s", projectsText)
+	projectID := requiredLabeledInt(t, projectsText, "project_id")
+	if projectID != fx.projectID {
+		t.Fatalf("list_projects text project_id=%d, want %d (text %q)", projectID, fx.projectID, projectsText)
+	}
+	project := callJSON(t, sess, "get_project", map[string]any{"project_id": projectID})
+	gotProject, _ := project["project"].(map[string]any)
+	if gotProject == nil || int64(gotProject["id"].(float64)) != projectID {
+		t.Fatalf("get_project from text id: %+v", project)
+	}
+
+	sessionsText := toolText(t, callResult(t, sess, "list_sessions", map[string]any{}))
+	t.Logf("list_sessions text: %s", sessionsText)
+	sessionID := requiredLabeledInt(t, sessionsText, "session_id")
+	if sessionID != fx.sessionID {
+		t.Fatalf("list_sessions text session_id=%d, want %d (text %q)", sessionID, fx.sessionID, sessionsText)
+	}
+	if got := requiredLabeledInt(t, sessionsText, "project_id"); got != fx.projectID {
+		t.Fatalf("list_sessions text project_id=%d, want %d (text %q)", got, fx.projectID, sessionsText)
+	}
+	detail := callJSON(t, sess, "get_session", map[string]any{"session_id": sessionID, "include_transcript": false})
+	if int64(detail["id"].(float64)) != sessionID {
+		t.Fatalf("get_session from text id: %+v", detail)
+	}
+
+	overviewText := toolText(t, callResult(t, sess, "overview", map[string]any{}))
+	t.Logf("overview text: %s", overviewText)
+	userID := requiredLabeledInt(t, overviewText, "user_id")
+	if !strings.Contains(overviewText, "grace") {
+		t.Fatalf("overview text missing username: %q", overviewText)
+	}
+	filtered := callJSON(t, sess, "overview", map[string]any{"user_ids": []int64{userID}})
+	if _, ok := filtered["analytics"].(map[string]any); !ok {
+		t.Fatalf("overview filtered by user_id=%d missing analytics: %+v", userID, filtered)
 	}
 }
 
