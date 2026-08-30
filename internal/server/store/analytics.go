@@ -371,14 +371,17 @@ func (s *Store) PublicProjectCardSnapshot(ctx context.Context, f AnalyticsFilter
 // gating on it would flap the cards on every active instance.
 //
 // The check is EpochStaleCount's predicate verbatim (attemptedEpoch behind the running
-// epoch), so the gate and the drain agree exactly: any session the worker still has a
-// rebuild path for gates the snapshot, and a session it can never advance (a failure
-// pinned to the current bytes at the running epoch or ahead) does not, since gating on
-// that would blank the cards forever rather than for the duration of a rebuild. New
-// bytes on a failed session un-pin it for both at once. In steady state (every row at
-// the running epoch) the range over idx_session_raw_attempted_epoch is empty and the
-// EXISTS is an index-only touch. An unset epoch (0, a store wired without
-// SetParserEpoch, as in tests) gates nothing.
+// epoch), not the ready-work subset the HTTP fleet gate uses. A parked operational
+// failure still has a last-good projection at an older epoch, so public aggregate
+// cards would mix epochs if the snapshot ignored the deferral; parsed pages instead
+// keep serving that last-good projection and do not blank the application. The drain
+// and the snapshot still agree on pinned failures: a session the worker can never
+// advance (pinned to the current bytes at the running epoch or ahead) does not gate
+// the cards, since gating on that would blank them forever rather than for the
+// duration of a rebuild. New bytes on a failed session un-pin it for both at once.
+// In steady state (every row at the running epoch) the range over
+// idx_session_raw_attempted_epoch is empty and the EXISTS is an index-only touch. An
+// unset epoch (0, a store wired without SetParserEpoch, as in tests) gates nothing.
 func (s *Store) epochGatedSnapshot(ctx context.Context, fn func(tx pgx.Tx) error) (ok bool, err error) {
 	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {

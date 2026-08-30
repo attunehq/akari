@@ -262,8 +262,8 @@ func (w *Worker) drain(ctx context.Context) error {
 	// epoch-stale work (deferred operational failures excluded): a corpus with a
 	// parked failure backlog then pays nothing here per append, and it neither
 	// enters fleet mode nor logs on wakes that have no rebuildable backlog. The
-	// parsed-page gate stays honest independently (FleetStatus probes the full
-	// stale set, deferred rows included).
+	// parsed-page gate uses the same ready predicate (FleetStatus via
+	// EpochStaleReadyExists), so parked rows do not blank the application.
 	staleTotal, err := w.st.EpochStaleReadyCount(ctx, Epoch)
 	if err != nil {
 		if ctx.Err() != nil {

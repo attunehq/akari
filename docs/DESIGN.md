@@ -634,22 +634,29 @@ a bumped epoch retry it. Every staleness surface shares one indexed
 expression, the attempted epoch (the last successful rebuild's epoch, raised
 to the failure epoch while the failure still covers the current bytes): the
 due scan's epoch branch, the fleet progress count, and the OG-card snapshot
-check all test it against the running epoch, so "due" and "gated" can never
-drift apart, and a corpus full of pinned failures indexes AT its failure
-epochs, outside the behind-range the hot probes scan, so probe cost tracks
-the actual backlog rather than the accumulated failure history. New bytes
-break the pin and readmit the session to the scan and the gates in the same
-instant. An operational error (a store or CAS failure, a shutdown) records
-nothing about the parse, but the worker defers the session's next attempt with
-a doubling backoff (30s to a 1h ceiling): the session must not fall out of the
-due set (the failure may clear on its own), yet a persistent one (a CAS blob
-the client never uploaded) must not be re-attempted on every chunk wake, since
-each wake drains the whole due set. The deferral is indexed the same way the
-failure pin is: parked rows leave the ready-work indexes the due scan and the
-drain's opening count read (an elapsed retry comes back via one range scan on
-its ready time), so a parked backlog costs the hot paths nothing. New bytes, a
-reset, or an operator reparse clear the deferral for an immediate retry; the
-epoch gates ignore it (deferred is not done).
+check all test it against the running epoch, so a session the drain can never
+advance (a failure pinned to the current bytes at the running epoch or ahead)
+cannot wedge a gate, and a corpus full of pinned failures indexes AT its
+failure epochs, outside the behind-range the hot probes scan, so probe cost
+tracks the actual backlog rather than the accumulated failure history. New
+bytes break the pin and readmit the session to the scan and the gates in the
+same instant. An operational error (a store or CAS failure, a shutdown)
+records nothing about the parse, but the worker defers the session's next
+attempt with a doubling backoff (30s to a 1h ceiling): the session must not
+fall out of the due set (the failure may clear on its own), yet a persistent
+one (a CAS blob the client never uploaded) must not be re-attempted on every
+chunk wake, since each wake drains the whole due set. The deferral is indexed
+the same way the failure pin is: parked rows leave the ready-work indexes the
+due scan, the drain's opening count, and the cross-instance HTTP fleet gate
+(parsed pages) read (an elapsed retry comes back via one range scan on its
+ready time), so a parked backlog costs the hot paths nothing and does not
+blank the application behind a 0/0 progress bar. New bytes, a reset, or an
+operator reparse clear the deferral for an immediate retry. Diagnostic totals
+(`EpochStaleCount`) and the OG-card snapshot still see deferred rows: a parked
+session keeps its last-good projection at an older epoch, so public aggregate
+cards would mix epochs if the snapshot ignored the deferral, and the
+diagnostic count is how operators notice a parked failure that is not
+currently being retried.
 
 **Scheduling.** The worker drains due sessions continuously, woken in-process
 by the chunk handler and backstopped by the periodic maintenance tick that also

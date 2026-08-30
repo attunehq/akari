@@ -129,12 +129,14 @@ func (s *Store) DueSessions(ctx context.Context, epoch int, limit int) ([]DueSes
 // EpochStaleCount counts the sessions whose projection was last rebuilt behind
 // the running epoch and can still be rebuilt at it (attemptedEpoch, which
 // folds in both the monotonic behind-only comparison and the failed-parse
-// pin). A nonzero count means a fleet rebuild is draining (a deploy with a
-// bumped epoch, a first boot after the pipeline migration, or an
-// operator-marked scope), which is what the parsed-page gate and the rebuild
-// progress bar key on. A row stamped or pinned at the running epoch or ahead
-// is not this binary's work: counting it would wedge the gate and the bar on
-// sessions the drain will never advance.
+// pin). A nonzero count is the diagnostic fleet-rebuild total (a deploy with a
+// bumped epoch, a first boot after the pipeline migration, an operator-marked
+// scope, or a parked operational failure still covering those bytes). The
+// parsed-page gate and the drain's opening count / progress bar key on the
+// ready subset (EpochStaleReadyExists / EpochStaleReadyCount), so a deferred
+// retry cannot blank the application. A row stamped or pinned at the running
+// epoch or ahead is not this binary's work: counting it would wedge those
+// probes on sessions the drain will never advance.
 func (s *Store) EpochStaleCount(ctx context.Context, epoch int) (int, error) {
 	var n int
 	if err := s.Pool.QueryRow(ctx,
