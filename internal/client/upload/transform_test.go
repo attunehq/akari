@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/hex"
+	"hash"
 	"io"
 	"os"
 	"strings"
@@ -13,6 +14,16 @@ import (
 	"github.com/jssblck/akari/internal/casenc"
 	"github.com/jssblck/akari/internal/parser"
 )
+
+func prefixDigest(ctx context.Context, f *os.File, agent string, size, want int64) (hash.Hash, int64, bool, error) {
+	enc := casenc.New()
+	sink := &syncSink{enc: enc}
+	emit := func(ctx context.Context, ref bodyRef) (parser.Body, error) {
+		body, _, err := sink.bodyDescriptor(ctx, ref)
+		return body, err
+	}
+	return transformPrefixDigest(ctx, f, agent, size, want, enc, emit)
+}
 
 func TestChunkAssemblerNeverExceedsProtocolCap(t *testing.T) {
 	oldHardCap, oldChunkTarget := hardCap, chunkTarget
@@ -434,7 +445,7 @@ func TestTransformCodexErrorKeepsStatus(t *testing.T) {
 		t.Fatalf("parsed result status = %+v, want error", parsed.ToolCalls)
 	}
 
-	h, orig, ok, err := transformPrefixDigest(context.Background(), f, "codex", size, int64(len(big.data)), casenc.New())
+	h, orig, ok, err := prefixDigest(context.Background(), f, "codex", size, int64(len(big.data)))
 	if err != nil || !ok {
 		t.Fatalf("cold prefix digest: ok=%v err=%v", ok, err)
 	}
@@ -527,7 +538,7 @@ func TestPrefixDigestRecomputesBigBodyKeys(t *testing.T) {
 
 	// The cold path must recompute a byte-identical transformed prefix over the whole
 	// file and recover the original cursor, by re-streaming and re-compressing the body.
-	h, orig, ok, err := transformPrefixDigest(context.Background(), f, "claude", size, int64(len(transformed)), casenc.New())
+	h, orig, ok, err := prefixDigest(context.Background(), f, "claude", size, int64(len(transformed)))
 	if err != nil || !ok {
 		t.Fatalf("cold prefix digest over a big body: ok=%v err=%v", ok, err)
 	}
@@ -554,7 +565,7 @@ func TestPrefixDigestRecomputesClaudeUserLiftExtensions(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			f, size := openTemp(t, c.content)
 			transformed := runTransform(t, f, 0, size, "claude", true).data
-			h, orig, ok, err := transformPrefixDigest(context.Background(), f, "claude", size, int64(len(transformed)), casenc.New())
+			h, orig, ok, err := prefixDigest(context.Background(), f, "claude", size, int64(len(transformed)))
 			if err != nil || !ok {
 				t.Fatalf("cold prefix digest: ok=%v err=%v", ok, err)
 			}
@@ -595,7 +606,7 @@ func TestPrefixDigestRecomputesBigBodyKeysWithDetail(t *testing.T) {
 
 	// The cold path must recompute a byte-identical transformed prefix, detail
 	// included, by re-streaming and re-deriving the sentinel over the file span.
-	h, orig, ok, err := transformPrefixDigest(context.Background(), f, "claude", size, int64(len(transformed)), casenc.New())
+	h, orig, ok, err := prefixDigest(context.Background(), f, "claude", size, int64(len(transformed)))
 	if err != nil || !ok {
 		t.Fatalf("cold prefix digest over a big input with a detail: ok=%v err=%v", ok, err)
 	}

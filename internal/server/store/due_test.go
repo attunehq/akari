@@ -444,6 +444,15 @@ func TestRebuildBackoffDefersDueRetry(t *testing.T) {
 	if got := backoffSecs(); got != 30 {
 		t.Fatalf("first backoff = %ds, want 30", got)
 	}
+	reannounced, err := st.Announce(ctx, store.AnnounceParams{
+		UserID: uid.ID, Agent: "claude", SourceSessionID: "backoff", ProjectID: pid,
+	})
+	if err != nil {
+		t.Fatalf("re-announce backing-off session: %v", err)
+	}
+	if !reannounced.RebuildDeferred {
+		t.Fatal("announce did not report the deferred rebuild to the client")
+	}
 	// A newer binary can park a byte-dirty session whose last successful
 	// projection is ahead of this worker. The old worker must ignore that retry
 	// even after it elapses; otherwise its timer spins at zero while DueSessions
@@ -517,6 +526,15 @@ func TestRebuildBackoffDefersDueRetry(t *testing.T) {
 	}
 	if got := backoffSecs(); got != 0 {
 		t.Fatalf("backoff after append = %ds, want 0", got)
+	}
+	reannounced, err = st.Announce(ctx, store.AnnounceParams{
+		UserID: uid.ID, Agent: "claude", SourceSessionID: "backoff", ProjectID: pid,
+	})
+	if err != nil {
+		t.Fatalf("re-announce after append: %v", err)
+	}
+	if reannounced.RebuildDeferred {
+		t.Fatal("announce still reported a deferred rebuild after append cleared it")
 	}
 
 	// An operator reparse clears it too.

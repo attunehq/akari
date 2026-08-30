@@ -61,7 +61,10 @@ func (s *syncSink) registerBody(ctx context.Context, sha, contentType string, re
 	s.pending = append(s.pending, pendingBody{sha: sha, contentType: contentType, storedLen: stored, ref: ref})
 	s.pendingShas[sha] = struct{}{}
 	s.pendingBytes += int64(stored)
-	if s.pendingBytes >= maxPendingBodyBytes {
+	// Prefix verification can visit a whole session without emitting a chunk. Bound
+	// streamed-body refs by the same number of hashes one wave of existence checks
+	// handles; unlike buffered bodies, they add no bytes to pendingBytes.
+	if s.pendingBytes >= maxPendingBodyBytes || len(s.pending) >= blobCheckBatch*blobCheckConcurrency {
 		return s.flushPending(ctx)
 	}
 	return nil
@@ -102,6 +105,9 @@ func (s *syncSink) flushPending(ctx context.Context) error {
 	}
 	if err := s.uploadMissing(ctx, order, byID, missing); err != nil {
 		return err
+	}
+	if len(missing) > 0 {
+		s.repaired = true
 	}
 
 	for _, sha := range order {

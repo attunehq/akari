@@ -46,10 +46,13 @@ type ProjectParams struct {
 }
 
 // AnnounceResult is the server's authoritative view of a session's raw store.
+// RebuildDeferred tells the client to verify that the accepted prefix's CAS
+// references still exist before it resumes.
 type AnnounceResult struct {
-	SessionID    int64
-	StoredBytes  int64
-	PrefixSHA256 string
+	SessionID       int64
+	StoredBytes     int64
+	PrefixSHA256    string
+	RebuildDeferred bool
 }
 
 // emptySHA256 is the hex sha256 of zero bytes. A freshly announced session holds
@@ -251,8 +254,9 @@ func keepRemoteAttributionTx(ctx context.Context, tx pgx.Tx, p AnnounceParams) (
 		return AnnounceResult{}, false, err
 	}
 	err = tx.QueryRow(ctx,
-		`SELECT byte_len, content_sha256 FROM session_raw WHERE session_id = $1`, existingID).
-		Scan(&r.StoredBytes, &r.PrefixSHA256)
+		`SELECT byte_len, content_sha256, parse_retry_at IS NOT NULL
+		   FROM session_raw WHERE session_id = $1`, existingID).
+		Scan(&r.StoredBytes, &r.PrefixSHA256, &r.RebuildDeferred)
 	return r, true, err
 }
 
@@ -313,8 +317,9 @@ func announceIntoProjectTx(ctx context.Context, tx pgx.Tx, p AnnounceParams) (An
 		return AnnounceResult{}, err
 	}
 	return r, tx.QueryRow(ctx,
-		`SELECT byte_len, content_sha256 FROM session_raw WHERE session_id = $1`, r.SessionID).
-		Scan(&r.StoredBytes, &r.PrefixSHA256)
+		`SELECT byte_len, content_sha256, parse_retry_at IS NOT NULL
+		   FROM session_raw WHERE session_id = $1`, r.SessionID).
+		Scan(&r.StoredBytes, &r.PrefixSHA256, &r.RebuildDeferred)
 }
 
 // refreshCwdDerivedStateTx updates the two projections that depend on a

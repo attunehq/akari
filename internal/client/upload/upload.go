@@ -431,13 +431,15 @@ func (c *Client) syncOnce(ctx context.Context, t Target, fs *fileSync, f *os.Fil
 			fs.clearDerived()
 		}
 	} else {
-		ok, err := c.verifyPrefix(ctx, f, fs, t.Agent, ann.StoredBytes, size, ann.PrefixSHA256)
+		ok, repaired, err := c.verifyPrefix(ctx, f, fs, t.Agent, ann.StoredBytes, size, ann.PrefixSHA256, ann.RebuildDeferred)
 		if err != nil {
 			return Outcome{}, false, err
 		}
-		if !ok {
+		if !ok || repaired {
 			// The local file was rotated, truncated, or rewritten, or the server
-			// diverged: drop the server copy and re-upload from zero.
+			// diverged. A repaired CAS reference also means the accepted raw prefix
+			// was broken; reset it so the re-upload wakes an operationally parked
+			// rebuild immediately.
 			if err := c.reset(ctx, ann.SessionID); err != nil {
 				return Outcome{}, false, err
 			}
@@ -606,6 +608,10 @@ type syncSink struct {
 	pendingShas  map[string]struct{}
 	pendingBytes int64
 	present      *seenCache
+	// repaired records that a prefix existence check restored at least one CAS
+	// body. The caller resets and reuploads that broken prefix so the parse worker
+	// retries immediately instead of waiting on its operational backoff.
+	repaired bool
 }
 
 // emitBody resolves a located body to its CAS key (the sha256 of the bytes the CAS
@@ -788,24 +794,40 @@ func lastCodexTurnEnd(buf []byte) int {
 // file. A cached digest proves only what a previous read saw; trusting it would
 // miss an in-place rewrite whose size did not shrink and append new bytes to a
 // stale server prefix. The pass streams from disk without a prefix-sized
-// allocation.
-func (c *Client) verifyPrefix(ctx context.Context, f *os.File, fs *fileSync, agent string, serverBytes, size int64, want string) (bool, error) {
-	h, origBase, ok, err := transformPrefixDigest(ctx, f, agent, size, serverBytes, c.enc)
+// allocation. When repairBodies is true, the same pass restores missing CAS
+// bodies and reports repaired so the caller resets the broken raw prefix.
+func (c *Client) verifyPrefix(ctx context.Context, f *os.File, fs *fileSync, agent string, serverBytes, size int64, want string, repairBodies bool) (matches, repaired bool, err error) {
+	bodySink := &syncSink{enc: c.enc}
+	emitBody := func(ctx context.Context, ref bodyRef) (parser.Body, error) {
+		body, _, err := bodySink.bodyDescriptor(ctx, ref)
+		return body, err
+	}
+	if repairBodies {
+		bodySink = &syncSink{c: c, present: newSeenCache(), pendingShas: map[string]struct{}{}, enc: c.enc}
+		emitBody = bodySink.emitBody
+	}
+	h, origBase, ok, err := transformPrefixDigest(ctx, f, agent, size, serverBytes, c.enc, emitBody)
 	if err != nil {
-		return false, err
+		return false, bodySink.repaired, err
+	}
+	if repairBodies {
+		if err := bodySink.flushPending(ctx); err != nil {
+			return false, bodySink.repaired, err
+		}
 	}
 	if !ok || hex.EncodeToString(h.Sum(nil)) != want {
-		return false, nil
+		return false, bodySink.repaired, nil
 	}
 	fs.base = serverBytes
 	fs.origBase = origBase
-	return true, nil
+	return true, bodySink.repaired, nil
 }
 
 type announceResp struct {
-	SessionID    int64  `json:"session_id"`
-	StoredBytes  int64  `json:"stored_bytes"`
-	PrefixSHA256 string `json:"prefix_sha256"`
+	SessionID       int64  `json:"session_id"`
+	StoredBytes     int64  `json:"stored_bytes"`
+	PrefixSHA256    string `json:"prefix_sha256"`
+	RebuildDeferred bool   `json:"rebuild_deferred"`
 }
 
 func (c *Client) announce(ctx context.Context, t Target) (announceResp, error) {

@@ -119,9 +119,10 @@ func (s *Server) handleAnnounce(w http.ResponseWriter, r *http.Request) {
 	// on the maintenance tick, which can be disabled, to leave the due set.
 	s.worker.Wake()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"session_id":    res.SessionID,
-		"stored_bytes":  res.StoredBytes,
-		"prefix_sha256": res.PrefixSHA256,
+		"session_id":       res.SessionID,
+		"stored_bytes":     res.StoredBytes,
+		"prefix_sha256":    res.PrefixSHA256,
+		"rebuild_deferred": res.RebuildDeferred,
 	})
 }
 

@@ -29,14 +29,16 @@ import (
 // the stored bytes are the TRANSFORMED transcript, so prefix_sha256 is the hash of
 // buf and the client verifies its transformed prefix against it.
 type fakeServer struct {
-	mu           sync.Mutex
-	buf          []byte
-	lastAnnounce map[string]any    // the most recent announce request body, decoded
-	finalizes    int               // count of finalize POSTs, for the --finalize refresh assertion
-	blobs        map[string][]byte // sha256 -> stored (possibly compressed) body bytes
-	blobCT       map[string]string // sha256 -> declared storage content_type
-	blobMedia    map[string]string // sha256 -> declared semantic media_type
-	puts         int               // count of accepted blob uploads, for dedup assertions
+	mu              sync.Mutex
+	buf             []byte
+	lastAnnounce    map[string]any    // the most recent announce request body, decoded
+	finalizes       int               // count of finalize POSTs, for the --finalize refresh assertion
+	resets          int               // count of raw resets, including CAS prefix repair
+	rebuildDeferred bool              // announce reports an operationally parked projection rebuild
+	blobs           map[string][]byte // sha256 -> stored (possibly compressed) body bytes
+	blobCT          map[string]string // sha256 -> declared storage content_type
+	blobMedia       map[string]string // sha256 -> declared semantic media_type
+	puts            int               // count of accepted blob uploads, for dedup assertions
 
 	// Instrumentation for the batched existence-check tests. checkBatchSizes records the
 	// hash count of every request, while maxConcurrentChecks records the peak in-flight
@@ -79,9 +81,10 @@ func (s *fakeServer) handler() http.Handler {
 		s.lastAnnounce = body
 		sum := sha256.Sum256(s.buf)
 		writeJSON(w, map[string]any{
-			"session_id":    1,
-			"stored_bytes":  len(s.buf),
-			"prefix_sha256": hex.EncodeToString(sum[:]),
+			"session_id":       1,
+			"stored_bytes":     len(s.buf),
+			"prefix_sha256":    hex.EncodeToString(sum[:]),
+			"rebuild_deferred": s.rebuildDeferred,
 		})
 	})
 	mux.HandleFunc("POST /api/v1/ingest/session/{id}/chunk", func(w http.ResponseWriter, r *http.Request) {
@@ -112,6 +115,7 @@ func (s *fakeServer) handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/ingest/session/{id}/reset", func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		s.resets++
 		s.buf = nil
 		writeJSON(w, map[string]any{"stored_bytes": 0})
 	})
@@ -363,6 +367,67 @@ func TestSyncUpToDate(t *testing.T) {
 	}
 }
 
+func TestSyncRepairsMissingBlobReferencedByStoredPrefix(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		threshold int64
+		body      string
+	}{
+		{name: "buffered body", threshold: 1 << 20, body: "Grace Hopper found the missing CAS body"},
+		{name: "streamed body", threshold: 128, body: strings.Repeat("missing output ", 400)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setBigLineThreshold(t, tc.threshold)
+			c, fs := newTestClient(t)
+			content := `{"type":"response_item","payload":{"type":"function_call"}}` + "\n" +
+				`{"type":"response_item","payload":{"type":"function_call_output","output":` + jsonString(tc.body) + `}}` + "\n"
+			path := tempFile(t, content)
+			tgt := target(path)
+			tgt.Agent = "codex"
+			tgt.Finalize = true
+
+			first, err := c.SyncFile(context.Background(), tgt)
+			if err != nil {
+				t.Fatalf("initial sync: %v", err)
+			}
+			if first.Action != ActionUploaded || fs.puts != 1 {
+				t.Fatalf("initial sync = %+v, puts=%d; want one uploaded transcript and blob", first, fs.puts)
+			}
+			checks := len(fs.checkBatchSizes)
+			if _, err := c.SyncFile(context.Background(), tgt); err != nil {
+				t.Fatalf("ordinary up-to-date sync: %v", err)
+			}
+			if len(fs.checkBatchSizes) != checks {
+				t.Fatal("ordinary prefix verification rechecked historical CAS bodies")
+			}
+
+			fs.mu.Lock()
+			fs.blobs = map[string][]byte{}
+			fs.rebuildDeferred = true
+			fs.mu.Unlock()
+
+			repaired, err := c.SyncFile(context.Background(), tgt)
+			if err != nil {
+				t.Fatalf("repair sync: %v", err)
+			}
+			if repaired.Action != ActionReset {
+				t.Fatalf("repair action = %s, want %s", repaired.Action, ActionReset)
+			}
+			fs.mu.Lock()
+			defer fs.mu.Unlock()
+			if fs.resets != 1 {
+				t.Fatalf("repair resets = %d, want 1", fs.resets)
+			}
+			if fs.puts != 2 || len(fs.blobs) != 1 {
+				t.Fatalf("after repair puts=%d blobs=%d, want restored body uploaded once", fs.puts, len(fs.blobs))
+			}
+			if len(fs.buf) == 0 {
+				t.Fatal("repair left the server transcript empty")
+			}
+		})
+	}
+}
+
 func TestSyncDivergenceResets(t *testing.T) {
 	c, fs := newTestClient(t)
 	content := "l1\nl2\nl3\n"
@@ -538,14 +603,14 @@ func TestVerifyPrefixReDerivesWarmState(t *testing.T) {
 	// bytes have since been rewritten in place.
 	fs := &fileSync{base: 4, origBase: 4}
 
-	ok, err := c.verifyPrefix(context.Background(), f, fs, "claude", 4, 4, hexSHA("BBB\n"))
+	ok, _, err := c.verifyPrefix(context.Background(), f, fs, "claude", 4, 4, hexSHA("BBB\n"), false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ok {
 		t.Fatal("verification trusted a cached digest that differs from the file")
 	}
-	ok, err = c.verifyPrefix(context.Background(), f, fs, "claude", 4, 4, hexSHA("AAA\n"))
+	ok, _, err = c.verifyPrefix(context.Background(), f, fs, "claude", 4, 4, hexSHA("AAA\n"), false)
 	if err != nil || !ok {
 		t.Fatalf("verification against current file: ok=%v err=%v", ok, err)
 	}
@@ -643,7 +708,7 @@ func TestVerifyPrefixColdReTransforms(t *testing.T) {
 
 	first := claudeLine("hi")
 	fs := &fileSync{}
-	ok, err := c.verifyPrefix(context.Background(), f, fs, "claude", int64(len(first)), int64(len(content)), hexSHA(first))
+	ok, _, err := c.verifyPrefix(context.Background(), f, fs, "claude", int64(len(first)), int64(len(content)), hexSHA(first), false)
 	if err != nil || !ok {
 		t.Fatalf("cold verify: ok=%v err=%v", ok, err)
 	}
@@ -652,7 +717,7 @@ func TestVerifyPrefixColdReTransforms(t *testing.T) {
 	}
 
 	// A wrong hash is rejected.
-	if ok, err := c.verifyPrefix(context.Background(), f, &fileSync{}, "claude", int64(len(first)), int64(len(content)), hexSHA("nope")); err != nil || ok {
+	if ok, _, err := c.verifyPrefix(context.Background(), f, &fileSync{}, "claude", int64(len(first)), int64(len(content)), hexSHA("nope"), false); err != nil || ok {
 		t.Fatalf("cold verify of wrong hash: ok=%v err=%v, want false", ok, err)
 	}
 }

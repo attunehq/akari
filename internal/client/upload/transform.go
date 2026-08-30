@@ -453,10 +453,10 @@ func lineContentLen(f *os.File, origOff, origLen int64) (contentLen int64, hasNL
 // bytes). It is the cold-cache verification path: deterministic because the
 // transform is, so the recomputed prefix is byte identical to what was uploaded.
 //
-// The prefix verification only needs the transformed bytes, not their bodies, so it
-// re-derives each rewritten line. A small line is rewritten whole; a big line is
-// rewritten from its literal regions plus sentinels, streaming each body once only
-// to recompute its hash, never buffering it.
+// When the server reports a deferred rebuild, prefix verification also rechecks
+// every referenced body with the CAS. A failed rebuild can leave raw bytes
+// referring to an unprojected blob. The source file still contains the body, so
+// this pass can restore it while it re-derives each rewritten line.
 //
 // Recomputing those hashes re-compresses the bodies (the key is the hash of the
 // compressed bytes, so there is no cheaper way to recover it). That is a deliberate
@@ -466,7 +466,7 @@ func lineContentLen(f *os.File, origOff, origLen int64) (contentLen int64, hasNL
 // (a fresh process or an evicted entry), and like the rest of the transform it
 // streams in a fixed window, so the cost is bounded client CPU, never input-sized
 // memory.
-func transformPrefixDigest(ctx context.Context, f *os.File, agent string, size, wantTransformed int64, enc *casenc.Encoder) (hash.Hash, int64, bool, error) {
+func transformPrefixDigest(ctx context.Context, f *os.File, agent string, size, wantTransformed int64, enc *casenc.Encoder, emitBody func(context.Context, bodyRef) (parser.Body, error)) (hash.Hash, int64, bool, error) {
 	sc := newOrigLineScanner(f, 0, size).withContext(ctx)
 	h := sha256.New()
 	var transformed, orig int64
@@ -481,7 +481,7 @@ func transformPrefixDigest(ctx context.Context, f *os.File, agent string, size, 
 		if !ok {
 			return nil, 0, false, nil // ran out of file before reaching the cursor
 		}
-		rewritten, err := rewriteForDigest(ctx, f, agent, line, origOff, origLen, isBig, enc)
+		rewritten, err := rewriteForDigest(ctx, f, agent, line, origOff, origLen, isBig, enc, emitBody)
 		if err != nil {
 			return nil, 0, false, err
 		}
@@ -496,21 +496,38 @@ func transformPrefixDigest(ctx context.Context, f *os.File, agent string, size, 
 }
 
 // rewriteForDigest produces the transformed bytes of one line for prefix
-// verification, matching the bytes the transform uploaded. A big line goes through
-// the same rewriteBigLine as the upload path, but the body is only hashed (through
-// the same encoder, so the key matches) rather than uploaded.
-func rewriteForDigest(ctx context.Context, f *os.File, agent string, line []byte, origOff, origLen int64, isBig bool, enc *casenc.Encoder) ([]byte, error) {
+// verification, matching the bytes the transform uploaded. The supplied body
+// emitter either recovers each sentinel descriptor only or also repairs the CAS.
+func rewriteForDigest(ctx context.Context, f *os.File, agent string, line []byte, origOff, origLen int64, isBig bool, enc *casenc.Encoder, emitBody func(context.Context, bodyRef) (parser.Body, error)) ([]byte, error) {
 	if !isBig {
-		rewritten, _ := parser.RewriteLine(parser.Agent(agent), line, enc)
+		rewritten, bodies := parser.RewriteLine(parser.Agent(agent), line, enc)
+		for _, b := range bodies {
+			if _, err := emitBody(ctx, bodyRef{
+				media:       b.MediaType,
+				kind:        b.Kind,
+				haveContent: true,
+				sha:         b.SHA256,
+				stored:      b.Stored,
+				contentType: b.ContentType,
+				rawLen:      b.Bytes,
+			}); err != nil {
+				return nil, err
+			}
+		}
 		return rewritten, nil
 	}
 	return rewriteBigLine(ctx, f, agent, origOff, origLen, func(loc parser.BodyLocation) ([]byte, error) {
-		reader := parser.CanonicalBodyReader(ctx, f, origOff, loc.Span, loc.Kind)
-		sha, _, rawLen, err := enc.HashStream(ctx, reader)
+		body, err := emitBody(ctx, bodyRef{
+			media:    loc.Media,
+			file:     f,
+			lineOff:  origOff,
+			span:     loc.Span,
+			bodyKind: loc.Kind,
+		})
 		if err != nil {
 			return nil, err
 		}
-		return parser.SentinelBytes(sha, rawLen, loc.Media, loc.FilePath, loc.Detail, loc.IsError), nil
+		return sentinelFor(body, loc.FilePath, loc.Detail, loc.IsError), nil
 	})
 }
 
