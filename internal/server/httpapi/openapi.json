@@ -1450,6 +1450,32 @@
         ],
         "type": "object"
       },
+      "ModelCost": {
+        "additionalProperties": false,
+        "properties": {
+          "CostUSD": {
+            "type": "number"
+          },
+          "Model": {
+            "type": "string"
+          },
+          "Sessions": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Tokens": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "CostUSD",
+          "Model",
+          "Sessions",
+          "Tokens"
+        ],
+        "type": "object"
+      },
       "ModelFallback": {
         "additionalProperties": false,
         "properties": {
@@ -4151,6 +4177,12 @@
             },
             "type": "array"
           },
+          "ModelCost": {
+            "items": {
+              "$ref": "#/components/schemas/ModelCost"
+            },
+            "type": "array"
+          },
           "Rhythm": {
             "$ref": "#/components/schemas/RhythmGrid"
           },
@@ -4177,6 +4209,7 @@
           "FleetMix",
           "Gallery",
           "Labels",
+          "ModelCost",
           "Rhythm",
           "Signals",
           "Subagents",

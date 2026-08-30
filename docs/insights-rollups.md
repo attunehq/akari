@@ -5,7 +5,7 @@ Status: implemented (migration 0048; derivations in
 design rationale. The implementation deviates from it in three places:
 
 - **The usage cluster conversion is scoped to the Insights consumers.**
-  `fleetMixFrom`, `economicsFrom`, `cacheSavingsTrend`, and the subagent cost
+  `fleetMixFrom`, `modelCostFrom`, `economicsFrom`, `cacheSavingsTrend`, and the subagent cost
   share read `session_usage_daily`; `Analytics`, `cacheStats`, and
   `ProjectSparklines` stay on the `usage_events` ledger. Those surfaces window
   on raw instants (`occurred_at >= now - Nd`), and a day-grain rollup cannot
@@ -333,9 +333,9 @@ Panel by panel, each landing with its oracle test:
 
 1. **Usage cluster** (biggest shared win, also speeds the overview):
    `Analytics` series/by-model/by-agent/by-user, `cacheStats`,
-   `ProjectSparklines`, `fleetMixFrom`, `economicsFrom` (outcome via the
-   signals join), `cacheSavingsTrend`, and the subagent cost share move to
-   `session_usage_daily`.
+   `ProjectSparklines`, `fleetMixFrom`, `modelCostFrom`, `economicsFrom`
+   (outcome via the signals join), `cacheSavingsTrend`, and the subagent cost
+   share move to `session_usage_daily`.
 2. **Tools cluster**: `toolStatsFrom`, `toolTrendsFrom`, `toolFailureTrend`
    move to `session_tool_rollup`; the dedup window function disappears from the
    read path.

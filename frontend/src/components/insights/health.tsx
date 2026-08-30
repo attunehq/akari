@@ -173,7 +173,7 @@ export function GradesChart({
   );
 }
 
-// ArchetypesChart is not one of the fleet page's seven instruments (there is
+// ArchetypesChart is not one of the fleet page's instruments (there is
 // no archetype mount on /insights); it is drawn only by the project quality
 // band, alongside Grades and Outcomes, matching the old renderQuality cut.
 export function ArchetypesChart({

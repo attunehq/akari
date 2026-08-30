@@ -22,6 +22,7 @@ function trends(): Trends {
       NewestModel: "fable-5",
       NewestFirst: 0,
     },
+    ModelCost: [],
     Gallery: {
       Rows: [],
       Total: 0,

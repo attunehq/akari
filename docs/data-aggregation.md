@@ -119,7 +119,7 @@ the ledger.
 | Projects index (tokens, cost columns) | `Store.ListProjects` | rollups | Lifetime per-project totals. Must equal the project usage panel's all-time figure (same datum, two pages). Pinned by `TestProjectsIndexReconcilesWithAnalytics`. |
 | Global session list / project session list / subagents | `Store.ListAllSessions` / `Store.ListSessions` / `Store.Subagents` | rollups | Per-session rollups; the `tokens` sort walks the generated `total_tokens` column. |
 | Session detail header (Tokens tile, cost) | `Store.SessionDetailByID` | rollups | Per-session rollups. The session page shows no ledger-derived figure beside them, so the invariant alone keeps them honest. |
-| Insights fleet mix, economics, cache savings, subagent cost share | `fleetMixFrom`, `economicsFrom`, `cacheSavingsTrend`, `subagentTrendsFrom` | daily rollup | Per-day-and-model sums the trend grid re-buckets; pinned to the ledger by `TestRollupsDerivedInRebuild` and windowed in whole days (see above). |
+| Insights fleet mix, model cost, economics, cache savings, subagent cost share | `fleetMixFrom`, `modelCostFrom`, `economicsFrom`, `cacheSavingsTrend`, `subagentTrendsFrom` | daily rollup | Per-day-and-model sums the trend grid re-buckets (fleet mix, economics) or the window totals (model cost); pinned to the ledger by `TestRollupsDerivedInRebuild` and windowed in whole days (see above). |
 
 ### Why the index stays on rollups
 

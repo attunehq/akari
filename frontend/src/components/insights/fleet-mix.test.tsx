@@ -50,6 +50,7 @@ function trends(
       NewestModel: "claude-haiku-4-5-20251001",
       NewestFirst: n - 1,
     },
+    ModelCost: [],
     Gallery: {
       Rows: [],
       Total: 0,

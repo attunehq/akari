@@ -36,6 +36,7 @@ export type ChurnFile = Schema["ChurnFile"];
 export type FileChurn = Schema["FileChurn"];
 export type ContextHealthStats = Schema["ContextHealthStats"];
 export type ModelSeries = Schema["ModelSeries"];
+export type ModelCost = Schema["ModelCost"];
 export type FleetMix = Schema["FleetMix"];
 export type ContextBucket = Schema["ContextBucket"];
 export type ContextMarker = Schema["ContextMarker"];

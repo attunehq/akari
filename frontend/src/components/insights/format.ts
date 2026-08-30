@@ -40,8 +40,8 @@ export function fmtDuration(s: number): string {
 // neither prefix passes through unchanged. Stripping a prefix can still put two
 // different ids on the same label (a bare "sonnet-5" beside "claude-sonnet-5"),
 // which a legend must never do, so a caller labelling a known set of models is
-// responsible for detecting that clash and keeping the full id: see modelStyle
-// in fleet-mix.tsx. Callers that need the untruncated id back for a tooltip or
+// responsible for detecting that clash and keeping the full id: see modelStyle.
+// Callers that need the untruncated id back for a tooltip or
 // title attribute read it from the source data; this function keeps no reverse
 // mapping.
 export function prettyModel(m: string): string {
@@ -91,6 +91,39 @@ export const vizRgb: Record<string, [number, number, number]> = {
 export function pickVizVar(i: number): string {
   const idx = ((i % vizVars.length) + vizVars.length) % vizVars.length;
   return vizVars[idx] ?? "var(--viz-1)";
+}
+
+// modelStyle assigns each model its ordinal viz hue (skipping "other" and
+// "unknown", which are always var(--muted) and never consume a ramp slot) and
+// its prettified label, in the order the caller already ranked them. Returns
+// lookup functions rather than raw maps so every call site gets a plain
+// string back instead of repeating a fallback at each use. A shortened form
+// claimed by more than one identifier goes back to the full id, so two models
+// never render as the same chip.
+export function modelStyle(models: { Model: string }[]) {
+  const colors: Record<string, string> = {};
+  const labels: Record<string, string> = {};
+  let slot = 0;
+  for (const m of models) {
+    if (m.Model === "other" || m.Model === "unknown") {
+      colors[m.Model] = "var(--muted)";
+    } else {
+      colors[m.Model] = pickVizVar(slot);
+      slot++;
+    }
+    labels[m.Model] = prettyModel(m.Model);
+  }
+  const claims: Record<string, number> = {};
+  for (const label of Object.values(labels)) {
+    claims[label] = (claims[label] ?? 0) + 1;
+  }
+  for (const [model, label] of Object.entries(labels)) {
+    if ((claims[label] ?? 0) > 1) labels[model] = model;
+  }
+  return {
+    colorOf: (model: string) => colors[model] ?? "var(--muted)",
+    labelOf: (model: string) => labels[model] ?? prettyModel(model),
+  };
 }
 
 export const CATEGORY_COLOR: Record<string, string> = {

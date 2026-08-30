@@ -1,7 +1,7 @@
 import { formatCount } from "../../format";
 import type { Trends } from "../../types";
 import { Stat, StatStrip } from "../stat-strip";
-import { pickVizVar, prettyModel } from "./format";
+import { modelStyle, prettyModel } from "./format";
 import { Legend } from "./legend";
 import {
   AxisBaseline,
@@ -23,40 +23,6 @@ const PL = 34;
 const PR = 24;
 const PT = 14;
 const PB = 24;
-
-// modelStyle assigns each model its ordinal viz hue (skipping "other", which
-// is always var(--muted) and never consumes a ramp slot) and its
-// prettified label, in the order the server already ranked them. Returns
-// lookup functions rather than raw maps so every call site gets a plain
-// string back instead of repeating a fallback at each use.
-function modelStyle(models: Trends["FleetMix"]["Models"]) {
-  const colors: Record<string, string> = {};
-  const labels: Record<string, string> = {};
-  let slot = 0;
-  for (const m of models) {
-    if (m.Model === "other") {
-      colors[m.Model] = "var(--muted)";
-    } else {
-      colors[m.Model] = pickVizVar(slot);
-      slot++;
-    }
-    labels[m.Model] = prettyModel(m.Model);
-  }
-  // Stripping a vendor prefix can land two different models on one label, so any
-  // shortened form claimed by more than one identifier goes back to the full id.
-  // Two models rendering as the same chip would read as one model.
-  const claims: Record<string, number> = {};
-  for (const label of Object.values(labels)) {
-    claims[label] = (claims[label] ?? 0) + 1;
-  }
-  for (const [model, label] of Object.entries(labels)) {
-    if ((claims[label] ?? 0) > 1) labels[model] = model;
-  }
-  return {
-    colorOf: (model: string) => colors[model] ?? "var(--muted)",
-    labelOf: (model: string) => labels[model] ?? prettyModel(model),
-  };
-}
 
 // axisLabelsWithYear appends the calendar year to every label when the
 // window spans more than one year. The Year and All ranges bucket weekly

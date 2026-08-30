@@ -45,6 +45,9 @@ hour; the Overview and the Sessions feed stay live.
 Top to bottom:
 
 
+- **Model cost**: each model's spend against its billed-token volume in the
+  window, so a model that is expensive relative to the work it did sits off the
+  fleet's blended rate.
 - **Concurrency and velocity**: how many sessions ran at once at the fleet's peak
   (and when), the busiest single user, and the average; then how fast turns
   cycled: the median and slow-tail (p90) response latency, the opening reply on

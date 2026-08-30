@@ -44,13 +44,15 @@ func (i Insights) HasData() bool { return i.Quality.Sessions > 0 }
 // when the filter names a bucket, the signal trend series) is always computed: it is
 // cheap (one row per session off sessions and session_signals), and Quality gates
 // Insights.HasData, so every surface needs it. Everything else is opt-in, because the
-// callers genuinely differ: the fleet /insights page renders all seven instruments, but
+// callers genuinely differ: the fleet /insights page renders every instrument, but
 // the project page's quality band renders only the signal series plus the Tools
 // instrument, and it used to pay for the gallery, velocity, economics, rhythm, and
 // subagent scans anyway. A skipped group leaves its Insights (and Trends) fields zero,
 // which the JSON payload serializes as empty series no chart mount reads.
 type InsightsPanels struct {
-	// FleetMix is the per-bucket token share by model (Trends.FleetMix).
+	// FleetMix is the per-bucket token share by model (Trends.FleetMix) and the
+	// window-level cost × tokens scatter (Trends.ModelCost). Both read
+	// session_usage_daily over the same scoped window.
 	FleetMix bool
 	// Gallery is the per-session duration-by-cost scatter and its summary figures
 	// (Trends.Gallery).
@@ -313,7 +315,10 @@ func (s *Store) insightsReads(f AnalyticsFilter, panels InsightsPanels, grid tre
 	if wantTrends {
 		if panels.FleetMix {
 			reads = append(reads, func(ctx context.Context, q querier) (err error) {
-				out.Trends.FleetMix, err = s.fleetMixFrom(ctx, q, f, grid)
+				if out.Trends.FleetMix, err = s.fleetMixFrom(ctx, q, f, grid); err != nil {
+					return err
+				}
+				out.Trends.ModelCost, err = s.modelCostFrom(ctx, q, f)
 				return
 			})
 		}

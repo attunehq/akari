@@ -12,7 +12,7 @@ import { useChartTooltip } from "./tooltip";
 // Shared SVG chart engine, ported behavior-for-behavior from the pre-React
 // insights.js (scaleLinear/scaleLog, the path builders, bucketAxis, the hover
 // crosshair). Every chart in components/insights/
-// composes these instead of reinventing axis or scale math, so the seven
+// composes these instead of reinventing axis or scale math, so the
 // instruments read as one visual system.
 
 export type Point = readonly [number, number];

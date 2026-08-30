@@ -2120,6 +2120,14 @@ export interface components {
             Timestamp: string | null;
             Usage: components["schemas"]["TurnUsage"] | null;
         };
+        ModelCost: {
+            CostUSD: number;
+            Model: string;
+            /** Format: int64 */
+            Sessions: number;
+            /** Format: int64 */
+            Tokens: number;
+        };
         ModelFallback: {
             DeclinedCacheRead: number | null;
             DeclinedCacheWrite: number | null;
@@ -2773,6 +2781,7 @@ export interface components {
             FleetMix: components["schemas"]["FleetMix"];
             Gallery: components["schemas"]["Gallery"];
             Labels: string[];
+            ModelCost: components["schemas"]["ModelCost"][];
             Rhythm: components["schemas"]["RhythmGrid"];
             Signals: components["schemas"]["SignalTrends"];
             Subagents: components["schemas"]["SubagentStats"];

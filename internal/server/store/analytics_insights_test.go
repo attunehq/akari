@@ -398,6 +398,9 @@ func TestInsightsPanelsShareCohort(t *testing.T) {
 	if len(band.Trends.Gallery.Rows) != 0 {
 		t.Errorf("band panels computed the skipped gallery group: %d rows", len(band.Trends.Gallery.Rows))
 	}
+	if len(band.Trends.ModelCost) != 0 {
+		t.Errorf("band panels computed the skipped model-cost group: %d rows", len(band.Trends.ModelCost))
+	}
 	for i, cost := range band.Trends.Economics.CostCompleted {
 		if cost != 0 {
 			t.Errorf("band panels computed the skipped economics group: bucket %d cost %v", i, cost)
@@ -484,6 +487,9 @@ func TestInsightsBucketedGridUnderConnectionStarvation(t *testing.T) {
 	}
 	if !tr.FleetMix.HasData() {
 		t.Error("FleetMix empty: the fleet-mix panel did not run on the control connection")
+	}
+	if len(tr.ModelCost) == 0 {
+		t.Error("ModelCost empty: the fleet-mix panel's cost × tokens read did not run on the control connection")
 	}
 	var outcomeTotal int
 	for _, n := range tr.Signals.OutcomeTotal {

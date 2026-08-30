@@ -17,6 +17,7 @@ import {
   OutcomesChart,
 } from "../components/insights/health";
 import { Legend } from "../components/insights/legend";
+import { ModelCostInstrument } from "../components/insights/model-cost";
 import { SubagentsInstrument } from "../components/insights/subagents";
 import { ToolsInstrument } from "../components/insights/tools";
 import { TooltipHost } from "../components/insights/tooltip";
@@ -184,6 +185,7 @@ export function InsightsPage() {
               ) : (
                 <TooltipHost>
                   <FleetMixInstrument trends={trends} />
+                  <ModelCostInstrument trends={trends} />
                   <SessionGalleryInstrument trends={trends} />
                   <VelocityInstrument
                     insights={insights}

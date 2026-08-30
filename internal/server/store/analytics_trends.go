@@ -23,6 +23,7 @@ type Trends struct {
 	Labels       []string    // formatted bucket labels, aligned to BucketStarts
 
 	FleetMix  FleetMix       // token share by model per bucket
+	ModelCost []ModelCost    // window-level spend versus billed-token volume by model
 	Gallery   Gallery        // one point per fully-spanned session (duration x cost)
 	Velocity  VelocityTrends // active hours, response latency, throughput per bucket
 	Tools     ToolTrends     // reliability scatter, category mix, failure rate per bucket
@@ -74,6 +75,20 @@ type FleetMix struct {
 
 // HasData reports whether any model carried tokens in the window.
 func (f FleetMix) HasData() bool { return len(f.Models) > 0 }
+
+// ModelCost is one model's spend versus billed-token volume over the window, the
+// cost × tokens scatter on Insights. Tokens are the four billed classes (input,
+// output, cache read, cache write), the same volume fleet mix and the overview
+// by-model bars size on. Sessions is how many distinct sessions that model
+// touched; a session that used two models counts in both rows. Zero-priced
+// models still appear (CostUSD 0 with a token volume), so a model off the rate
+// table is visible as a point on the token axis rather than folded away.
+type ModelCost struct {
+	Model    string
+	CostUSD  float64
+	Tokens   int64
+	Sessions int
+}
 
 // SignalTrends is the per-bucket read of the settle-pass signals: how grades, outcomes,
 // prompt hygiene, and context resets moved over the window. Every series is gated the same
@@ -453,6 +468,41 @@ func (s *Store) fleetMixFrom(ctx context.Context, q querier, f AnalyticsFilter, 
 	}
 	if otherTotal > 0 {
 		out.Models = append(out.Models, build("other", other))
+	}
+	return out, nil
+}
+
+// modelCostFrom sums each model's spend and billed-token volume over the window
+// from session_usage_daily. It is the window-level counterpart to fleetMixFrom
+// (share per bucket): one point per named model, no top-N fold, because folding
+// mixed price points into "other" would put an average on the scatter. An empty
+// model id becomes "unknown", matching fleet mix. Undated (NULL-day) rows stay
+// off the time axis here as everywhere.
+func (s *Store) modelCostFrom(ctx context.Context, q querier, f AnalyticsFilter) ([]ModelCost, error) {
+	filter, args := f.clauseForRollupDay("sud.day")
+	out := []ModelCost{}
+	err := eachRow(ctx, q, "model cost",
+		`SELECT CASE WHEN coalesce(sud.model, '') = '' THEN 'unknown' ELSE sud.model END,
+		        coalesce(sum(sud.cost_usd), 0),
+		        coalesce(sum(sud.input_tokens + sud.output_tokens + sud.cache_read_tokens + sud.cache_write_tokens), 0),
+		        count(DISTINCT sud.session_id)::int
+		   FROM session_usage_daily sud
+		   JOIN sessions s ON s.id = sud.session_id
+		  WHERE sud.day IS NOT NULL`+filter+`
+		  GROUP BY 1
+		 HAVING coalesce(sum(sud.cost_usd), 0) > 0
+		     OR coalesce(sum(sud.input_tokens + sud.output_tokens + sud.cache_read_tokens + sud.cache_write_tokens), 0) > 0
+		  ORDER BY 2 DESC, 3 DESC, 1`, args,
+		func(rows pgx.Rows) error {
+			var row ModelCost
+			if err := rows.Scan(&row.Model, &row.CostUSD, &row.Tokens, &row.Sessions); err != nil {
+				return err
+			}
+			out = append(out, row)
+			return nil
+		})
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -875,6 +925,7 @@ func newTrends(grid trendGrid) *Trends {
 		BucketStarts: grid.Starts,
 		Labels:       grid.labels(),
 		FleetMix:     FleetMix{Models: []ModelSeries{}, NewestFirst: -1},
+		ModelCost:    []ModelCost{},
 		Gallery:      Gallery{Rows: []GallerySession{}},
 		Velocity: VelocityTrends{
 			ActiveHours: f(), WallHours: f(),

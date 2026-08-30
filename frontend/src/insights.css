@@ -1,4 +1,4 @@
-/* Insights page: seven fleet instruments plus the project quality band, all
+/* Insights page: fleet instruments plus the project quality band, all
    drawn as custom SVG (Recharts does not fit the log scatters, treemap,
    punchcard, or stacked area with right-edge labels this page needs). Ported
    from the pre-React insights.js/insights.css chart engine; see AGENTS.md and
@@ -95,6 +95,12 @@
   font-size: 11px;
   fill: var(--faint);
 }
+.scatter-label {
+  font-family: Geist, sans-serif;
+  font-size: 11px;
+  fill: var(--subtext);
+  pointer-events: none;
+}
 .mini-multiple .axis-tick-text,
 .mini-multiple .punchcard-row-label {
   font-size: 8px;
@@ -152,6 +158,13 @@
   height: 8px;
   border-radius: 2px;
   flex-shrink: 0;
+}
+
+.chart-footnote {
+  margin: 10px 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.4;
 }
 
 /* tooltip: one shared fixed-position host per mounted instrument tree */
