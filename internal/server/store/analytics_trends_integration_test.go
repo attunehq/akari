@@ -109,8 +109,8 @@ func TestInsightsTrends(t *testing.T) {
 	// dollars or cache savings, and it rides day 2, so the latest measured cache bucket
 	// (day 1) keeps its rate.
 	if _, err := st.Pool.Exec(ctx,
-		`INSERT INTO usage_events (session_id, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, occurred_at, dedup_key)
-		 VALUES ($1, 'pi-unpriced-xyz', 0, 0, 500, 0, 0, now() - make_interval(days => 2), 't1-unpriced')`,
+		`INSERT INTO usage_events (session_id, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, cost_source, occurred_at, dedup_key)
+		 VALUES ($1, 'pi-unpriced-xyz', 0, 0, 500, 0, 0, 'unknown', now() - make_interval(days => 2), 't1-unpriced')`,
 		root1); err != nil {
 		t.Fatalf("seed unpriced usage: %v", err)
 	}
@@ -626,11 +626,11 @@ func TestModelCostScatter(t *testing.T) {
 	rebuildWith(t, st, sid, store.ProjectionDelta{
 		Messages: []store.MessageDelta{{Ordinal: 0, Role: "user", Content: "go", Timestamp: day.Add(2 * time.Hour)}},
 		Usage: []store.ProjUsage{
-			{Model: "expensive", Input: 100, CostUSD: 10, OccurredAt: day.Add(2 * time.Hour), DedupKey: "c1", SourceOffset: 10},
-			{Model: "cheap", Input: 10000, CostUSD: 1, OccurredAt: day.Add(3 * time.Hour), DedupKey: "c2", SourceOffset: 20},
-			{Model: "", Input: 50, CostUSD: 0.5, OccurredAt: day.Add(4 * time.Hour), DedupKey: "c3", SourceOffset: 30},
-			{Model: "unpriced", Input: 200, CostUSD: 0, OccurredAt: day.Add(5 * time.Hour), DedupKey: "c4", SourceOffset: 40},
-			{Model: "old", Input: 1000, CostUSD: 50, OccurredAt: day.Add(-10 * 24 * time.Hour), DedupKey: "c5", SourceOffset: 50},
+			{Model: "expensive", Input: 100, CostUSD: 10, CostSource: store.CostSourceRateTable, OccurredAt: day.Add(2 * time.Hour), DedupKey: "c1", SourceOffset: 10},
+			{Model: "cheap", Input: 10000, CostUSD: 1, CostSource: store.CostSourceRateTable, OccurredAt: day.Add(3 * time.Hour), DedupKey: "c2", SourceOffset: 20},
+			{Model: "", Input: 50, CostUSD: 0.5, CostSource: store.CostSourceRateTable, OccurredAt: day.Add(4 * time.Hour), DedupKey: "c3", SourceOffset: 30},
+			{Model: "unpriced", Input: 200, CostUSD: 0, CostSource: store.CostSourceUnknown, OccurredAt: day.Add(5 * time.Hour), DedupKey: "c4", SourceOffset: 40},
+			{Model: "old", Input: 1000, CostUSD: 50, CostSource: store.CostSourceRateTable, OccurredAt: day.Add(-10 * 24 * time.Hour), DedupKey: "c5", SourceOffset: 50},
 		},
 		Started: day.Add(2 * time.Hour),
 		Ended:   day.Add(6 * time.Hour),
