@@ -23,16 +23,15 @@ type DueSession struct {
 // fully dealt with a session as it currently stands: the epoch of the last
 // successful rebuild, raised to the failure epoch while a recorded
 // deterministic failure still covers the session's current bytes. A session is
-// epoch-stale exactly when this value is behind the running epoch, which is
-// the one predicate every staleness surface shares: the due scan's epoch
-// branch, EpochStaleCount, EpochStaleExists, and the analytics snapshot gate.
-// Sharing it keeps "due", "counted stale", and "gated" from ever drifting
-// apart, and folding the failure pin into the indexed value (rather than
-// filtering pinned rows out of a raw parser_epoch range) keeps sessions whose
-// parse failed at the running epoch OUT of the range the hot probes scan, so
-// their cost tracks the actual backlog, not the corpus's accumulated failure
-// history. New bytes break the byte match, the expression falls back to
-// parser_epoch, and the session re-enters the range (and the due set) at once.
+// epoch-stale exactly when this value is behind the running epoch. The due
+// scan's epoch branch, stale counts, ready probes, and analytics snapshot gate
+// all use this core predicate; the ready surfaces additionally exclude a
+// future retry backoff. Folding the failure pin into the indexed value, rather
+// than filtering pinned rows out of a raw parser_epoch range, keeps sessions
+// whose parse failed at the running epoch OUT of the range the hot probes scan.
+// Its cost tracks the actual backlog instead of the corpus's accumulated
+// failure history. New bytes break the byte match, the expression falls back to
+// parser_epoch, and the session re-enters the range and due set at once.
 //
 // The expression matches idx_session_raw_attempted_epoch (migration 0044);
 // keep the two in sync or the planner falls back to a seq scan. tbl prefixes
@@ -83,10 +82,10 @@ func attemptedEpoch(tbl string) string {
 //     its rebuild failed, and everything that advances a session clears the
 //     deferral in the same statement.
 //
-// The epoch-staleness gates deliberately do NOT honor the deferral: a
-// backing-off rebuild is deferred, not cancelled, so the corpus is still mixed
-// and the gate staying up is the honest answer (the safe direction of
-// asymmetry; the gates must never read done while the scan still has work).
+// The cross-instance HTTP gate honors the deferral: a parked operational
+// failure retains its last good projection, so it must not make every parsed
+// page unavailable while the worker waits for a repair or retry. The gate rises
+// again when the retry elapses or another event clears the backoff.
 func (s *Store) DueSessions(ctx context.Context, epoch int, limit int) ([]DueSession, error) {
 	arm := func(where string) string {
 		return `(SELECT sr.session_id, ` + attemptedEpoch("sr.") + ` < $1 AS epoch_stale
@@ -153,10 +152,7 @@ func (s *Store) EpochStaleCount(ctx context.Context, epoch int) (int, error) {
 // O(deferred backlog) per append just to decide there is nothing to do, since
 // persistent operational failures stay epoch-stale for as long as they keep
 // failing. The two arms mirror the due scan's, so each lands on a ready index
-// (epoch_ready, retry_elapsed) and parked rows are never visited. The fleet
-// GATE keeps the honest total-side answer (EpochStaleExists over the full
-// index): a deferred rebuild still makes the corpus mixed; it is only not this
-// drain's workload.
+// (epoch_ready, retry_elapsed) and parked rows are never visited.
 func (s *Store) EpochStaleReadyCount(ctx context.Context, epoch int) (int, error) {
 	var n int
 	if err := s.Pool.QueryRow(ctx,
@@ -168,19 +164,27 @@ func (s *Store) EpochStaleReadyCount(ctx context.Context, epoch int) (int, error
 	return n, nil
 }
 
-// EpochStaleExists answers whether any session is epoch-stale, with the same
-// predicate as EpochStaleCount but stopping at the first hit. It backs the
-// cross-instance fleet gate (Worker.FleetStatus), which only needs the
-// boolean; counting the whole backlog on a page request would pay for
-// precision the gate throws away.
-func (s *Store) EpochStaleExists(ctx context.Context, epoch int) (bool, error) {
+// EpochStaleReadyExists answers whether any session is epoch-stale and ready
+// for a rebuild now. It backs the cross-instance fleet gate, which must stay up
+// while another worker drains actionable epoch work but must not blank every
+// parsed page because an operational failure is parked on a retry backoff.
+func (s *Store) EpochStaleReadyExists(ctx context.Context, epoch int) (bool, error) {
 	var stale bool
 	if err := s.Pool.QueryRow(ctx,
 		`SELECT EXISTS (
-		   SELECT 1 FROM session_raw
-		    WHERE `+attemptedEpoch("")+` < $1
+		   SELECT 1 FROM (
+		     (SELECT 1 FROM session_raw
+		       WHERE parse_retry_at IS NULL
+		         AND `+attemptedEpoch("")+` < $1
+		       LIMIT 1)
+		     UNION ALL
+		     (SELECT 1 FROM session_raw
+		       WHERE parse_retry_at <= now()
+		         AND `+attemptedEpoch("")+` < $1
+		       LIMIT 1)
+		   ) ready
 		 )`, epoch).Scan(&stale); err != nil {
-		return false, fmt.Errorf("check epoch-stale sessions: %w", err)
+		return false, fmt.Errorf("check ready epoch-stale sessions: %w", err)
 	}
 	return stale, nil
 }

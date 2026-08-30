@@ -220,12 +220,21 @@ func TestWorkerDrainReportsOperationalFailure(t *testing.T) {
 	if _, err := NewWorker(st, 1, 0).Drain(ctx); err != nil {
 		t.Fatalf("drain during the backoff should be a no-op, got %v", err)
 	}
+	// A parked operational failure retains the last good projection. It must not
+	// hold every parsed page behind an indeterminate 0/0 fleet gate while the
+	// worker waits for a client repair or the next retry.
+	if status := NewWorker(st, 1, 0).FleetStatus(ctx); status.InProgress {
+		t.Fatalf("FleetStatus with only parked work = %+v, want not in progress", status)
+	}
 	if _, err := st.Pool.Exec(ctx,
 		`UPDATE session_raw SET parse_retry_at = now() - interval '1 second' WHERE session_id = $1`, sid); err != nil {
 		t.Fatal(err)
 	}
 	if !isDue() {
 		t.Fatal("operationally-failed session not due after its backoff elapsed; the retry path is gone")
+	}
+	if status := NewWorker(st, 1, 0).FleetStatus(ctx); !status.InProgress {
+		t.Fatalf("FleetStatus with an elapsed retry = %+v, want in progress", status)
 	}
 }
 

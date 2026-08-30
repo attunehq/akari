@@ -10,6 +10,12 @@ import {
 
 import { AppShell } from "./app-shell";
 import { basePath } from "./base";
+import {
+  clearPreloadRecovery,
+  installPreloadRecovery,
+} from "./preload-recovery";
+
+installPreloadRecovery(window);
 
 const AccountPage = lazy(() =>
   import("./pages/account").then((module) => ({ default: module.AccountPage })),
@@ -84,6 +90,13 @@ function TitledRoute({
     document.title = `${title} · akari`;
   }, [title]);
   return children;
+}
+
+function PreloadRecoveryReset() {
+  useEffect(() => {
+    clearPreloadRecovery(window);
+  }, []);
+  return null;
 }
 
 const router = createBrowserRouter(
@@ -202,6 +215,7 @@ createRoot(root).render(
         </div>
       }
     >
+      <PreloadRecoveryReset />
       <RouterProvider router={router} />
     </Suspense>
   </StrictMode>,

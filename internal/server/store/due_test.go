@@ -264,9 +264,8 @@ func TestMarkEpochStaleAndCount(t *testing.T) {
 	}
 }
 
-// TestEpochGatesAgreeWithDueScan pins the two properties the fleet gates
-// (EpochStaleCount, EpochStaleExists, and the analytics snapshot gate that
-// embeds the same predicate) share with DueSessions.
+// TestEpochGatesAgreeWithDueScan pins the two properties the fleet gates share
+// with DueSessions when no operational retry is parked.
 //
 // Monotonicity: a session stamped ahead of the running epoch (the rolling
 // deploy case, where an old binary looks at a newer binary's stamp) is neither
@@ -322,7 +321,7 @@ func TestEpochGatesAgreeWithDueScan(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: stale count: %v", when, err)
 		}
-		exists, err := st.EpochStaleExists(ctx, epoch)
+		exists, err := st.EpochStaleReadyExists(ctx, epoch)
 		if err != nil {
 			t.Fatalf("%s: stale exists: %v", when, err)
 		}
@@ -379,11 +378,11 @@ func TestEpochGatesAgreeWithDueScan(t *testing.T) {
 
 // TestRebuildBackoffDefersDueRetry pins the operational-failure backoff: the
 // deferral takes the session out of the due scan (so a persistent failure is
-// not re-attempted on every chunk wake) without touching the epoch gates (the
-// rebuild is deferred, not cancelled, so the corpus is still honestly mixed),
-// it doubles to a ceiling on consecutive failures, and every event that
-// changes the situation (new bytes, an operator reparse, a successful rebuild)
-// clears it for an immediate retry.
+// not re-attempted on every chunk wake) and out of the fleet HTTP gate (so one
+// parked failure cannot blank the application indefinitely). It doubles to a
+// ceiling on consecutive failures, and every event that changes the situation
+// (new bytes, an operator reparse, a successful rebuild) clears it for an
+// immediate retry.
 func TestRebuildBackoffDefersDueRetry(t *testing.T) {
 	t.Parallel()
 	st := storetest.NewStore(t)
@@ -475,13 +474,16 @@ func TestRebuildBackoffDefersDueRetry(t *testing.T) {
 		  WHERE session_id = $1`, sid); err != nil {
 		t.Fatal(err)
 	}
-	// The gates ignore the deferral (the rebuild is still pending work), while
-	// the drain's ready count excludes it (it is not this drain's workload).
+	// The total stale count keeps deferred work visible for diagnostics. The
+	// ready count and HTTP gate exclude it until the retry elapses.
 	if n, err := st.EpochStaleCount(ctx, testEpoch); err != nil || n != 1 {
 		t.Fatalf("EpochStaleCount with a backing-off session = %d (err %v), want 1 (deferred, not cancelled)", n, err)
 	}
 	if n, err := st.EpochStaleReadyCount(ctx, testEpoch); err != nil || n != 0 {
 		t.Fatalf("EpochStaleReadyCount with a backing-off session = %d (err %v), want 0 (parked until the deferral elapses)", n, err)
+	}
+	if exists, err := st.EpochStaleReadyExists(ctx, testEpoch); err != nil || exists {
+		t.Fatalf("EpochStaleReadyExists with a backing-off session = %v (err %v), want false", exists, err)
 	}
 	// Consecutive failures double toward the ceiling.
 	if err := st.RecordRebuildBackoff(ctx, sid); err != nil {
@@ -512,6 +514,9 @@ func TestRebuildBackoffDefersDueRetry(t *testing.T) {
 	}
 	if n, err := st.EpochStaleReadyCount(ctx, testEpoch); err != nil || n != 1 {
 		t.Fatalf("EpochStaleReadyCount with an elapsed backoff = %d (err %v), want 1", n, err)
+	}
+	if exists, err := st.EpochStaleReadyExists(ctx, testEpoch); err != nil || !exists {
+		t.Fatalf("EpochStaleReadyExists with an elapsed backoff = %v (err %v), want true", exists, err)
 	}
 
 	// New bytes clear the deferral: the situation changed, retry now.

@@ -20,9 +20,9 @@ var duePageSize = 256
 
 // defaultFleetCacheTTL is how long a positive cross-instance "a fleet rebuild
 // is draining" answer is cached, so gating a parsed-page request does not probe
-// the epoch-stale set on every request. The negative answer is never cached (see
-// FleetStatus), mirroring the old advisory-lock gate's asymmetry: briefly
-// over-gating after a rebuild finishes is safe, serving mixed pages is not.
+// the ready epoch-stale set on every request. The negative answer is never
+// cached (see FleetStatus), mirroring the old advisory-lock gate's asymmetry:
+// briefly over-gating after a rebuild finishes is safe.
 const defaultFleetCacheTTL = 2 * time.Second
 
 // retryScheduleFallback bounds recovery after the worker cannot drain the due
@@ -79,11 +79,11 @@ type Worker struct {
 	// time, but the worker may already be draining (a fresh migration makes
 	// every session due at boot), so the setters race the drain's reads
 	// without the lock.
-	onRebuilt      func(sessionID int64)
-	onStatus       func(Status)
-	status         Status
-	fleetCheckedAt time.Time
-	fleetStale     bool
+	onRebuilt           func(sessionID int64)
+	onStatus            func(Status)
+	status              Status
+	fleetReadyCheckedAt time.Time
+	fleetReadyStale     bool
 }
 
 // NewWorker builds a Worker draining through st with the given rebuild
@@ -465,44 +465,47 @@ func (w *Worker) SetStatusForTest(st Status) {
 }
 
 // FleetStatus is Status widened to reflect a fleet rebuild draining on any
-// instance, not just this process. A follower instance sees the shared
-// epoch-stale backlog (the same corpus state the driving instance is draining)
-// and gates its parsed pages with an indeterminate bar: the counts stay this
-// process's, so only the instance doing the work reports progress numbers.
+// instance, not just this process. A follower instance sees the shared ready
+// epoch-stale backlog and gates its parsed pages with an indeterminate bar: the
+// counts stay this process's, so only the instance doing the work reports
+// progress numbers. Parked operational failures retain their last good
+// projection and do not gate the whole application while waiting for repair or
+// retry; once their backoff elapses, they become ready and raise the gate again.
 // Only the positive answer is cached (briefly over-gating after a rebuild
 // finishes is safe); the negative is always read fresh, so a follower can
-// never serve mixed pages on a stale "not draining". A check error fails open
-// (serving pages) rather than wedging the UI gated on a transient blip.
+// never miss an actionable backlog on a stale "not draining". A check error
+// fails open (serving pages) rather than wedging the UI gated on a transient
+// blip.
 func (w *Worker) FleetStatus(ctx context.Context) Status {
 	st := w.Status()
 	if st.InProgress {
 		return st
 	}
-	if w.fleetStaleExists(ctx) {
+	if w.fleetReadyExists(ctx) {
 		st.InProgress = true
 	}
 	return st
 }
 
-func (w *Worker) fleetStaleExists(ctx context.Context) bool {
+func (w *Worker) fleetReadyExists(ctx context.Context) bool {
 	w.mu.Lock()
-	if w.fleetStale && time.Since(w.fleetCheckedAt) < w.fleetTTL {
+	if w.fleetReadyStale && time.Since(w.fleetReadyCheckedAt) < w.fleetTTL {
 		w.mu.Unlock()
 		return true
 	}
 	w.mu.Unlock()
 
-	stale, err := w.st.EpochStaleExists(ctx, Epoch)
+	stale, err := w.st.EpochStaleReadyExists(ctx, Epoch)
 	if err != nil {
 		return false
 	}
 	w.mu.Lock()
 	if stale {
-		w.fleetStale = true
-		w.fleetCheckedAt = time.Now()
+		w.fleetReadyStale = true
+		w.fleetReadyCheckedAt = time.Now()
 	} else {
-		w.fleetStale = false
-		w.fleetCheckedAt = time.Time{}
+		w.fleetReadyStale = false
+		w.fleetReadyCheckedAt = time.Time{}
 	}
 	w.mu.Unlock()
 	return stale
@@ -538,8 +541,8 @@ func (w *Worker) advanceFleet(done, failed int) {
 func (w *Worker) finishFleet() {
 	w.mu.Lock()
 	w.status.InProgress = false
-	w.fleetStale = false
-	w.fleetCheckedAt = time.Time{}
+	w.fleetReadyStale = false
+	w.fleetReadyCheckedAt = time.Time{}
 	w.mu.Unlock()
 	w.emit()
 }
