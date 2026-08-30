@@ -1,18 +1,27 @@
 name: CI
 
-# Fast feedback on every push to main and every pull request: formatting, vet,
-# and the full test suite. The release workflow separately cross-compiles every
-# release target on the same events, so CI here does not duplicate the build
-# matrix; it focuses on correctness.
+# Fast feedback on every push to main, every pull request, and every merge
+# group: formatting, vet, and the full test suite. The release workflow
+# separately cross-compiles every release target on the same events, so CI here
+# does not duplicate the build matrix; it focuses on correctness.
+#
+# A merge group re-runs these checks against the merged tree, except when that
+# tree is the one the pull request already proved. Then every job short-circuits
+# and still reports success, so "Test" stays a required check that the queue can
+# satisfy without paying for a second identical run.
 
 on:
   push:
     branches: ["main"]
   pull_request:
+  merge_group:
+    types: [checks_requested]
   workflow_dispatch:
 
 permissions:
   contents: read
+  # The merge group skip resolves the queued pull request's head tree.
+  pull-requests: read
 
 jobs:
   test:
@@ -43,18 +52,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - id: skip
+        uses: ./.github/actions/merge-group-skip
+
       - name: Set up Go
+        if: steps.skip.outputs.skip != 'true'
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Set up Bun
+        if: steps.skip.outputs.skip != 'true'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.6
 
       - name: Check and build React application
+        if: steps.skip.outputs.skip != 'true'
         working-directory: frontend
         run: |
           bun install --frozen-lockfile
@@ -63,12 +78,15 @@ jobs:
           bun run build
 
       - name: Verify committed frontend artifact
+        if: steps.skip.outputs.skip != 'true'
         run: git diff --exit-code -- internal/server/frontend/dist
 
       - name: Generate server templates
+        if: steps.skip.outputs.skip != 'true'
         run: go generate ./...
 
       - name: Check formatting
+        if: steps.skip.outputs.skip != 'true'
         run: |
           # gofmt -l prints files that are not formatted; any output is a failure.
           unformatted="$(gofmt -l .)"
@@ -79,9 +97,11 @@ jobs:
           fi
 
       - name: Vet
+        if: steps.skip.outputs.skip != 'true'
         run: go vet ./...
 
       - name: Test
+        if: steps.skip.outputs.skip != 'true'
         # The integration tests provision an isolated database per test (see
         # internal/server/storetest), so packages run concurrently at the default
         # parallelism with no clobbering. -race needs CGO, which the ubuntu runner
@@ -94,11 +114,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - id: skip
+        uses: ./.github/actions/merge-group-skip
+
       - name: Set up Go
+        if: steps.skip.outputs.skip != 'true'
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Test Windows daemon behavior
+        if: steps.skip.outputs.skip != 'true'
         run: go test -race ./internal/client/daemon ./cmd/akari

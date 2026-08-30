@@ -1,22 +1,37 @@
 name: Bastion
 
+# Bastion is pull request feedback, not a merge queue gate. The workflow still
+# subscribes to merge_group so the check reports (as skipped, which satisfies a
+# required check) instead of leaving the queue waiting on a check that never
+# arrives.
+
 on:
   pull_request:
+  merge_group:
+    types: [checks_requested]
 
 permissions:
   contents: read
   pull-requests: read
 
 concurrency:
-  group: bastion-${{ github.event.pull_request.number }}
+  # A pull request ref is stable across force pushes and each merge group has
+  # its own ref, so this cancels a superseded run without touching another
+  # queued group.
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   review:
     name: Bastion
+    # Skip the paid review in the merge queue: the pull request already had it,
+    # and a second one cannot change the merge decision.
+    #
     # Forks cannot read ZAI_API_KEY. Review same-repository pull requests and
     # let the ordinary human review path handle external contributions.
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: >-
+      github.event_name != 'merge_group'
+      && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

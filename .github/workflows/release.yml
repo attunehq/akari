@@ -12,14 +12,24 @@ name: Release
 # the release only becomes visible once it is complete, never half-populated.
 # Edit the generated notes afterward if you want to expand them.
 #
-# On every pull request and every push to main this runs as a DRY RUN: it
-# executes the exact same binary build and packaging matrix, computes
-# SHA256SUMS, builds both image platforms, and runs `akari-server --version`
-# inside the amd64 and arm64 images. It stops short of creating a GitHub Release
-# or pushing the image. That makes the release pipeline a PR-time gate, so a
-# change that breaks a release artifact fails on the PR instead of when a tag is
-# cut. The only difference between a dry run and a real release is a version-tag
-# push event. workflow_dispatch triggers a manual dry run on any ref.
+# On every pull request, every merge group, and every push to main this runs as
+# a DRY RUN: it executes the exact same binary build and packaging matrix,
+# computes SHA256SUMS, builds both image platforms, and runs
+# `akari-server --version` inside the amd64 and arm64 images. It stops short of
+# creating a GitHub Release or pushing the image. That makes the release
+# pipeline a PR-time gate, so a change that breaks a release artifact fails on
+# the PR instead of when a tag is cut. The only difference between a dry run and
+# a real release is a version-tag push event. workflow_dispatch triggers a
+# manual dry run on any ref.
+#
+# A merge group repeats the dry run against the merged tree, except when that
+# tree is the one the pull request already proved: then Prepare records the
+# match and the build matrix skips, because the pull request built those exact
+# artifacts already.
+#
+# "Release gate" is the required check for all of this. It is the only job here
+# that runs on every event, so it is the only one whose result means anything to
+# a ruleset; see its comment below.
 #
 # Go style: every target cross-compiles from a single Linux runner with
 # CGO_ENABLED=0 (akari is pure Go), so there is no per-OS build matrix of
@@ -35,6 +45,8 @@ on:
       - "v*"
     branches: ["main"]
   pull_request:
+  merge_group:
+    types: [checks_requested]
   workflow_dispatch:
 
 concurrency:
@@ -50,16 +62,24 @@ jobs:
   prepare:
     name: Prepare
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The merge group skip resolves the queued pull request's head tree.
+      pull-requests: read
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
       prerelease: ${{ steps.version.outputs.prerelease }}
       dry_run: ${{ steps.version.outputs.dry_run }}
+      skip: ${{ steps.skip.outputs.skip }}
     steps:
       - uses: actions/checkout@v7
         with:
           # Full history so git describe can find the previous tag on dry runs.
           fetch-depth: 0
+
+      - id: skip
+        uses: ./.github/actions/merge-group-skip
 
       - name: Extract version from tag
         id: version
@@ -87,9 +107,9 @@ jobs:
             VERSION="${TAG#v}"
             DRY_RUN=false
           else
-            # Pull requests, main pushes, and manual dispatch all build and
-            # package the full release but never publish it. git describe gives a
-            # sensible version stamp without a tag.
+            # Pull requests, merge groups, main pushes, and manual dispatch
+            # all build and package the full release but never publish it.
+            # git describe gives a sensible version stamp without a tag.
             TAG="$(git describe --always --tags --dirty)"
             VERSION="${TAG#v}"
             DRY_RUN=true
@@ -119,6 +139,7 @@ jobs:
   build:
     name: Build ${{ matrix.bin }} ${{ matrix.goos }}/${{ matrix.goarch }}
     needs: prepare
+    if: ${{ needs.prepare.outputs.skip != 'true' }}
     runs-on: ubuntu-latest
     strategy:
       # One target's failure should not cancel the others: a release wants every
@@ -209,6 +230,7 @@ jobs:
   image:
     name: Test server image
     needs: prepare
+    if: ${{ needs.prepare.outputs.skip != 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -564,3 +586,83 @@ jobs:
           docker buildx imagetools create \
             --tag "${image}:latest" \
             "${image}@${DIGEST}"
+
+  # The one required check for this workflow. Every job above can legitimately
+  # skip, and GitHub counts a skipped required check as a pass, so requiring any
+  # of them individually gates on nothing: "Release" only runs on a version tag,
+  # so on a pull request it reported skipped and let a broken release pipeline
+  # through. This job runs unconditionally and fails unless each job reached the
+  # result its event calls for.
+  gate:
+    name: Release gate
+    if: always()
+    needs:
+      - prepare
+      - build
+      - image
+      - release_assets
+      - publish_image
+      - release
+      - promote_image
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every applicable job
+        shell: bash
+        env:
+          PREPARE: ${{ needs.prepare.result }}
+          BUILD: ${{ needs.build.result }}
+          IMAGE: ${{ needs.image.result }}
+          RELEASE_ASSETS: ${{ needs.release_assets.result }}
+          PUBLISH_IMAGE: ${{ needs.publish_image.result }}
+          RELEASE: ${{ needs.release.result }}
+          PROMOTE_IMAGE: ${{ needs.promote_image.result }}
+          DRY_RUN: ${{ needs.prepare.outputs.dry_run }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+          SKIP: ${{ needs.prepare.outputs.skip }}
+        run: |
+          set -uo pipefail
+
+          status=0
+          require() {
+            if [[ "$2" != "$3" ]]; then
+              echo "::error::$1 finished with '$2', expected '$3'"
+              status=1
+            fi
+          }
+
+          require 'Prepare' "$PREPARE" success
+          if [[ "$status" -ne 0 ]]; then
+            exit "$status"
+          fi
+
+          # A merge group whose tree the pull request already proved builds
+          # nothing, so every job below Prepare must be skipped, not green.
+          if [[ "$SKIP" == 'true' ]]; then
+            require 'Build' "$BUILD" skipped
+            require 'Test server image' "$IMAGE" skipped
+            require 'Stage release assets' "$RELEASE_ASSETS" skipped
+            exit "$status"
+          fi
+
+          require 'Build' "$BUILD" success
+          require 'Test server image' "$IMAGE" success
+          require 'Stage release assets' "$RELEASE_ASSETS" success
+
+          # Only a version-tag push publishes, and only a stable tag promotes
+          # the image to latest. Every other event must leave all three alone.
+          if [[ "$DRY_RUN" == 'false' ]]; then
+            require 'Publish server image' "$PUBLISH_IMAGE" success
+            require 'Release' "$RELEASE" success
+            if [[ "$PRERELEASE" == 'false' ]]; then
+              require 'Promote stable server image' "$PROMOTE_IMAGE" success
+            else
+              require 'Promote stable server image' "$PROMOTE_IMAGE" skipped
+            fi
+          else
+            require 'Publish server image' "$PUBLISH_IMAGE" skipped
+            require 'Release' "$RELEASE" skipped
+            require 'Promote stable server image' "$PROMOTE_IMAGE" skipped
+          fi
+
+          exit "$status"

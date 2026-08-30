@@ -61,6 +61,14 @@ PRs should explain why the change exists, what behavior changed, any impact on
 the stored schema or the parse projection, and the verification performed
 (especially the Go checks and any database-backed tests).
 
+An approved PR lands through GitHub's merge queue rather than a direct merge.
+The queue re-runs the checks against the tree it would put on `main`, so a
+change that only breaks in combination with another queued change fails in the
+queue instead of on `main`. Two things do not repeat there: Bastion, because
+its review is feedback on the PR and cannot change the merge decision, and
+every check whose tree the PR already proved, which happens whenever the entry
+is first in the queue and already up to date with `main`.
+
 ## Releases
 
 akari ships binaries on GitHub Releases, not a Go module for import, so a release
@@ -84,7 +92,8 @@ To cut a release:
    whose notes are generated from the pull requests merged since the previous tag.
 4. Review the draft and its generated notes, edit if needed, and publish.
 
-The same build runs as a dry run on every pull request and `main` push, so a
-break in the release pipeline surfaces on the PR rather than when a tag is cut. A
+The same build runs as a dry run on every pull request, merge group, and `main`
+push, so a break in the release pipeline surfaces on the PR rather than when a
+tag is cut. A
 tag with a pre-release suffix (`v0.2.0-rc.1`) is published as a prerelease. See
 [docs/releases.md](docs/releases.md) for the full process and asset list.

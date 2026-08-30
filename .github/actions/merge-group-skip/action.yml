@@ -1,0 +1,62 @@
+name: Merge group skip
+description: >-
+  Report whether the merge group under test carries the tree its pull request
+  already proved, so the checks that proved it can skip.
+
+outputs:
+  skip:
+    description: >-
+      "true" when the merge group tree matches the pull request head tree and
+      every check may skip; "false" otherwise.
+    value: ${{ steps.decide.outputs.skip }}
+
+runs:
+  using: composite
+  steps:
+    - id: decide
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        GH_TOKEN: ${{ github.token }}
+        GROUP_REF: ${{ github.ref }}
+        GROUP_SHA: ${{ github.event.merge_group.head_sha }}
+        REPO: ${{ github.repository }}
+      run: |
+        # Compares trees, not commits: the queue rewrites the commit but leaves
+        # the tree alone when the entry is first in the queue and already up to
+        # date with main. A group that carries a second entry, or that merges
+        # new main commits, has a different tree and runs everything.
+        #
+        # Every unproven case answers "false". Rerunning a proven tree costs
+        # minutes; skipping an unproven one merges untested code.
+        set -uo pipefail
+
+        skip=false
+        reason='not a merge group'
+
+        if [[ "$EVENT_NAME" == 'merge_group' ]]; then
+          reason="not a merge queue ref: $GROUP_REF"
+          if [[ "$GROUP_REF" =~ ^refs/heads/gh-readonly-queue/.+/pr-([1-9][0-9]*)-[0-9a-f]+$ ]]; then
+            pr="${BASH_REMATCH[1]}"
+            pr_head="$(gh api "repos/$REPO/pulls/$pr" --jq '.head.sha' 2>/dev/null)"
+            group_tree="$(gh api "repos/$REPO/commits/$GROUP_SHA" --jq '.commit.tree.sha' 2>/dev/null)"
+            pr_tree=''
+            if [[ -n "$pr_head" ]]; then
+              pr_tree="$(gh api "repos/$REPO/commits/$pr_head" --jq '.commit.tree.sha' 2>/dev/null)"
+            fi
+
+            # gh prints its error body on stdout, so require a tree SHA
+            # rather than merely a non-empty answer.
+            if [[ ! "$group_tree" =~ ^[0-9a-f]{40}$ || ! "$pr_tree" =~ ^[0-9a-f]{40}$ ]]; then
+              reason="could not read both trees for pull request #$pr"
+            elif [[ "$group_tree" == "$pr_tree" ]]; then
+              skip=true
+              reason="tree $group_tree already proved by pull request #$pr"
+            else
+              reason="tree $group_tree differs from pull request #$pr tree $pr_tree"
+            fi
+          fi
+        fi
+
+        echo "::notice::merge group skip=$skip ($reason)"
+        echo "skip=$skip" >> "$GITHUB_OUTPUT"
