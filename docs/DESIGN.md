@@ -583,7 +583,8 @@ the rebuild's high-water mark, folds the full projection in memory, deletes the
 old projection rows, and bulk-inserts the new set (`CopyFrom`). Everything
 derived is computed in that fold, over complete information and into empty
 tables: usage dedup (Claude's repeated usage blocks collapse in memory, not via
-ON CONFLICT arithmetic), per-event pricing at each event's `occurred_at`, the
+ON CONFLICT arithmetic), per-event pricing at each event's `occurred_at`
+(or a provider-reported cost when the reducer attached one), the
 session rollups (summed from the exact row set being written, so the
 rollup/ledger invariant in docs/data-aggregation.md holds by construction), the
 per-turn usage rollup, prompt-hygiene facts and the duplicate-prompt flag
@@ -730,20 +731,26 @@ cache-write (cache creation), cache-read, reasoning.
 
 ### Cost
 
-Cost is computed server-side at parse time from a pricing table compiled into the
-binary. The table maps a pricing identity to per-million-token rates for input,
-output, reasoning, cache-write, and cache-read. pi and OpenCode identities use
-`provider/model` because one model can have different rates through different
-providers. Matching is exact, and each identity maps to a list of date-effective
-rates so one route can price pre-change and post-change usage differently. The
-usage event's time selects the active window. There is no runtime catalog or
-refresh endpoint; updating prices means a new build. The computed cost is stored
-on each usage event.
+Cost is computed server-side at parse time. Most agents are priced from a table
+compiled into the binary. The table maps a pricing identity to per-million-token
+rates for input, output, reasoning, cache-write, and cache-read. pi and OpenCode
+identities use `provider/model` because one model can have different rates through
+different providers. Matching is exact, and each identity maps to a list of
+date-effective rates so one route can price pre-change and post-change usage
+differently. The usage event's time selects the active window. There is no
+runtime catalog or refresh endpoint; updating prices means a new build.
 
-A turn whose model is not in the table records its token usage with a zero cost.
-Zero is the application-wide representation for an unknown price; it does not mean
-the model was free. Dollar figures are best-effort estimates, and analytics group
-zero-priced models under `Other` without a separate completeness marker.
+The Grok CLI is the exception: when a `turn_completed` usage payload carries a
+non-negative `costUsdTicks` value (10^10 ticks is one USD), that billed amount is
+stored instead. The table remains the fallback for Grok turns that omit ticks,
+and for every other agent. The computed cost is stored on each usage event.
+
+A turn whose model is not in the table records its token usage with a zero cost,
+unless a provider-reported cost filled the row. Zero is the application-wide
+representation for an unknown price; it does not mean the model was free. Dollar
+figures are best-effort estimates except where a transcript carries the billed
+amount, and analytics group zero-priced models under `Other` without a separate
+completeness marker.
 
 ### Postgres schema
 

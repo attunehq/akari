@@ -1,9 +1,9 @@
-// Package pricing computes session cost from a model rate table compiled into
-// the binary. There is no runtime catalog or refresh: updating rates means a new
-// build. Rates are a snapshot in USD per one million tokens and are intentionally
-// approximate. An unknown model has a zero rate: every dollar figure in Akari is
-// already a best-effort estimate, and zero is the single representation for a
-// price the table does not know.
+// Package pricing computes estimated session cost from a model rate table compiled
+// into the binary. There is no runtime catalog or refresh: updating rates means a
+// new build. Rates are a snapshot in USD per one million tokens and are
+// intentionally approximate. An unknown model has a zero rate: zero is the single
+// representation for a price the table does not know. Grok CLI turns that carry
+// costUsdTicks skip this table (see the grok reducer).
 //
 // A model's price carries a time dimension: each model maps to a list of
 // date-effective rates, and a lookup selects the entry in effect at the usage
@@ -283,15 +283,16 @@ var table = map[string][]DatedRate{
 	"opencode-go/qwen3.8-flash":             flat(Rate{Input: 0.15, Output: 0.47, Reasoning: 0.47, CacheWrite: 0.20, CacheRead: 0.016}),
 	"opencode-go/qwen3.8-max":               flat(Rate{Input: 2, Output: 6, Reasoning: 6, CacheWrite: 2.50, CacheRead: 0.25}),
 
-	// xAI Grok, as served through the Grok CLI (grok.com accounts). The rates are
-	// derived from the CLI's own per-turn billing telemetry rather than a price
-	// page: turn_completed reports costUsdTicks (1 tick = 1e-10 USD) beside exact
-	// token splits, and fitting independent turns solves both models to these
-	// round numbers exactly (Aug 2026), with reasoning tokens billed inside
-	// output. The two differ only on cached reads. cacheCreationTokens is live in
-	// the schema but zero on every observed turn, and no write rate is published
-	// or derivable until one is nonzero, so CacheWrite stays unset like the
-	// pre-5.6 OpenAI keys.
+	// xAI Grok, as served through the Grok CLI (grok.com accounts). The Grok
+	// reducer prefers turn_completed costUsdTicks when present (1 tick = 1e-10
+	// USD); these rates are the fallback for turns that omit ticks, and for
+	// Grok models reached through OpenCode or OpenRouter. They were fitted from
+	// CLI telemetry (Aug 2026) and match sticker billing on some turns, with
+	// reasoning billed inside output. Live billed amounts often disagree (a
+	// promo multiplier, a different route). The two CLI models differ only on
+	// cached reads. cacheCreationTokens is live in the schema but zero on every
+	// observed turn, and no write rate is published or derivable until one is
+	// nonzero, so CacheWrite stays unset like the pre-5.6 OpenAI keys.
 	"grok-4.6":                 flat(Rate{Input: 2, Output: 6, CacheRead: 0.50}),
 	"grok-4.5":                 flat(Rate{Input: 2, Output: 6, CacheRead: 0.30}),
 	"opencode/grok-4.6":        flat(Rate{Input: 2, Output: 6, Reasoning: 6, CacheRead: 0.50}),

@@ -110,18 +110,21 @@ model and provider identity to per-token rates, built into the binary. Parsing a
 session looks up that identity and multiplies each token class by its rate to get
 a dollar cost. There is no runtime pricing feed; updating rates means a new
 server build (which, because pricing is part of parsing, reprices old sessions
-automatically on the next [reparse](#parsing-and-reparse)).
+automatically on the next [reparse](#parsing-and-reparse)). Grok CLI sessions are
+the exception: when a turn records `costUsdTicks`, Akari stores that billed
+amount instead of the table estimate.
 
 When a session uses a model the table does not know, its tokens are still recorded
-and its cost is stored as zero. Zero means Akari does not know the price; it does
-not mean the model was free.
+and its cost is stored as zero, unless a provider-reported cost filled the row.
+Zero means Akari does not know the price; it does not mean the model was free.
 
 Cursor sessions record no usage at all. The cursor-agent CLI never writes token
 counts, model ids, tool results, or reasoning to its transcript, so a Cursor
 session shows its conversation, tool calls, and outcomes, with tokens and cost
-zero by construction rather than measured. All dollar figures are best-effort estimates, and
-analytics group zero-priced models under `Other`. Costs below a cent show extra
-precision rather than collapsing to `$0`.
+zero by construction rather than measured. Dollar figures are best-effort
+estimates except where a transcript carries the billed amount, and analytics
+group zero-priced models under `Other`. Costs below a cent show extra precision
+rather than collapsing to `$0`.
 
 Per-session totals roll up across the session's turns; fleet and project totals
 roll those up further, always within the selected trailing window.

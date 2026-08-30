@@ -321,4 +321,12 @@ package parse
 // and its August 21 Sol price reduction. Date-effective windows preserve launch
 // pricing for earlier usage. Rebuilding the corpus re-prices usage events and
 // refreshes every derived cost rollup.
-const Epoch = 27
+//
+// Epoch 27 -> 28: prefer Grok provider-reported costUsdTicks over the rate-table
+// estimate when a turn_completed usage payload carries a non-negative tick count
+// (issue #225). The compiled grok-4.6/4.5 rates remain the fallback for turns
+// that omit ticks. Per-model ticks win when present; a top-level total allocates
+// any unassigned remainder across unpriced model rows by token share. The grok
+// golden moves (fixture ticks were already in the raw JSON and previously
+// discarded). Other agent goldens are unchanged.
+const Epoch = 28
