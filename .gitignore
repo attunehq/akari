@@ -34,3 +34,7 @@ internal/server/web/*_templ.go
 /.bastion/*.jsonl
 /.bastion/pi-agent/*
 !/.bastion/pi-agent/models.json
+
+# Agent throwaway files: screenshots, logs, one-off mocks. See AGENTS.md,
+# "Proof artifacts".
+/scratch/

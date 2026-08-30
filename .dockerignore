@@ -11,3 +11,4 @@
 .dockerignore
 Dockerfile
 docker-compose.yml
+scratch

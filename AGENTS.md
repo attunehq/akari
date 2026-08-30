@@ -78,6 +78,19 @@ in the background. The golden-fixtures test fails by name when you forget.
 signal must default to "unmeasured" and the absolute token scale observed
 thinking bands on. Read it before you touch signals, scoring, or pricing.
 
+## Proof artifacts
+
+Screenshots, logs, and one-off mocks that back a pull request go in `scratch/`,
+which is gitignored. Never commit them, and never upload them to a host outside
+GitHub. Upload images and files with the `github-image-upload` skill
+(`gh image`), which returns `github.com/user-attachments` URLs that stay private
+for a private repository.
+
+Because `scratch/` is ignored, files left there do not dirty the tree, so
+`bastion attest` still sees a clean worktree. Keep it to artifacts: `go vet
+./...` and `gofmt -l .` walk every directory, so a stray `.go` file under
+`scratch/` does get compiled and reported.
+
 ## Cursor Cloud specific instructions
 
 The Cloud Agent environment (`.cursor/environment.json`) runs Postgres natively
