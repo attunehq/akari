@@ -45,6 +45,7 @@ hour; the Overview and the Sessions feed stay live.
 Top to bottom:
 
 
+- **Fleet mix**: which models carried the window's billed-token volume over time.
 - **Model cost**: each model's spend against its billed-token volume in the
   window, so a model that is expensive relative to the work it did sits off the
   fleet's blended rate.
