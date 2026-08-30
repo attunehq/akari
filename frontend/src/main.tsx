@@ -1,6 +1,6 @@
 import "./styles.css";
 
-import { lazy, type ReactNode, StrictMode, Suspense, useEffect } from "react";
+import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import {
   createBrowserRouter,
@@ -10,10 +10,8 @@ import {
 
 import { AppShell } from "./app-shell";
 import { basePath } from "./base";
-import {
-  clearPreloadRecovery,
-  installPreloadRecovery,
-} from "./preload-recovery";
+import { installPreloadRecovery } from "./preload-recovery";
+import { RouteReady } from "./route-ready";
 
 installPreloadRecovery(window);
 
@@ -79,120 +77,121 @@ const SessionsPage = lazy(() =>
   })),
 );
 
-function TitledRoute({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  useEffect(() => {
-    document.title = `${title} · akari`;
-  }, [title]);
-  return children;
-}
-
-function PreloadRecoveryReset() {
-  useEffect(() => {
-    clearPreloadRecovery(window);
-  }, []);
-  return null;
-}
-
 const router = createBrowserRouter(
   [
     {
       path: "/login",
       element: (
-        <TitledRoute title="Log in">
+        <RouteReady title="Log in">
           <AuthPage mode="login" />
-        </TitledRoute>
+        </RouteReady>
       ),
     },
     {
       path: "/register",
       element: (
-        <TitledRoute title="Register">
+        <RouteReady title="Register">
           <AuthPage mode="register" />
-        </TitledRoute>
+        </RouteReady>
       ),
     },
     {
       path: "/api/docs",
       element: (
-        <TitledRoute title="API">
+        <RouteReady title="API">
           <ApiDocsPage />
-        </TitledRoute>
+        </RouteReady>
       ),
     },
     {
       path: "/oauth/authorize",
       element: (
-        <TitledRoute title="Authorize">
+        <RouteReady title="Authorize">
           <OAuthConsentPage />
-        </TitledRoute>
+        </RouteReady>
       ),
     },
-    { path: "/u/:username", element: <PublicOverviewPage /> },
-    { path: "/p/:id", element: <PublicProjectPage /> },
-    { path: "/s/:publicId", element: <PublicSessionPage /> },
+    {
+      path: "/u/:username",
+      element: (
+        <RouteReady>
+          <PublicOverviewPage />
+        </RouteReady>
+      ),
+    },
+    {
+      path: "/p/:id",
+      element: (
+        <RouteReady>
+          <PublicProjectPage />
+        </RouteReady>
+      ),
+    },
+    {
+      path: "/s/:publicId",
+      element: (
+        <RouteReady>
+          <PublicSessionPage />
+        </RouteReady>
+      ),
+    },
     {
       element: <AppShell />,
       children: [
         {
           path: "/overview",
           element: (
-            <TitledRoute title="Overview">
+            <RouteReady title="Overview">
               <OverviewPage />
-            </TitledRoute>
+            </RouteReady>
           ),
         },
         {
           path: "/insights",
           element: (
-            <TitledRoute title="Insights">
+            <RouteReady title="Insights">
               <InsightsPage />
-            </TitledRoute>
+            </RouteReady>
           ),
         },
         {
           path: "/projects",
           element: (
-            <TitledRoute title="Projects">
+            <RouteReady title="Projects">
               <ProjectsPage />
-            </TitledRoute>
+            </RouteReady>
           ),
         },
         {
           path: "/projects/:id",
           element: (
-            <TitledRoute title="Project">
+            <RouteReady title="Project">
               <ProjectPage />
-            </TitledRoute>
+            </RouteReady>
           ),
         },
         {
           path: "/sessions",
           element: (
-            <TitledRoute title="Sessions">
+            <RouteReady title="Sessions">
               <SessionsPage />
-            </TitledRoute>
+            </RouteReady>
           ),
         },
         {
           path: "/sessions/:id",
           element: (
-            <TitledRoute title="Session">
+            <RouteReady title="Session">
               <SessionPage />
-            </TitledRoute>
+            </RouteReady>
           ),
         },
         {
           path: "/account",
           element: (
-            <TitledRoute title="Account">
+            <RouteReady title="Account">
               <AccountPage />
-            </TitledRoute>
+            </RouteReady>
           ),
         },
       ],
@@ -215,7 +214,6 @@ createRoot(root).render(
         </div>
       }
     >
-      <PreloadRecoveryReset />
       <RouterProvider router={router} />
     </Suspense>
   </StrictMode>,

@@ -59,3 +59,25 @@ it("clears the retry marker after the route renders", () => {
 
   expect(values.has(preloadReloadKey)).toBe(false);
 });
+
+it("re-arms after a successful render, not before", () => {
+  const { target, values, reload, dispatch } = recoveryWindow();
+  installPreloadRecovery(target);
+
+  const first = new Event("vite:preloadError", { cancelable: true });
+  dispatch(first);
+  expect(reload).toHaveBeenCalledOnce();
+
+  const stillLoading = new Event("vite:preloadError", { cancelable: true });
+  dispatch(stillLoading);
+  expect(stillLoading.defaultPrevented).toBe(false);
+  expect(reload).toHaveBeenCalledOnce();
+  expect(values.get(preloadReloadKey)).toBe(target.location.href);
+
+  clearPreloadRecovery(target);
+
+  const afterRender = new Event("vite:preloadError", { cancelable: true });
+  dispatch(afterRender);
+  expect(afterRender.defaultPrevented).toBe(true);
+  expect(reload).toHaveBeenCalledTimes(2);
+});
