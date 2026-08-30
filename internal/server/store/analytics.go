@@ -9,7 +9,7 @@ import (
 )
 
 // DayPoint is one day's aggregated usage, the unit of the analytics time series.
-// Days with no priced usage events are absent rather than zero-filled; the chart
+// Days with no dated usage events are absent rather than zero-filled; the chart
 // layer decides how to render gaps.
 type DayPoint struct {
 	Day        time.Time
@@ -20,13 +20,18 @@ type DayPoint struct {
 	CacheWrite int64
 }
 
-// Breakdown is one slice of a by-model or by-agent split: a label with its rolled
-// cost, its token volume broken out by class, and how many sessions it touched.
+// Breakdown is one slice of a by-model, by-agent, or by-user split: a label with
+// its rolled cost, its token volume broken out by class, and how many sessions it touched.
 // The per-class split lets a slice both size its bar on the full token volume and
 // reproduce the same hover card every other token figure carries.
 type Breakdown struct {
-	Label      string
-	CostUSD    float64
+	Label   string
+	CostUSD float64
+	// CostKnown is true when every usage event in this slice had either a
+	// rate-table estimate or a provider-reported cost. It distinguishes a real
+	// aggregate $0 from an unpriced zero without restoring a visible partial-cost
+	// marker on positive best-effort totals.
+	CostKnown  bool
 	Input      int64
 	Output     int64
 	CacheRead  int64
@@ -39,6 +44,13 @@ type Breakdown struct {
 	Reasoning int64
 	Sessions  int
 }
+
+type modelNameDisclosure uint8
+
+const (
+	modelNamesInternal modelNameDisclosure = iota
+	modelNamesPublic
+)
 
 // Tokens is the all-class token volume (input, output, cache read, cache write)
 // for the slice. The breakdown bars size and label on this, so a model's share
@@ -167,17 +179,27 @@ func (a Analytics) TotalTokens() int64 {
 // It reads inside one read-only REPEATABLE READ transaction so every grouped query and the
 // Cache tile share a single MVCC snapshot: the headline token classes and the Cache split are
 // the same sums regrouped, so a concurrent ingest landing between two pooled reads would let
-// them disagree by the usage that arrived mid-render. Unlike AnalyticsSnapshot this takes no
+// them disagree by the usage that arrived mid-render. Unlike PublicAnalyticsSnapshot this takes no
 // reparse-lock gate (a live panel tolerates a snapshot that falls during a reparse, where each
 // session is atomically old or new), and being read-only it takes no locks that could block
 // ingest.
 func (s *Store) Analytics(ctx context.Context, f AnalyticsFilter) (Analytics, error) {
+	return s.analytics(ctx, f, modelNamesInternal)
+}
+
+// PublicAnalytics returns the same reconciled totals as Analytics while folding
+// every model identifier not approved for public disclosure into Other.
+func (s *Store) PublicAnalytics(ctx context.Context, f AnalyticsFilter) (Analytics, error) {
+	return s.analytics(ctx, f, modelNamesPublic)
+}
+
+func (s *Store) analytics(ctx context.Context, f AnalyticsFilter, disclosure modelNameDisclosure) (Analytics, error) {
 	var a Analytics
 	err := pgx.BeginTxFunc(ctx, s.Pool,
 		pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly},
 		func(tx pgx.Tx) error {
 			var err error
-			a, err = s.analyticsFrom(ctx, tx, f)
+			a, err = s.analyticsFrom(ctx, tx, f, disclosure)
 			return err
 		})
 	if err != nil {
@@ -191,7 +213,7 @@ func (s *Store) Analytics(ctx context.Context, f AnalyticsFilter) (Analytics, er
 
 // querier is the subset of *pgxpool.Pool and pgx.Tx that the analytics queries
 // use, so the same query builders serve both a plain pool read (Analytics) and a
-// transaction-scoped read (AnalyticsSnapshot).
+// transaction-scoped read (PublicAnalyticsSnapshot).
 type querier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
@@ -224,7 +246,7 @@ func eachRow(ctx context.Context, q querier, what, sql string, args []any, scan 
 // analyticsFrom assembles the Analytics from one querier, so a pooled read and a
 // single-transaction snapshot share the same three grouped queries and the same
 // headline arithmetic.
-func (s *Store) analyticsFrom(ctx context.Context, q querier, f AnalyticsFilter) (Analytics, error) {
+func (s *Store) analyticsFrom(ctx context.Context, q querier, f AnalyticsFilter, disclosure modelNameDisclosure) (Analytics, error) {
 	var a Analytics
 
 	series, err := s.analyticsSeries(ctx, q, f)
@@ -233,7 +255,7 @@ func (s *Store) analyticsFrom(ctx context.Context, q querier, f AnalyticsFilter)
 	}
 	a.Series = series
 
-	models, err := s.analyticsByModel(ctx, q, f)
+	models, err := s.analyticsByModel(ctx, q, f, disclosure)
 	if err != nil {
 		return a, err
 	}
@@ -279,7 +301,7 @@ func (s *Store) analyticsFrom(ctx context.Context, q querier, f AnalyticsFilter)
 	// Cache effectiveness shares the same scoped dated-usage base, so its prompt
 	// totals reconcile with the headline token classes above (its Input/CacheRead/
 	// CacheWrite are the same sums, regrouped by model to price the saving). It reads
-	// through the same querier, so under AnalyticsSnapshot the Cache tile comes from the
+	// through the same querier, so under PublicAnalyticsSnapshot the Cache tile comes from the
 	// one repeatable-read snapshot as the totals (not a second pooled connection that
 	// could see a different MVCC snapshot, or deadlock a small pool by holding two).
 	cache, err := s.cacheStats(ctx, q, f)
@@ -290,7 +312,7 @@ func (s *Store) analyticsFrom(ctx context.Context, q querier, f AnalyticsFilter)
 	return a, nil
 }
 
-// AnalyticsSnapshot reads Analytics as a single consistent snapshot that is
+// PublicAnalyticsSnapshot reads disclosure-safe Analytics as a single consistent snapshot that is
 // guaranteed not to straddle a fleet rebuild, for the OG card render. It runs the
 // grouped queries inside one REPEATABLE READ transaction, so they all read one MVCC
 // snapshot rather than several independently-timed reads. The first statement in that
@@ -300,9 +322,9 @@ func (s *Store) analyticsFrom(ctx context.Context, q querier, f AnalyticsFilter)
 // an epoch rollout that starts later cannot alter the frozen snapshot. When sessions
 // are still behind the epoch, it returns ok=false and no analytics, so the caller
 // skips the render rather than caching a mixed aggregate.
-func (s *Store) AnalyticsSnapshot(ctx context.Context, f AnalyticsFilter) (a Analytics, ok bool, err error) {
+func (s *Store) PublicAnalyticsSnapshot(ctx context.Context, f AnalyticsFilter) (a Analytics, ok bool, err error) {
 	ok, err = s.epochGatedSnapshot(ctx, func(tx pgx.Tx) error {
-		a, err = s.analyticsFrom(ctx, tx, f)
+		a, err = s.analyticsFrom(ctx, tx, f, modelNamesPublic)
 		return err
 	})
 	if err != nil {
@@ -311,20 +333,20 @@ func (s *Store) AnalyticsSnapshot(ctx context.Context, f AnalyticsFilter) (a Ana
 	return a, ok, nil
 }
 
-// ProjectCardSnapshot reads everything the project OG card renders from (the windowed
+// PublicProjectCardSnapshot reads everything the project OG card renders from (the windowed
 // analytics and the mean quality score) as one epoch-gated snapshot, so the card's
 // figures and its QUALITY grade describe the same instant. The two reads sat in separate
 // pooled queries before, which let a rebuild or a signal refresh land in the gap: the card
 // could then cache pre-rebuild token totals beside a partially rebuilt quality grade, a
 // torn projection the page a visitor lands on never shows. Folding both into the one
-// repeatable-read snapshot AnalyticsSnapshot already uses (and its epoch gate) means
+// repeatable-read snapshot PublicAnalyticsSnapshot already uses (and its epoch gate) means
 // the average is read from the same MVCC snapshot as the totals, so the card reconciles with
 // the page's Insights grade distribution for the same project and window. ok is false when a
-// fleet rebuild is draining at the snapshot point, exactly as AnalyticsSnapshot, so the caller
+// fleet rebuild is draining at the snapshot point, exactly as PublicAnalyticsSnapshot, so the caller
 // skips the render rather than caching a mixed card.
-func (s *Store) ProjectCardSnapshot(ctx context.Context, f AnalyticsFilter) (a Analytics, avgScore *float64, ok bool, err error) {
+func (s *Store) PublicProjectCardSnapshot(ctx context.Context, f AnalyticsFilter) (a Analytics, avgScore *float64, ok bool, err error) {
 	ok, err = s.epochGatedSnapshot(ctx, func(tx pgx.Tx) error {
-		if a, err = s.analyticsFrom(ctx, tx, f); err != nil {
+		if a, err = s.analyticsFrom(ctx, tx, f, modelNamesPublic); err != nil {
 			return err
 		}
 		avgScore, err = s.avgQualityScoreFrom(ctx, tx, f)
@@ -339,7 +361,8 @@ func (s *Store) ProjectCardSnapshot(ctx context.Context, f AnalyticsFilter) (a A
 // epochGatedSnapshot runs fn inside one REPEATABLE READ, read-only transaction whose first
 // statement is the epoch-staleness check, so every read fn makes sees the one MVCC snapshot
 // that check established rather than several independently-timed reads. It is the shared
-// spine of the aggregate OG-card reads (AnalyticsSnapshot, ProjectCardSnapshot): fn is not
+// spine of the aggregate OG-card reads (PublicAnalyticsSnapshot,
+// PublicProjectCardSnapshot): fn is not
 // run and ok is false when any session's projection is behind the running parser epoch,
 // since the corpus is then a half-rebuilt mix of old and new parses; otherwise the frozen
 // snapshot is a single-epoch corpus and a rebuild that starts later cannot alter it. It
@@ -503,22 +526,28 @@ func (s *Store) analyticsSeries(ctx context.Context, q querier, f AnalyticsFilte
 	return out, nil
 }
 
-func (s *Store) analyticsByModel(ctx context.Context, q querier, f AnalyticsFilter) ([]Breakdown, error) {
+func (s *Store) analyticsByModel(ctx context.Context, q querier, f AnalyticsFilter, disclosure modelNameDisclosure) ([]Breakdown, error) {
 	filter, args := f.clause()
+	modelExpr := "ue.model"
+	if disclosure == modelNamesPublic {
+		modelExpr = "CASE WHEN ue.model_name_public THEN ue.model ELSE 'Other' END"
+	}
 	// occurred_at IS NOT NULL matches the series and the by-agent split, so the
 	// three reconcile; see Analytics. No model <> '' filter though: usage that
 	// carries no model id still has to be in the split, or the by-model rows would
-	// sum to less than the headline. Zero-priced rows collapse into one "Other"
-	// bucket, the canonical representation for models outside the rate table.
+	// sum to less than the headline. Public reads fold every identifier that the
+	// fail-closed model catalog has not approved into one Other bucket before
+	// aggregation, which preserves distinct session counts across hidden models.
 	rows, err := q.Query(ctx,
-		`SELECT CASE WHEN ue.cost_usd = 0 THEN 'Other' ELSE ue.model END AS model,
+		`SELECT `+modelExpr+` AS model,
 		        coalesce(sum(ue.cost_usd), 0),
 		        coalesce(sum(ue.input_tokens), 0),
 		        coalesce(sum(ue.output_tokens), 0),
 		        coalesce(sum(ue.cache_read_tokens), 0),
 		        coalesce(sum(ue.cache_write_tokens), 0),
 		        coalesce(sum(ue.reasoning_tokens), 0),
-		        count(DISTINCT ue.session_id)
+		        count(DISTINCT ue.session_id),
+		        coalesce(bool_and(ue.cost_source <> 'unknown'), false)
 		   FROM usage_events ue
 		   JOIN sessions s ON s.id = ue.session_id
 		  WHERE ue.occurred_at IS NOT NULL`+filter+`
@@ -551,7 +580,8 @@ func (s *Store) analyticsByAgent(ctx context.Context, q querier, f AnalyticsFilt
 		        coalesce(sum(ue.cache_read_tokens), 0),
 		        coalesce(sum(ue.cache_write_tokens), 0),
 		        coalesce(sum(ue.reasoning_tokens), 0),
-		        count(DISTINCT ue.session_id)
+		        count(DISTINCT ue.session_id),
+		        coalesce(bool_and(ue.cost_source <> 'unknown'), false)
 		   FROM usage_events ue
 		   JOIN sessions s ON s.id = ue.session_id
 		  WHERE ue.occurred_at IS NOT NULL`+filter+`
@@ -584,7 +614,8 @@ func (s *Store) analyticsByUser(ctx context.Context, q querier, f AnalyticsFilte
 		        coalesce(sum(ue.cache_read_tokens), 0),
 		        coalesce(sum(ue.cache_write_tokens), 0),
 		        coalesce(sum(ue.reasoning_tokens), 0),
-		        count(DISTINCT ue.session_id)
+		        count(DISTINCT ue.session_id),
+		        coalesce(bool_and(ue.cost_source <> 'unknown'), false)
 		   FROM usage_events ue
 		   JOIN sessions s ON s.id = ue.session_id
 		   JOIN users u ON u.id = s.user_id
@@ -606,7 +637,7 @@ func scanBreakdowns(rows pgx.Rows) ([]Breakdown, error) {
 	out := []Breakdown{}
 	for rows.Next() {
 		var b Breakdown
-		if err := rows.Scan(&b.Label, &b.CostUSD, &b.Input, &b.Output, &b.CacheRead, &b.CacheWrite, &b.Reasoning, &b.Sessions); err != nil {
+		if err := rows.Scan(&b.Label, &b.CostUSD, &b.Input, &b.Output, &b.CacheRead, &b.CacheWrite, &b.Reasoning, &b.Sessions, &b.CostKnown); err != nil {
 			return nil, err
 		}
 		out = append(out, b)

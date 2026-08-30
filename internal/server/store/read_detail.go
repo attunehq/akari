@@ -217,8 +217,9 @@ func (s *Store) scanToolCalls(ctx context.Context, q querier, query string, args
 // per-ordinal map. Input, Output, CacheRead, CacheWrite, and Reasoning are the summed token
 // classes.
 //
-// CostUSD is the summed best-effort estimate. Unknown model rates contribute zero,
-// matching session and analytics totals.
+// CostUSD is the summed per-event cost: a provider-reported amount when the
+// transcript carried one, otherwise the rate-table estimate. Unknown model
+// rates contribute zero, matching session and analytics totals.
 //
 // ContextTokens is the turn's context occupancy: Input + CacheRead + CacheWrite, output
 // EXCLUDED. It is the size of the prompt presented that turn (what the model had to read),

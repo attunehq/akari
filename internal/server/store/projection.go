@@ -114,19 +114,32 @@ type SessionIdentityDelta struct {
 // and SourceIndex identify the transcript line it came from; together with
 // DedupKey they drive the in-memory dedup (see foldUsage).
 type ProjUsage struct {
-	MessageOrdinal *int
-	Model          string
-	Input          int
-	Output         int
-	CacheWrite     int
-	CacheRead      int
-	Reasoning      int
-	CostUSD        float64
-	OccurredAt     time.Time
-	DedupKey       string
-	SourceOffset   int64
-	SourceIndex    int
+	MessageOrdinal  *int
+	Model           string
+	Input           int
+	Output          int
+	CacheWrite      int
+	CacheRead       int
+	Reasoning       int
+	CostUSD         float64
+	CostSource      CostSource
+	ModelNamePublic bool
+	OccurredAt      time.Time
+	DedupKey        string
+	SourceOffset    int64
+	SourceIndex     int
 }
+
+// CostSource records how a usage event obtained its dollar cost. The amount
+// alone cannot carry this state because zero may mean unknown pricing, a zero
+// rate-table estimate, or a provider-reported free turn.
+type CostSource string
+
+const (
+	CostSourceUnknown   CostSource = "unknown"
+	CostSourceRateTable CostSource = "rate_table"
+	CostSourceProvider  CostSource = "provider"
+)
 
 // AttachmentDelta is one attachments row (today a lifted image). Like a tool
 // body it reaches the CAS by one of two paths: when the client lifted the image,
@@ -925,7 +938,8 @@ func writeUsage(ctx context.Context, tx pgx.Tx, sessionID int64, usage []ProjUsa
 		}
 		rows = append(rows, []any{
 			sessionID, ord, sanitizeText(u.Model), u.Input, u.Output, u.CacheWrite, u.CacheRead,
-			u.Reasoning, u.CostUSD, nullTime(u.OccurredAt), key, u.SourceOffset, u.SourceIndex,
+			u.Reasoning, u.CostUSD, u.CostSource, u.ModelNamePublic,
+			nullTime(u.OccurredAt), key, u.SourceOffset, u.SourceIndex,
 		})
 
 		// Fold this surviving row into its turn's rollup, so the transcript reads one
@@ -961,7 +975,7 @@ func writeUsage(ctx context.Context, tx pgx.Tx, sessionID int64, usage []ProjUsa
 	if _, err := tx.CopyFrom(ctx, pgx.Identifier{"usage_events"},
 		[]string{"session_id", "message_ordinal", "model", "input_tokens", "output_tokens",
 			"cache_write_tokens", "cache_read_tokens", "reasoning_tokens", "cost_usd",
-			"occurred_at", "dedup_key", "source_offset", "source_index"},
+			"cost_source", "model_name_public", "occurred_at", "dedup_key", "source_offset", "source_index"},
 		pgx.CopyFromRows(rows)); err != nil {
 		return usageRollup{}, fmt.Errorf("copy usage events for session %d: %w", sessionID, err)
 	}

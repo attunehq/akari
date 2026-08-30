@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -785,8 +786,15 @@ func TestParseGrok(t *testing.T) {
 	if u.MessageOrdinal == nil || *u.MessageOrdinal != 1 {
 		t.Errorf("usage 0 ordinal = %v, want 1", u.MessageOrdinal)
 	}
-	if u2 := s.UsageEvent[1]; u2.Model != "grok-4.5" || u2.Input != 300 || u2.CacheRead != 600 {
+	if u.ReportedCostUSD == nil || math.Abs(*u.ReportedCostUSD-0.00153) > 1e-12 {
+		t.Errorf("usage 0 cost = %s, want 0.00153 reported", grokCostText(u.ReportedCostUSD))
+	}
+	u2 := s.UsageEvent[1]
+	if u2.Model != "grok-4.5" || u2.Input != 300 || u2.CacheRead != 600 {
 		t.Errorf("usage 1 = %+v", u2)
+	}
+	if u2.ReportedCostUSD == nil || math.Abs(*u2.ReportedCostUSD-0.00066) > 1e-12 {
+		t.Errorf("usage 1 cost = %s, want 0.00066 reported", grokCostText(u2.ReportedCostUSD))
 	}
 
 	// Each turn_completed records its telemetry, and the second turn's spawned

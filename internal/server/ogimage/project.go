@@ -19,7 +19,7 @@ import (
 //
 // heading is the project title the page shows (web.ProjectTitle), passed in rather than
 // derived here so this package stays free of the web view layer, the same reason
-// Generate takes a resolved username. The analytics are read through AnalyticsSnapshot
+// Generate takes a resolved username. The analytics are read through PublicProjectCardSnapshot
 // with OmitUsers set (the card shows no per-user split, matching the public project
 // page), which pins the read so it cannot straddle a reparse: a reparse mid-snapshot
 // reports not-ok and GenerateProject returns ErrReparseInProgress without storing
@@ -44,7 +44,7 @@ func GenerateProject(ctx context.Context, st *store.Store, projectID int64, head
 	// score, so the card's figures and its QUALITY grade come from the same instant. Reading
 	// the average in a second pooled query let a reparse land in the gap and cache a grade
 	// that did not reconcile with the totals beside it.
-	a, avg, ok, err := st.ProjectCardSnapshot(ctx, f)
+	a, avg, ok, err := st.PublicProjectCardSnapshot(ctx, f)
 	if err != nil {
 		return nil, fmt.Errorf("loading overview analytics for project %d: %w", projectID, err)
 	}

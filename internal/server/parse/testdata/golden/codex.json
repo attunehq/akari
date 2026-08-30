@@ -198,6 +198,8 @@
       "CacheRead": 4000,
       "Reasoning": 80,
       "CostUSD": 0.007,
+      "CostSource": "rate_table",
+      "ModelNamePublic": true,
       "OccurredAt": "2024-01-01T10:00:04Z",
       "DedupKey": "",
       "SourceOffset": 2179,

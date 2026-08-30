@@ -110,18 +110,26 @@ model and provider identity to per-token rates, built into the binary. Parsing a
 session looks up that identity and multiplies each token class by its rate to get
 a dollar cost. There is no runtime pricing feed; updating rates means a new
 server build (which, because pricing is part of parsing, reprices old sessions
-automatically on the next [reparse](#parsing-and-reparse)).
+automatically on the next [reparse](#parsing-and-reparse)). Grok CLI sessions are
+the exception: when a turn records `costUsdTicks`, Akari stores that billed
+amount instead of the table estimate.
 
 When a session uses a model the table does not know, its tokens are still recorded
-and its cost is stored as zero. Zero means Akari does not know the price; it does
-not mean the model was free.
+and its cost is stored as zero with an unknown-price marker. A provider can also
+report a real zero-dollar turn. Akari stores that as a known provider cost, so
+overview breakdowns show `$0` for free usage and `not priced` for unknown usage.
 
 Cursor sessions record no usage at all. The cursor-agent CLI never writes token
 counts, model ids, tool results, or reasoning to its transcript, so a Cursor
 session shows its conversation, tool calls, and outcomes, with tokens and cost
-zero by construction rather than measured. All dollar figures are best-effort estimates, and
-analytics group zero-priced models under `Other`. Costs below a cent show extra
-precision rather than collapsing to `$0`.
+zero by construction rather than measured. Dollar figures are best-effort
+estimates except where a transcript carries the billed amount. Costs below a cent
+show extra precision rather than collapsing to `$0`.
+
+Signed-in analytics show the recorded model identifiers. Public user and project
+overviews use a compiled, exact allowlist of released identifiers. Models outside
+that catalog, including EAP and synthetic identifiers, appear as `Other` even when
+Akari knows their price. This disclosure rule does not use model-name patterns.
 
 Per-session totals roll up across the session's turns; fleet and project totals
 roll those up further, always within the selected trailing window.

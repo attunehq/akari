@@ -1,9 +1,10 @@
-// Package pricing computes session cost from a model rate table compiled into
-// the binary. There is no runtime catalog or refresh: updating rates means a new
-// build. Rates are a snapshot in USD per one million tokens and are intentionally
-// approximate. An unknown model has a zero rate: every dollar figure in Akari is
-// already a best-effort estimate, and zero is the single representation for a
-// price the table does not know.
+// Package pricing computes estimated session cost from a model rate table compiled
+// into the binary. There is no runtime catalog or refresh: updating rates means a
+// new build. Rates are a snapshot in USD per one million tokens and are
+// intentionally approximate. Cost reports separately whether this table knew a
+// model's rate, because zero can also be a real estimated or provider-reported
+// cost. Grok CLI turns that carry costUsdTicks skip this table (see the grok
+// reducer).
 //
 // A model's price carries a time dimension: each model maps to a list of
 // date-effective rates, and a lookup selects the entry in effect at the usage
@@ -67,9 +68,10 @@ var (
 // eight hours of September 9 UTC rather than splitting that aggregate day.
 var glm53FlashSticker = time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
 
-// table maps a canonical model ID to its date-effective rates. Matching is EXACT, not
-// by prefix: a key prices only the model whose ID it is, never a whole family or major
-// line. That is deliberate. Pricing has diverged within a major line before (Opus 4.1
+// table maps a publicly disclosed canonical model ID to its date-effective rates.
+// Matching is EXACT, not by prefix: a key prices only the model whose ID it is,
+// never a whole family or major line. That is deliberate. Pricing has diverged
+// within a major line before (Opus 4.1
 // at $15/$75 then Opus 4.5 at $5/$25; GPT-5 at $1.25/$10 then GPT-5.5 at $5/$30), but
 // each of those was a NEW model ID, so exact-match keys already price them apart. The
 // date dimension here is the other axis: a rate that changes on a date under ONE ID (a
@@ -93,11 +95,9 @@ var glm53FlashSticker = time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
 // future and sibling models stay unknown. When adding a model, add its exact ID; do
 // not widen an existing key.
 var table = map[string][]DatedRate{
-	// Fable 5 and Mythos 5 share pricing; mythos-preview is the invitation-only
-	// predecessor at the same rate.
-	"claude-fable-5":        flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1.00}),
-	"claude-mythos-5":       flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1.00}),
-	"claude-mythos-preview": flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1.00}),
+	// Fable 5 and Mythos 5 share pricing.
+	"claude-fable-5":  flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1.00}),
+	"claude-mythos-5": flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1.00}),
 
 	// Opus: 4.0/4.1 at $15/$75, 4.5 onward at $5/$25, which Opus 5 holds (it is a
 	// drop-in upgrade at Opus 4.8's rate). "claude-opus-4" is Opus 4.0's dateless
@@ -283,21 +283,36 @@ var table = map[string][]DatedRate{
 	"opencode-go/qwen3.8-flash":             flat(Rate{Input: 0.15, Output: 0.47, Reasoning: 0.47, CacheWrite: 0.20, CacheRead: 0.016}),
 	"opencode-go/qwen3.8-max":               flat(Rate{Input: 2, Output: 6, Reasoning: 6, CacheWrite: 2.50, CacheRead: 0.25}),
 
-	// xAI Grok, as served through the Grok CLI (grok.com accounts). The rates are
-	// derived from the CLI's own per-turn billing telemetry rather than a price
-	// page: turn_completed reports costUsdTicks (1 tick = 1e-10 USD) beside exact
-	// token splits, and fitting independent turns solves both models to these
-	// round numbers exactly (Aug 2026), with reasoning tokens billed inside
-	// output. The two differ only on cached reads. cacheCreationTokens is live in
-	// the schema but zero on every observed turn, and no write rate is published
-	// or derivable until one is nonzero, so CacheWrite stays unset like the
-	// pre-5.6 OpenAI keys.
+	// xAI Grok, as served through the Grok CLI (grok.com accounts). The Grok
+	// reducer prefers turn_completed costUsdTicks when present (1 tick = 1e-10
+	// USD); these rates are the fallback for turns that omit ticks, and for
+	// Grok models reached through OpenCode or OpenRouter. They were fitted from
+	// CLI telemetry (Aug 2026) and match sticker billing on some turns, with
+	// reasoning billed inside output. Live billed amounts often disagree (a
+	// promo multiplier, a different route). The two CLI models differ only on
+	// cached reads. cacheCreationTokens is live in the schema but zero on every
+	// observed turn, and no write rate is published or derivable until one is
+	// nonzero, so CacheWrite stays unset like the pre-5.6 OpenAI keys.
 	"grok-4.6":                 flat(Rate{Input: 2, Output: 6, CacheRead: 0.50}),
 	"grok-4.5":                 flat(Rate{Input: 2, Output: 6, CacheRead: 0.30}),
 	"opencode/grok-4.6":        flat(Rate{Input: 2, Output: 6, Reasoning: 6, CacheRead: 0.50}),
 	"opencode-go/grok-4.6":     flat(Rate{Input: 2, Output: 6, Reasoning: 6, CacheRead: 0.50}),
 	"openrouter/x-ai/grok-4.6": flat(Rate{Input: 2, Output: 6, CacheRead: 0.50}),
 }
+
+// undisclosedRates holds exact rates for models whose identifiers are not safe to
+// publish yet. Unknown models are undisclosed by default, so an EAP model needs an
+// entry here only when Akari also knows how to estimate its cost. Moving an entry
+// from here to table is the explicit release decision and requires a parse epoch bump.
+var undisclosedRates = map[string][]DatedRate{
+	// Invitation-only predecessor to the released Mythos 5 model.
+	"claude-mythos-preview": flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1.00}),
+}
+
+// publicUnpricedModels is the exact allowlist for released models that have no
+// rate-table estimate. It stays separate from table so disclosure never implies
+// that Akari knows a price.
+var publicUnpricedModels = map[string]struct{}{}
 
 // directProviderFallbacks are transcript providers whose input, output, and
 // cache rates are already represented by Akari's legacy unqualified keys.
@@ -338,6 +353,40 @@ func rateAt(rates []DatedRate, at time.Time) Rate {
 	return r
 }
 
+func ratesFor(model string) ([]DatedRate, bool) {
+	rates, ok := table[model]
+	if !ok {
+		rates, ok = undisclosedRates[model]
+	}
+	return rates, ok
+}
+
+func publicModel(model string) bool {
+	if _, ok := table[model]; ok {
+		return true
+	}
+	_, ok := publicUnpricedModels[model]
+	return ok
+}
+
+// ModelNamePublic reports whether a model identifier is safe to expose on a
+// publicly shared overview. The catalog is an exact, fail-closed allowlist:
+// unknown and explicitly undisclosed models return false. It uses the same
+// normalization and direct-provider fallback as pricing.
+func ModelNamePublic(model string) bool {
+	model = normalize(model)
+	if model == "" {
+		return false
+	}
+	if publicModel(model) {
+		return true
+	}
+	if provider, unqualified, found := strings.Cut(model, "/"); found && directProviderFallbacks[provider] {
+		return publicModel(unqualified)
+	}
+	return false
+}
+
 // RateAt returns the rate for a model at a point in time, and whether it was found.
 // The model string is normalized (lowercased, trimmed, and stripped of a trailing
 // release-date snapshot) and then matched exactly against the table. There is no prefix
@@ -350,10 +399,10 @@ func RateAt(model string, at time.Time) (Rate, bool) {
 		return Rate{}, false
 	}
 	qualified := strings.Contains(model, "/")
-	rates, ok := table[model]
+	rates, ok := ratesFor(model)
 	if !ok {
 		if provider, unqualified, found := strings.Cut(model, "/"); found && directProviderFallbacks[provider] {
-			rates, ok = table[unqualified]
+			rates, ok = ratesFor(unqualified)
 		}
 	}
 	if !ok {
@@ -367,12 +416,13 @@ func RateAt(model string, at time.Time) (Rate, bool) {
 }
 
 // Cost returns the estimated USD cost for a token count under a model at the time
-// the usage occurred. Token counts are in tokens (not millions). An unknown model
-// returns zero. The time selects the date-effective rate window.
-func Cost(model string, at time.Time, input, output, cacheWrite, cacheRead, reasoning int) float64 {
+// the usage occurred, and whether the model had a rate. Token counts are in
+// tokens (not millions). An unknown model returns zero and false. The time
+// selects the date-effective rate window.
+func Cost(model string, at time.Time, input, output, cacheWrite, cacheRead, reasoning int) (float64, bool) {
 	r, ok := RateAt(model, at)
 	if !ok {
-		return 0
+		return 0, false
 	}
 	const million = 1_000_000.0
 	cost := float64(input)/million*r.Input +
@@ -385,7 +435,7 @@ func Cost(model string, at time.Time, input, output, cacheWrite, cacheRead, reas
 	// Floating-point multiply-add behavior differs slightly across architectures.
 	// Round to one trillionth of a dollar so one projection produces identical stored
 	// costs and golden snapshots on every supported platform.
-	return math.Round(cost*1e12) / 1e12
+	return math.Round(cost*1e12) / 1e12, true
 }
 
 // CacheSavings returns the USD that prompt caching saved versus paying the full

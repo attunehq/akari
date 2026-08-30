@@ -12,6 +12,60 @@ import (
 	"github.com/jssblck/akari/internal/server/storetest"
 )
 
+func TestGrokProviderCostTakesPrecedence(t *testing.T) {
+	const tokens = `"inputTokens":1200,"outputTokens":80,"cachedReadTokens":700,"cacheCreationTokens":0,"reasoningTokens":30`
+	cases := []struct {
+		name       string
+		usage      string
+		want       float64
+		wantSource store.CostSource
+	}{
+		{
+			name:       "reported ticks beat the rate table",
+			usage:      `{"costUsdTicks":15300000,"modelUsage":{"grok-4.6-build":{` + tokens + `,"costUsdTicks":15300000}}}`,
+			want:       0.00153,
+			wantSource: store.CostSourceProvider,
+		},
+		{
+			name:       "missing ticks use the rate table",
+			usage:      `{"modelUsage":{"grok-4.6-build":{` + tokens + `}}}`,
+			want:       0.00183,
+			wantSource: store.CostSourceRateTable,
+		},
+		{
+			name:       "zero ticks is reported free",
+			usage:      `{"costUsdTicks":0,"modelUsage":{"grok-4.6-build":{` + tokens + `,"costUsdTicks":0}}}`,
+			want:       0,
+			wantSource: store.CostSourceProvider,
+		},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			raw := []byte(`{"timestamp":1709280006,"method":"session/update","params":{"update":{"sessionUpdate":"turn_completed","prompt_id":"p-1","usage":` + tt.usage + `}}}` + "\n")
+			r, err := newSessionReducer("grok")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := r.Feed(raw, 0); err != nil {
+				t.Fatal(err)
+			}
+			delta := r.Finish()
+			if len(delta.Usage) != 1 {
+				t.Fatalf("usage rows = %d, want 1", len(delta.Usage))
+			}
+			if math.Abs(delta.Usage[0].CostUSD-tt.want) > 1e-12 {
+				t.Errorf("cost = %v, want %v", delta.Usage[0].CostUSD, tt.want)
+			}
+			if delta.Usage[0].CostSource != tt.wantSource {
+				t.Errorf("cost source = %q, want %q", delta.Usage[0].CostSource, tt.wantSource)
+			}
+			if !delta.Usage[0].ModelNamePublic {
+				t.Error("released Grok model should be public")
+			}
+		})
+	}
+}
+
 func TestPiGLM53FlashProviderPricing(t *testing.T) {
 	raw := []byte(`{"type":"message","id":"glm-turn","timestamp":"2026-08-28T12:00:00Z","message":{"role":"assistant","provider":"zai","model":"glm-5.3-flash","usage":{"input":1000000,"output":1000000,"cacheRead":1000000,"cacheWrite":0},"content":[{"type":"text","text":"Done."}]}}` + "\n")
 	r, err := newSessionReducer("pi")

@@ -11,6 +11,7 @@ function breakdown(
   return {
     Label: label,
     CostUSD: 1,
+    CostKnown: true,
     Input: 100,
     Output: 50,
     CacheRead: 10,
@@ -93,7 +94,7 @@ describe("AnalyticsPanel", () => {
     render(
       <AnalyticsPanel
         analytics={analytics({
-          Models: [breakdown("Other", { CostUSD: 0 })],
+          Models: [breakdown("Other", { CostUSD: 0, CostKnown: false })],
         })}
       />,
     );
@@ -108,6 +109,20 @@ describe("AnalyticsPanel", () => {
     // omits it in favour of "not priced".
     const row = screen.getByText("Other").closest(".breakdown-row");
     expect(row?.querySelector(".tt-cost")).not.toBeInTheDocument();
+  });
+
+  it("shows a known zero cost as free rather than unpriced", () => {
+    render(
+      <AnalyticsPanel
+        analytics={analytics({
+          Models: [breakdown("grok-4.6", { CostUSD: 0, CostKnown: true })],
+        })}
+      />,
+    );
+
+    const row = screen.getByText("grok-4.6").closest(".breakdown-row");
+    expect(row?.textContent).toContain("$0");
+    expect(row?.textContent).not.toContain("not priced");
   });
 
   it("keeps the share fill in its own track instead of behind the row text", () => {

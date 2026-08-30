@@ -133,7 +133,9 @@ band the signed-in project page shows (totals, the activity heatmap, the by-mode
 by-agent breakdowns, and the grades/outcomes/tools band) scoped to that one repo. It
 lists no sessions and names no accounts, so it shares the repo's usage shape without
 exposing a session or which people ran in it. The address is the project id, so
-unpublishing hides the page without changing the link.
+unpublishing hides the page without changing the link. The by-model breakdown names
+only models in Akari's exact released-model catalog. It combines every other model
+under `Other`, including priced EAP models and synthetic identifiers.
 
 Like the user overview, a published project overview gets an Open Graph preview card
 at `/p/<id>/og.png`, the same simplified heatmap in the house style, with three foot
@@ -149,7 +151,8 @@ overview** at `/u/<username>`. The public page is the same aggregate panel you s
 account alone: it carries no session links and no one else's numbers, so it shares
 your usage shape without exposing any session or any other user. The address is
 your username, so unpublishing hides the page without changing the link, and
-re-publishing brings the same URL back.
+re-publishing brings the same URL back. Its by-model breakdown uses the same
+released-model catalog and combines every undisclosed identifier under `Other`.
 
 A published overview also gets an Open Graph preview card at `/u/<username>/og.png`,
 so a shared link unfurls with an image: a simplified copy of your activity heatmap

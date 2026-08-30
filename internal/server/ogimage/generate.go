@@ -42,7 +42,7 @@ func DefaultUntil(now time.Time) time.Time {
 // (on a cache miss or a stale card), so a cached card and a freshly served one
 // cannot drift.
 //
-// The analytics come from AnalyticsSnapshot, which reads them as a single
+// The analytics come from PublicAnalyticsSnapshot, which reads them as a single
 // consistent snapshot pinned so it cannot straddle a reparse: if a reparse is
 // rewriting the projection when the snapshot is taken, it reports not-ok and
 // Generate returns ErrReparseInProgress without storing anything, so a half-rebuilt
@@ -59,7 +59,7 @@ func DefaultUntil(now time.Time) time.Time {
 // now fixes the analytics window and the heatmap's trailing edge; the caller passes
 // the wall clock (tests pass a fixed instant).
 func Generate(ctx context.Context, st *store.Store, u store.User, now time.Time) ([]byte, error) {
-	a, ok, err := st.AnalyticsSnapshot(ctx, store.AnalyticsFilter{
+	a, ok, err := st.PublicAnalyticsSnapshot(ctx, store.AnalyticsFilter{
 		Since:   DefaultSince(now),
 		Until:   DefaultUntil(now),
 		UserIDs: []int64{u.ID},

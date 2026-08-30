@@ -181,16 +181,21 @@ type ToolCall struct {
 // totals not tied to a single message. SourceOffset and SourceIndex identify the
 // originating line (and its position within it) so incremental inserts are
 // idempotent even for agents whose usage carries no native dedup key.
+//
+// ReportedCostUSD is a provider-reported dollar cost when the transcript carried one
+// (Grok costUsdTicks). Nil means the projection should estimate from the rate
+// table. A pointer to zero is a real reported $0, not missing.
 type Usage struct {
-	MessageOrdinal *int
-	Model          string
-	Input          int
-	Output         int
-	CacheWrite     int
-	CacheRead      int
-	Reasoning      int
-	OccurredAt     time.Time
-	DedupKey       string
-	SourceOffset   int64
-	SourceIndex    int
+	MessageOrdinal  *int
+	Model           string
+	Input           int
+	Output          int
+	CacheWrite      int
+	CacheRead       int
+	Reasoning       int
+	ReportedCostUSD *float64
+	OccurredAt      time.Time
+	DedupKey        string
+	SourceOffset    int64
+	SourceIndex     int
 }

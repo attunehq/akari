@@ -25,10 +25,10 @@ func TestSignalsContextHealth(t *testing.T) {
 			{Ordinal: 1, Role: "assistant", Content: "done"},
 		},
 		Usage: []store.ProjUsage{
-			{Model: "claude-sonnet-4", Input: 60000, SourceOffset: 100, SourceIndex: 0},
-			{Model: "claude-sonnet-4", Input: 100000, CacheRead: 60000, CacheWrite: 20000, SourceOffset: 200, SourceIndex: 0},
-			{Model: "claude-sonnet-4", Input: 200000, SourceOffset: 300, SourceIndex: 0},
-			{Model: "claude-sonnet-4", Input: 25000, SourceOffset: 400, SourceIndex: 0},
+			{Model: "claude-sonnet-4", Input: 60000, CostSource: store.CostSourceRateTable, ModelNamePublic: true, SourceOffset: 100, SourceIndex: 0},
+			{Model: "claude-sonnet-4", Input: 100000, CacheRead: 60000, CacheWrite: 20000, CostSource: store.CostSourceRateTable, ModelNamePublic: true, SourceOffset: 200, SourceIndex: 0},
+			{Model: "claude-sonnet-4", Input: 200000, CostSource: store.CostSourceRateTable, ModelNamePublic: true, SourceOffset: 300, SourceIndex: 0},
+			{Model: "claude-sonnet-4", Input: 25000, CostSource: store.CostSourceRateTable, ModelNamePublic: true, SourceOffset: 400, SourceIndex: 0},
 		},
 	}
 	rebuildWith(t, st, sid, delta)

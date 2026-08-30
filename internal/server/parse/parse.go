@@ -1,12 +1,13 @@
 // Package parse is the server-side pipeline that turns a session's stored raw
 // bytes into the queryable projection. Parsing has exactly one shape: rebuild
 // the whole session. The per-agent reducer is fed the session's complete bytes,
-// each usage event is priced from the compiled-in table, and the store swaps
-// the folded projection in atomically (see store.RebuildSession). There is no
-// incremental parse, no serialized parser state, and no separate reparse
-// mechanism: a session that gained bytes, a session whose last parse failed,
-// and a corpus behind a new parser epoch are all "the projection is behind the
-// raw bytes", handled by the same rebuild.
+// each usage event is priced from the compiled-in table unless the reducer
+// already attached a provider-reported cost, and the store swaps the folded
+// projection in atomically (see store.RebuildSession). There is no incremental
+// parse, no serialized parser state, and no separate reparse mechanism: a
+// session that gained bytes, a session whose last parse failed, and a corpus
+// behind a new parser epoch are all "the projection is behind the raw bytes",
+// handled by the same rebuild.
 package parse
 
 import (
@@ -70,8 +71,9 @@ func (s *sessionReducer) Finish() store.ProjectionDelta {
 }
 
 // toProjectionDelta maps a parser delta to the store delta, pricing each usage
-// event from the compiled-in table. It does not accumulate session-level token or
-// cost counters: those are derived by the store's fold from the deduped set that
+// event from the compiled-in table unless the reducer already attached a
+// provider-reported cost. It does not accumulate session-level token or cost
+// counters: those are derived by the store's fold from the deduped set that
 // actually persists, so the rollups count exactly the surviving ledger set.
 func toProjectionDelta(p parser.Delta) store.ProjectionDelta {
 	d := store.ProjectionDelta{
@@ -177,19 +179,30 @@ func toProjectionDelta(p parser.Delta) store.ProjectionDelta {
 	}
 
 	for _, u := range p.Usage {
+		cost, known := pricing.Cost(u.Model, u.OccurredAt, u.Input, u.Output, u.CacheWrite, u.CacheRead, u.Reasoning)
+		costSource := store.CostSourceUnknown
+		if known {
+			costSource = store.CostSourceRateTable
+		}
+		if u.ReportedCostUSD != nil {
+			cost = *u.ReportedCostUSD
+			costSource = store.CostSourceProvider
+		}
 		pu := store.ProjUsage{
-			MessageOrdinal: u.MessageOrdinal,
-			Model:          u.Model,
-			Input:          u.Input,
-			Output:         u.Output,
-			CacheWrite:     u.CacheWrite,
-			CacheRead:      u.CacheRead,
-			Reasoning:      u.Reasoning,
-			CostUSD:        pricing.Cost(u.Model, u.OccurredAt, u.Input, u.Output, u.CacheWrite, u.CacheRead, u.Reasoning),
-			OccurredAt:     u.OccurredAt,
-			DedupKey:       u.DedupKey,
-			SourceOffset:   u.SourceOffset,
-			SourceIndex:    u.SourceIndex,
+			MessageOrdinal:  u.MessageOrdinal,
+			Model:           u.Model,
+			Input:           u.Input,
+			Output:          u.Output,
+			CacheWrite:      u.CacheWrite,
+			CacheRead:       u.CacheRead,
+			Reasoning:       u.Reasoning,
+			CostUSD:         cost,
+			CostSource:      costSource,
+			ModelNamePublic: pricing.ModelNamePublic(u.Model),
+			OccurredAt:      u.OccurredAt,
+			DedupKey:        u.DedupKey,
+			SourceOffset:    u.SourceOffset,
+			SourceIndex:     u.SourceIndex,
 		}
 		d.Usage = append(d.Usage, pu)
 	}

@@ -167,7 +167,7 @@ func (s *Store) AvgQualityScore(ctx context.Context, f AnalyticsFilter) (*float6
 }
 
 // avgQualityScoreFrom is AvgQualityScore over one querier, so the standalone pooled read and
-// the project card's reparse-gated snapshot (ProjectCardSnapshot) run the identical query on
+// the project card's reparse-gated snapshot (PublicProjectCardSnapshot) run the identical query on
 // the same MVCC snapshot as the card's token totals rather than a second pooled connection
 // that could straddle a reparse. It returns nil, not zero, when no scored session is in scope.
 func (s *Store) avgQualityScoreFrom(ctx context.Context, q querier, f AnalyticsFilter) (*float64, error) {

@@ -891,6 +891,7 @@ func TestInsightsRangesAgreeAcrossWindows(t *testing.T) {
 			Messages: []store.MessageDelta{{Ordinal: 0, Role: "user", Content: "go", Timestamp: at}},
 			Usage: []store.ProjUsage{{
 				Model: model, Input: 1000, Output: 100,
+				CostSource: store.CostSourceUnknown,
 				OccurredAt: at, DedupKey: src, SourceOffset: 10,
 			}},
 			Started: at,

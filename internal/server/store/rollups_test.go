@@ -46,10 +46,10 @@ func rollupsDelta() store.ProjectionDelta {
 			{CallUID: "b1", Status: "error"},
 		},
 		Usage: []store.ProjUsage{
-			{Model: "m1", Input: 100, Output: 10, CacheRead: 50, CacheWrite: 5, CostUSD: cost(0.5), OccurredAt: t0, DedupKey: "u1", SourceOffset: 10},
-			{Model: "m1", Input: 200, Output: 20, CostUSD: cost(1.0), OccurredAt: t0.Add(13 * time.Hour), DedupKey: "u2", SourceOffset: 20}, // same UTC day, folds
-			{Model: "m2", Input: 10, OccurredAt: t0.Add(24 * time.Hour), DedupKey: "u3", SourceOffset: 30},                                  // unknown rate: zero cost
-			{Model: "m1", Input: 7, CostUSD: cost(0.1), DedupKey: "u4", SourceOffset: 40},                                                   // undated: NULL day
+			{Model: "m1", Input: 100, Output: 10, CacheRead: 50, CacheWrite: 5, CostUSD: cost(0.5), CostSource: store.CostSourceRateTable, OccurredAt: t0, DedupKey: "u1", SourceOffset: 10},
+			{Model: "m1", Input: 200, Output: 20, CostUSD: cost(1.0), CostSource: store.CostSourceRateTable, OccurredAt: t0.Add(13 * time.Hour), DedupKey: "u2", SourceOffset: 20}, // same UTC day, folds
+			{Model: "m2", Input: 10, CostSource: store.CostSourceUnknown, OccurredAt: t0.Add(24 * time.Hour), DedupKey: "u3", SourceOffset: 30},                                    // unknown rate: zero cost
+			{Model: "m1", Input: 7, CostUSD: cost(0.1), CostSource: store.CostSourceRateTable, DedupKey: "u4", SourceOffset: 40},                                                   // undated: NULL day
 		},
 		Started: t0,
 		Ended:   t0.Add(3700 * time.Second),

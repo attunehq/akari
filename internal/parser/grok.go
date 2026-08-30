@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -104,6 +105,7 @@ func (r *reducer) reduceGrok(region []byte, base int64) error {
 				keys = append(keys, k)
 			}
 			sort.Strings(keys)
+			rows := make([]Usage, 0, len(keys))
 			for _, k := range keys {
 				mu := models[k]
 				// The combined input includes the cached reads and writes; split them
@@ -115,7 +117,7 @@ func (r *reducer) reduceGrok(region []byte, base int64) error {
 				if input < 0 {
 					input = 0
 				}
-				r.addUsage(Usage{
+				row := Usage{
 					MessageOrdinal: anchor,
 					Model:          grokModelID(k),
 					Input:          input,
@@ -124,7 +126,19 @@ func (r *reducer) reduceGrok(region []byte, base int64) error {
 					Reasoning:  int(mu.Get("reasoningTokens").Int()),
 					OccurredAt: ts,
 					DedupKey:   u.Get("prompt_id").String() + "/" + k,
-				}, offset)
+				}
+				if cost, ok := grokReportedCost(mu); ok {
+					row.ReportedCostUSD = grokCostPtr(cost)
+				}
+				rows = append(rows, row)
+			}
+			// Provider-reported costUsdTicks (1e-10 USD) wins over the rate table
+			// when present. Per-model ticks stay on their row; a top-level total
+			// fills only the unpriced remainder so the billed sum is not counted
+			// twice.
+			grokApplyTopLevelCost(usage, rows)
+			for _, row := range rows {
+				r.addUsage(row, offset)
 			}
 			r.addEvent(EventTurnEnd, map[string]any{
 				"duration_ms": usage.Get("apiDurationMs").Int(),
@@ -191,4 +205,83 @@ func grokTime(e gjson.Result) time.Time {
 // meta stamps on messages, so the suffix is stripped to keep one facet value.
 func grokModelID(k string) string {
 	return strings.TrimSuffix(k, "-build")
+}
+
+// grokTicksPerUSD is the Grok CLI's costUsdTicks scale: 10^10 ticks is one USD.
+const grokTicksPerUSD = 10_000_000_000.0
+
+// grokReportedCost converts a usage object's costUsdTicks into USD. Missing,
+// null, non-numeric, and negative values are invalid and fall through to the
+// rate-table estimate. Zero is a real reported $0.
+func grokReportedCost(v gjson.Result) (float64, bool) {
+	t := v.Get("costUsdTicks")
+	if t.Type != gjson.Number || t.Num < 0 {
+		return 0, false
+	}
+	return grokRoundUSD(t.Num / grokTicksPerUSD), true
+}
+
+// grokApplyTopLevelCost assigns a top-level costUsdTicks total across model
+// rows that have no per-row ticks. Rows that already carry reported cost keep
+// it. If their sum exceeds the top-level total, the payload contradicts itself;
+// the missing rows stay unreported and retain the rate-table fallback. Otherwise
+// the unassigned remainder is split across them by billed-token share. When every
+// unpriced row has zero tokens, the remainder splits evenly so the top-level sum
+// is still preserved.
+func grokApplyTopLevelCost(usage gjson.Result, rows []Usage) {
+	top, ok := grokReportedCost(usage)
+	if !ok {
+		return
+	}
+	var assigned float64
+	unpriced := make([]int, 0, len(rows))
+	for i := range rows {
+		if rows[i].ReportedCostUSD != nil {
+			assigned += *rows[i].ReportedCostUSD
+			continue
+		}
+		unpriced = append(unpriced, i)
+	}
+	if len(unpriced) == 0 {
+		return
+	}
+	remainder := top - assigned
+	if remainder < 0 {
+		return
+	}
+	shareTotal := 0
+	for _, i := range unpriced {
+		shareTotal += grokTokenShare(rows[i])
+	}
+	n := len(unpriced)
+	var allocated float64
+	for j, i := range unpriced {
+		var cost float64
+		switch {
+		case j == n-1:
+			cost = remainder - allocated
+			if cost < 0 {
+				cost = 0
+			}
+		case shareTotal > 0:
+			cost = remainder * float64(grokTokenShare(rows[i])) / float64(shareTotal)
+		default:
+			cost = remainder / float64(n)
+		}
+		rows[i].ReportedCostUSD = grokCostPtr(cost)
+		allocated += *rows[i].ReportedCostUSD
+	}
+}
+
+func grokTokenShare(u Usage) int {
+	return u.Input + u.Output + u.CacheWrite + u.CacheRead
+}
+
+func grokRoundUSD(v float64) float64 {
+	return math.Round(v*1e12) / 1e12
+}
+
+func grokCostPtr(v float64) *float64 {
+	v = grokRoundUSD(v)
+	return &v
 }

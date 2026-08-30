@@ -273,7 +273,7 @@ func (s *Server) computeAnalyticsSnapshot(ctx context.Context, key analyticsSnap
 	switch key.scope.kind {
 	case analyticsUserScope:
 		filter.UserIDs = []int64{key.scope.id}
-		analytics, err := s.Store.Analytics(ctx, filter)
+		analytics, err := s.Store.PublicAnalytics(ctx, filter)
 		if err != nil {
 			return analyticsPageSnapshot{}, err
 		}
@@ -287,7 +287,7 @@ func (s *Server) computeAnalyticsSnapshot(ctx context.Context, key analyticsSnap
 		// though the project's aggregate usage is published. The signed-in
 		// project API reads live analytics and keeps its Users breakdown.
 		filter.OmitUsers = true
-		analytics, insights, err := s.Store.ProjectOverviewSnapshot(ctx, filter)
+		analytics, insights, err := s.Store.PublicProjectOverviewSnapshot(ctx, filter)
 		if err != nil {
 			return analyticsPageSnapshot{}, err
 		}

@@ -540,14 +540,14 @@ func TestUsageTrendsWholeDayWindow(t *testing.T) {
 		Messages: []store.MessageDelta{{Ordinal: 0, Role: "user", Content: "go", Timestamp: day.Add(2 * time.Hour)}},
 		Usage: []store.ProjUsage{
 			// Before the mid-day Since, same UTC day: only the whole-day read counts it.
-			{Model: "m1", Input: 100, Output: 10, CostUSD: cost(1.0), OccurredAt: day.Add(2 * time.Hour), DedupKey: "w1", SourceOffset: 10},
+			{Model: "m1", Input: 100, Output: 10, CostUSD: cost(1.0), CostSource: store.CostSourceRateTable, OccurredAt: day.Add(2 * time.Hour), DedupKey: "w1", SourceOffset: 10},
 			// After Since, same day: both reads count it.
-			{Model: "m1", Input: 100, Output: 10, CostUSD: cost(2.0), OccurredAt: day.Add(20 * time.Hour), DedupKey: "w2", SourceOffset: 20},
+			{Model: "m1", Input: 100, Output: 10, CostUSD: cost(2.0), CostSource: store.CostSourceRateTable, OccurredAt: day.Add(20 * time.Hour), DedupKey: "w2", SourceOffset: 20},
 			// Undated: excluded from every dated figure regardless of window.
-			{Model: "m1", Input: 100, Output: 10, CostUSD: cost(5.0), DedupKey: "w3", SourceOffset: 30},
+			{Model: "m1", Input: 100, Output: 10, CostUSD: cost(5.0), CostSource: store.CostSourceRateTable, DedupKey: "w3", SourceOffset: 30},
 			// Next day, second model, token-bearing and unpriced: a fleet-mix band and the
 			// lower-bound flag.
-			{Model: "m2", Input: 50, OccurredAt: day.Add(34 * time.Hour), DedupKey: "w4", SourceOffset: 40},
+			{Model: "m2", Input: 50, CostSource: store.CostSourceUnknown, OccurredAt: day.Add(34 * time.Hour), DedupKey: "w4", SourceOffset: 40},
 		},
 		Started: day.Add(2 * time.Hour),
 		Ended:   day.Add(20 * time.Hour),
@@ -597,12 +597,14 @@ func TestFleetMixArrivalScansPastTheFold(t *testing.T) {
 	for i := 0; i < 7; i++ {
 		usage = append(usage, store.ProjUsage{
 			Model: fmt.Sprintf("incumbent-%d", i), Input: 1_000_000, Output: 100_000,
+			CostSource: store.CostSourceUnknown,
 			OccurredAt: day0.Add(time.Duration(i+1) * time.Hour),
 			DedupKey:   fmt.Sprintf("fold-inc-%d", i), SourceOffset: int64(10 + i),
 		})
 	}
 	usage = append(usage, store.ProjUsage{
 		Model: "newcomer", Input: 10, Output: 1,
+		CostSource: store.CostSourceUnknown,
 		OccurredAt: day0.Add(4*24*time.Hour + 2*time.Hour),
 		DedupKey:   "fold-new", SourceOffset: 50,
 	})
