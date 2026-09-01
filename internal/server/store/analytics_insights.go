@@ -51,8 +51,8 @@ func (i Insights) HasData() bool { return i.Quality.Sessions > 0 }
 // which the JSON payload serializes as empty series no chart mount reads.
 type InsightsPanels struct {
 	// FleetMix is the per-bucket token share by model (Trends.FleetMix) and the
-	// window-level cost × tokens scatter (Trends.ModelCost). Both read
-	// session_usage_daily over the same scoped window.
+	// window-level cost × tokens scatter (Trends.ModelCost). Both read the
+	// usage_daily union view over the same scoped window.
 	FleetMix bool
 	// Gallery is the per-session duration-by-cost scatter and its summary figures
 	// (Trends.Gallery).

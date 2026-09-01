@@ -720,3 +720,36 @@ func TestUnattachedUsageHealsOnTheNextCollection(t *testing.T) {
 	}
 	assertRollupMatchesLedger(t, st, sid, "after healing a stranded event")
 }
+
+// A token count above what the INT column holds must clamp, not wrap. A wrap would
+// store a negative that subtracts from the session's totals and the fleet's, and
+// nothing would repair it: a stored event is immutable and the watermark moves past
+// its instant, so no re-fetch ever revisits the row.
+func TestOversizedTokenCountsClampInsteadOfWrapping(t *testing.T) {
+	t.Parallel()
+	st := storetest.NewStore(t)
+	ctx := context.Background()
+
+	user, err := st.Register(ctx, "hedy", "h", "")
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	at := time.Date(2026, 8, 28, 8, 0, 0, 0, time.UTC)
+	e := providerEvent("huge", "conv-huge", "cursor-grok-4.6-high", at, 0, 0, 0, 1)
+	e.Input = 6442450944 // 1.5 * 2^32, which wraps negative when narrowed to int32
+	if _, err := st.RecordProviderUsage(ctx, user.ID, "cursor", "acct", []store.ProviderUsageEvent{e}); err != nil {
+		t.Fatalf("record oversized event: %v", err)
+	}
+
+	var in int
+	if err := st.Pool.QueryRow(ctx,
+		`SELECT input_tokens FROM provider_usage_events WHERE user_id = $1`, user.ID).Scan(&in); err != nil {
+		t.Fatalf("read stored event: %v", err)
+	}
+	if in < 0 {
+		t.Errorf("stored input tokens %d, want a clamp rather than a wrapped negative", in)
+	}
+	if in != math.MaxInt32 {
+		t.Errorf("stored input tokens %d, want %d", in, math.MaxInt32)
+	}
+}

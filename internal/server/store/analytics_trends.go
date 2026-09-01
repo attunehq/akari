@@ -309,8 +309,8 @@ func (s *Store) resolveTrendSince(ctx context.Context, q querier, f AnalyticsFil
 const maxFleetMixModels = 6
 
 // fleetMixFrom computes each model's token share per bucket. It sums total tokens (input +
-// output + cache read + cache write) per (bucket, model) over the session_usage_daily
-// rollup of scoped sessions, bucketing on the rollup's UTC day (when the usage happened,
+// output + cache read + cache write) per (bucket, model) over the usage_daily union
+// view of scoped sessions, bucketing on the rollup's UTC day (when the usage happened,
 // day-grained) with the whole-day window, then normalizes each bucket to percent and keeps
 // the busiest models with the tail folded into "other". A NULL day is undated usage, off
 // the time axis here as everywhere.
@@ -471,7 +471,7 @@ func (s *Store) fleetMixFrom(ctx context.Context, q querier, f AnalyticsFilter, 
 }
 
 // modelCostFrom sums each model's spend and billed-token volume over the window
-// from session_usage_daily. It is the window-level counterpart to fleetMixFrom
+// from the usage_daily union view. It is the window-level counterpart to fleetMixFrom
 // (share per bucket): one point per named model, no top-N fold, because folding
 // mixed price points into "other" would put an average on the scatter. An empty
 // model id becomes "unknown", matching fleet mix. Undated (NULL-day) rows stay
@@ -776,7 +776,7 @@ func (s *Store) contextHistogramFrom(ctx context.Context, q querier, f Analytics
 }
 
 // economicsFrom computes the per-bucket spend split by session outcome and the cache
-// savings, over the session_usage_daily rollup. Spend buckets on the rollup's UTC day
+// savings, over the usage_daily union view. Spend buckets on the rollup's UTC day
 // (when the money was spent, day-grained) and is gated to the session's outcome so
 // completed-vs-abandoned dollars reconcile with the outcome distribution; the outcome
 // joins in from session_signals at read time per the rollup grain rule. Cache savings is
@@ -867,7 +867,7 @@ func (s *Store) economicsFrom(ctx context.Context, q querier, f AnalyticsFilter,
 }
 
 // cacheSavingsTrend prices what caching saved and folds it into the grid. The
-// session_usage_daily rollup already sits at day-and-model granularity (exactly what
+// usage_daily union view already sits at day-and-model granularity (exactly what
 // pricing's date-effective windows need), so each (day, model) row group prices with
 // pricing.CacheSavings at that day's rate, then the day's savings sum into its trend
 // bucket, so a weekly bucket that spans a rate change still totals correctly.

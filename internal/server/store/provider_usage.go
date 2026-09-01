@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -244,13 +245,25 @@ func (c *providerUsageColumns) append(key string, e ProviderUsageEvent) {
 	c.conversationID = append(c.conversationID, sanitizeText(e.ConversationID))
 	c.model = append(c.model, sanitizeText(e.Model))
 	c.costSource = append(c.costSource, string(e.CostSource))
-	c.input = append(c.input, int32(e.Input))
-	c.output = append(c.output, int32(e.Output))
-	c.cacheWrite = append(c.cacheWrite, int32(e.CacheWrite))
-	c.cacheRead = append(c.cacheRead, int32(e.CacheRead))
+	c.input = append(c.input, tokenCount(e.Input))
+	c.output = append(c.output, tokenCount(e.Output))
+	c.cacheWrite = append(c.cacheWrite, tokenCount(e.CacheWrite))
+	c.cacheRead = append(c.cacheRead, tokenCount(e.CacheRead))
 	c.cost = append(c.cost, e.CostUSD)
 	c.modelPublic = append(c.modelPublic, e.ModelNamePublic)
 	c.occurredAt = append(c.occurredAt, e.OccurredAt)
+}
+
+// tokenCount narrows one reported token count to the INT column that stores it.
+//
+// The clamp is what makes the narrowing safe: a count above 2^31 would wrap to a
+// negative and subtract from the session's totals and the fleet's, and nothing
+// would ever repair it, because a stored event is immutable (ON CONFLICT DO
+// NOTHING) and the watermark moves past its instant. Real feeds report millions at
+// most, so this only ever fires on a vendor-side anomaly, which is exactly the case
+// that must not corrupt a total silently.
+func tokenCount(v int) int32 {
+	return int32(min(max(v, 0), math.MaxInt32))
 }
 
 // ProviderUsageWatermark returns the newest event instant stored for one vendor
