@@ -28,7 +28,8 @@ func TestRateAtDatedSnapshotsAndAliases(t *testing.T) {
 		{"claude-opus-4-7", 5, 25},
 		{"claude-opus-4-8", 5, 25},
 		{"claude-opus-5", 5, 25},
-		// Sonnet at $3/$15 from 3.5 through 4.6. Sonnet 5 is dated and tested apart.
+		// Sonnet at $3/$15 from 3.5 through 4.6, and Sonnet 5 at $2/$10.
+		{"claude-sonnet-5", 2, 10},
 		{"claude-sonnet-4-20250514", 3, 15},
 		{"claude-sonnet-4-0", 3, 15},
 		{"claude-sonnet-4-5-20250929", 3, 15},
@@ -47,27 +48,27 @@ func TestRateAtDatedSnapshotsAndAliases(t *testing.T) {
 	}
 }
 
-func TestSonnet5DatedWindows(t *testing.T) {
-	// Sonnet 5 launched at an introductory $2/$10 through 2026-08-31 and reverts to
-	// the $3/$15 sticker on 2026-09-01. The window selects on the event time, and the
-	// boundary is inclusive of the sticker window (From is the first sticker instant).
+func TestGPT56SolDatedWindows(t *testing.T) {
+	// GPT-5.6 Sol launched at $5/$30 and dropped to $4/$20 on 2026-08-21. The window
+	// selects on the event time, and the boundary is inclusive of the later window
+	// (From is its first instant).
 	cases := []struct {
 		name                       string
 		at                         time.Time
 		input, output, write, read float64
 	}{
-		{"intro launch day", time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC), 2, 10, 2.50, 0.20},
-		{"intro last instant", time.Date(2026, 8, 31, 23, 59, 59, 0, time.UTC), 2, 10, 2.50, 0.20},
-		{"sticker boundary", sonnet5Sticker, 3, 15, 3.75, 0.30},
-		{"sticker later", time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC), 3, 15, 3.75, 0.30},
+		{"launch price", time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC), 5, 30, 6.25, 0.50},
+		{"launch last instant", time.Date(2026, 8, 20, 23, 59, 59, 0, time.UTC), 5, 30, 6.25, 0.50},
+		{"reprice boundary", gpt56SolReprice, 4, 20, 5, 0.40},
+		{"reprice later", time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC), 4, 20, 5, 0.40},
 		// An undated event (zero time) selects the earliest window, the same choice
 		// parse-time pricing makes for a row with no OccurredAt.
-		{"undated selects intro", time.Time{}, 2, 10, 2.50, 0.20},
+		{"undated selects launch", time.Time{}, 5, 30, 6.25, 0.50},
 	}
 	for _, c := range cases {
-		r, ok := RateAt("claude-sonnet-5", c.at)
+		r, ok := RateAt("gpt-5.6-sol", c.at)
 		if !ok {
-			t.Errorf("%s: sonnet 5 should be priced", c.name)
+			t.Errorf("%s: gpt-5.6-sol should be priced", c.name)
 			continue
 		}
 		if r.Input != c.input || r.Output != c.output || r.CacheWrite != c.write || r.CacheRead != c.read {
@@ -356,15 +357,15 @@ func TestCost(t *testing.T) {
 }
 
 func TestCostSelectsDatedWindow(t *testing.T) {
-	// The same 1M input + 1M output on Sonnet 5 prices at the intro rate inside the
-	// promo window and the sticker rate after it.
-	intro, _ := Cost("claude-sonnet-5", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), 1_000_000, 1_000_000, 0, 0, 0)
-	if math.Abs(intro-12.0) > 1e-9 {
-		t.Errorf("intro cost = %v, want 12 (2 + 10)", intro)
+	// The same 1M input + 1M output on GPT-5.6 Sol prices at the launch rate before
+	// the 2026-08-21 reprice and at the reduced rate from the boundary on.
+	launch, _ := Cost("gpt-5.6-sol", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), 1_000_000, 1_000_000, 0, 0, 0)
+	if math.Abs(launch-35.0) > 1e-9 {
+		t.Errorf("launch cost = %v, want 35 (5 + 30)", launch)
 	}
-	sticker, _ := Cost("claude-sonnet-5", sonnet5Sticker, 1_000_000, 1_000_000, 0, 0, 0)
-	if math.Abs(sticker-18.0) > 1e-9 {
-		t.Errorf("sticker cost = %v, want 18 (3 + 15)", sticker)
+	reduced, _ := Cost("gpt-5.6-sol", gpt56SolReprice, 1_000_000, 1_000_000, 0, 0, 0)
+	if math.Abs(reduced-24.0) > 1e-9 {
+		t.Errorf("reduced cost = %v, want 24 (4 + 20)", reduced)
 	}
 }
 
@@ -405,14 +406,14 @@ func TestCacheSavings(t *testing.T) {
 }
 
 func TestCacheSavingsSelectsDatedWindow(t *testing.T) {
-	// Sonnet 5 intro (Input 2, CacheRead 0.20): 1M read saves 1 * (2 - 0.20) = 1.80.
-	// After the sticker (Input 3, CacheRead 0.30): 1M read saves 1 * (3 - 0.30) = 2.70.
-	intro := CacheSavings("claude-sonnet-5", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), 1_000_000, 0)
-	if math.Abs(intro-1.80) > 1e-9 {
-		t.Errorf("intro saving = %v, want 1.80", intro)
+	// GPT-5.6 Sol at launch (Input 5, CacheRead 0.50): 1M read saves 1 * (5 - 0.50) = 4.50.
+	// After the reprice (Input 4, CacheRead 0.40): 1M read saves 1 * (4 - 0.40) = 3.60.
+	launch := CacheSavings("gpt-5.6-sol", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), 1_000_000, 0)
+	if math.Abs(launch-4.50) > 1e-9 {
+		t.Errorf("launch saving = %v, want 4.50", launch)
 	}
-	sticker := CacheSavings("claude-sonnet-5", sonnet5Sticker, 1_000_000, 0)
-	if math.Abs(sticker-2.70) > 1e-9 {
-		t.Errorf("sticker saving = %v, want 2.70", sticker)
+	reduced := CacheSavings("gpt-5.6-sol", gpt56SolReprice, 1_000_000, 0)
+	if math.Abs(reduced-3.60) > 1e-9 {
+		t.Errorf("reduced saving = %v, want 3.60", reduced)
 	}
 }

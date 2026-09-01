@@ -50,14 +50,11 @@ type DatedRate struct {
 func flat(r Rate) []DatedRate { return []DatedRate{{Rate: r}} }
 
 var (
-	// sonnet5Sticker is the date Claude Sonnet 5's introductory $2/$10 promo ends and the
-	// $3/$15 sticker rate takes over. It is a UTC-midnight boundary so it aligns with the
-	// day buckets the aggregate cache-savings paths price against (see store/analytics_cache.go).
-	sonnet5Sticker = time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
-
 	// OpenAI reduced GPT-5.6 Luna and Terra pricing on July 30, then reduced Sol
-	// pricing on August 21. These UTC-midnight boundaries follow the effective dates
-	// in OpenAI's API changelog and preserve the launch prices for earlier usage.
+	// pricing on August 21. These boundaries follow the effective dates in OpenAI's
+	// API changelog and preserve the launch prices for earlier usage. Like every
+	// boundary here they sit at UTC midnight, so they align with the day buckets the
+	// aggregate cache-savings paths price against (see store/analytics_cache.go).
 	gpt56LunaTerraReprice = time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC)
 	gpt56SolReprice       = time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
 )
@@ -116,16 +113,14 @@ var table = map[string][]DatedRate{
 	"claude-opus-4-8": flat(Rate{Input: 5, Output: 25, CacheWrite: 6.25, CacheRead: 0.50}),
 	"claude-opus-5":   flat(Rate{Input: 5, Output: 25, CacheWrite: 6.25, CacheRead: 0.50}),
 
-	// Sonnet: $3/$15 from 3.5 through 5, except Sonnet 5's launch promo. Sonnet 5
-	// launched at an introductory $2/$10 per MTok through 2026-08-31 and reverts to
-	// the $3/$15 sticker on 2026-09-01, so it carries two windows; the cache rates
-	// track input at the usual Anthropic ratios (write 1.25x, read 0.1x). Everything
-	// else is a single flat window. "claude-sonnet-4" is Sonnet 4.0's dateless ID
-	// (claude-sonnet-4-20250514 normalizes to it).
-	"claude-sonnet-5": {
-		{Rate: Rate{Input: 2, Output: 10, CacheWrite: 2.50, CacheRead: 0.20}},
-		{From: sonnet5Sticker, Rate: Rate{Input: 3, Output: 15, CacheWrite: 3.75, CacheRead: 0.30}},
-	},
+	// Sonnet: $3/$15 from 3.5 through 4.6, and $2/$10 for Sonnet 5. Sonnet 5's
+	// $2/$10 was announced as an introductory rate through 2026-08-31, and Akari
+	// carried the scheduled 2026-09-01 revert to $3/$15 as a second window until
+	// Anthropic cancelled it: $2/$10 is now the standard price, so the model is a
+	// single flat window like every other Sonnet. Cache rates track input at the
+	// usual Anthropic ratios (write 1.25x, read 0.1x). "claude-sonnet-4" is Sonnet
+	// 4.0's dateless ID (claude-sonnet-4-20250514 normalizes to it).
+	"claude-sonnet-5":   flat(Rate{Input: 2, Output: 10, CacheWrite: 2.50, CacheRead: 0.20}),
 	"claude-sonnet-4":   flat(Rate{Input: 3, Output: 15, CacheWrite: 3.75, CacheRead: 0.30}),
 	"claude-sonnet-4-0": flat(Rate{Input: 3, Output: 15, CacheWrite: 3.75, CacheRead: 0.30}),
 	"claude-sonnet-4-5": flat(Rate{Input: 3, Output: 15, CacheWrite: 3.75, CacheRead: 0.30}),

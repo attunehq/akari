@@ -375,4 +375,14 @@ package parse
 // change, and no golden fixture uses a 5.1 model, so the projection delta for the
 // fixtures is byte-for-byte identical and the golden snapshots do not move; the
 // bump is the reprice signal and stands on its own.
-const Epoch = 30
+//
+// Epoch 30 -> 31: drop claude-sonnet-5's second rate window. The $2/$10 rate was
+// announced as introductory through 2026-08-31, and Epoch 11 encoded the scheduled
+// 2026-09-01 revert to $3/$15 as a dated window; Anthropic has since cancelled that
+// increase and made $2/$10 the standard price, so the window would have overpriced
+// every Sonnet 5 token from 2026-09-01 by 50%. The model is now a single flat
+// window and Epoch 11's second window is gone, which also re-prices the Sonnet 5
+// usage this epoch's own deploy window may already have stored at the sticker rate.
+// A pricing change, not a reducer-shape change, and no golden fixture uses Sonnet 5,
+// so the fixtures do not move; the bump is the reprice signal and stands on its own.
+const Epoch = 31

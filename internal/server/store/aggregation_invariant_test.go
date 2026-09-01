@@ -334,28 +334,28 @@ func TestCacheSavingsRollupMatchesRecompute(t *testing.T) {
 	}
 }
 
-// datedCacheSavingsUsage is a Sonnet 5 session split across the 2026-09-01 rate boundary: a
-// cache read in the introductory $2/$10 window (input 2, cache read 0.20, so 1M reads save
-// 1.80) and an equal read in the $3/$15 sticker window (input 3, cache read 0.30, so 1M reads
-// save 2.70). The two windows share one model ID, so a fold that ignored the event time would
-// price both rows at one rate and diverge from the recompute.
+// datedCacheSavingsUsage is a GPT-5.6 Sol session split across the 2026-08-21 rate boundary: a
+// cache read in the launch $5/$30 window (input 5, cache read 0.50, so 1M reads save 4.50) and
+// an equal read in the reduced $4/$20 window (input 4, cache read 0.40, so 1M reads save 3.60).
+// The two windows share one model ID, so a fold that ignored the event time would price both
+// rows at one rate and diverge from the recompute.
 func datedCacheSavingsUsage() []usageRow {
-	intro := time.Date(2026, 7, 15, 10, 0, 0, 0, time.UTC)    // inside the $2/$10 promo
-	sticker := time.Date(2026, 10, 15, 10, 0, 0, 0, time.UTC) // after the $3/$15 revert
+	launch := time.Date(2026, 7, 15, 10, 0, 0, 0, time.UTC)   // before the reprice
+	reduced := time.Date(2026, 10, 15, 10, 0, 0, 0, time.UTC) // after it
 	return []usageRow{
-		{Model: "claude-sonnet-5", In: 0, Out: 0, CR: 1_000_000, CW: 0, At: intro, DedupKey: "dw_intro", SourceOffset: 10},
-		{Model: "claude-sonnet-5", In: 0, Out: 0, CR: 1_000_000, CW: 0, At: sticker, DedupKey: "dw_sticker", SourceOffset: 20},
+		{Model: "gpt-5.6-sol", In: 0, Out: 0, CR: 1_000_000, CW: 0, At: launch, DedupKey: "dw_launch", SourceOffset: 10},
+		{Model: "gpt-5.6-sol", In: 0, Out: 0, CR: 1_000_000, CW: 0, At: reduced, DedupKey: "dw_reduced", SourceOffset: 20},
 	}
 }
 
 // TestCacheSavingsRollupMatchesRecomputeAcrossDatedWindow is the end-to-end guard for
-// date-effective pricing on the savings rollup. It drives a Sonnet 5 session with cache reads
-// on both sides of the 2026-09-01 boundary through the rebuild fold (writeUsage, which
+// date-effective pricing on the savings rollup. It drives a GPT-5.6 Sol session with cache reads
+// on both sides of the 2026-08-21 boundary through the rebuild fold (writeUsage, which
 // prices each row at its exact OccurredAt) and reconciles sessions.total_cache_savings_usd
 // against SessionCacheStats (the per-(model, UTC day) recompute), after a first rebuild and
 // again after a repeat rebuild. The two price on different bases (exact instant versus
 // UTC-day bucket) and must still agree, which they do only because the rate boundary is
-// UTC-midnight aligned; the windowed total (4.50 = 1.80 intro + 2.70 sticker) is pinned
+// UTC-midnight aligned; the windowed total (8.10 = 4.50 launch + 3.60 reduced) is pinned
 // directly so a fold that collapsed the two windows to one rate would fail here rather than
 // reconcile with a matching but wrong recompute.
 func TestCacheSavingsRollupMatchesRecomputeAcrossDatedWindow(t *testing.T) {
@@ -373,9 +373,9 @@ func TestCacheSavingsRollupMatchesRecomputeAcrossDatedWindow(t *testing.T) {
 	}
 	msgs := []store.MessageDelta{{Ordinal: 0, Role: "user", Content: "go"}}
 
-	// The intro read saves 1M*(2-0.20)=1.80; the sticker read saves 1M*(3-0.30)=2.70; total 4.50.
-	// A flat single-window price would give 3.60 (both intro) or 5.40 (both sticker).
-	const wantSaving = 1.80 + 2.70
+	// The launch read saves 1M*(5-0.50)=4.50; the reduced read saves 1M*(4-0.40)=3.60; total 8.10.
+	// A flat single-window price would give 9.00 (both launch) or 7.20 (both reduced).
+	const wantSaving = 4.50 + 3.60
 
 	reconcile := func(t *testing.T, id int64, when string) {
 		t.Helper()
@@ -391,11 +391,11 @@ func TestCacheSavingsRollupMatchesRecomputeAcrossDatedWindow(t *testing.T) {
 			t.Errorf("%s: session %d rollup savings %v != recompute %v", when, id, d.TotalCacheSavingsUSD, recompute.SavingsUSD)
 		}
 		if math.Abs(d.TotalCacheSavingsUSD-wantSaving) > 1e-9 {
-			t.Errorf("%s: session %d rollup savings %v != windowed want %v (1.80 intro + 2.70 sticker)", when, id, d.TotalCacheSavingsUSD, wantSaving)
+			t.Errorf("%s: session %d rollup savings %v != windowed want %v (4.50 launch + 3.60 reduced)", when, id, d.TotalCacheSavingsUSD, wantSaving)
 		}
 	}
 
-	s, delta := ingestSession(t, st, user.ID, proj, "claude", "s-windowed", msgs, datedCacheSavingsUsage())
+	s, delta := ingestSession(t, st, user.ID, proj, "codex", "s-windowed", msgs, datedCacheSavingsUsage())
 	reconcile(t, s, "after ingest")
 
 	rebuildWith(t, st, s, delta)

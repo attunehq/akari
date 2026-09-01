@@ -57,8 +57,8 @@ func TestCacheStats(t *testing.T) {
 }
 
 // TestCacheStatsDatedWindowSplitsSaving pins the aggregate cache paths across a dated rate
-// change. Sonnet 5's introductory $2/$10 rate (cache read 0.20) reverts to the $3/$15 sticker
-// (cache read 0.30) on 2026-09-01, so cached reads spent on either side save a different gap.
+// change. GPT-5.6 Sol's launch $5/$30 rate (cache read 0.50) drops to $4/$20 (cache read 0.40)
+// on 2026-08-21, so cached reads spent on either side save a different gap.
 // The aggregate groups by (model, UTC day), and each UTC day sits inside one rate window, so
 // the scoped and per-session paths both price each side at its own rate rather than collapsing
 // the two into one flat rate, and the two paths agree with the hand-computed split.
@@ -76,23 +76,23 @@ func TestCacheStatsDatedWindowSplitsSaving(t *testing.T) {
 		t.Fatalf("project: %v", err)
 	}
 
-	s := seedSessionWithStats(t, st, admin.ID, proj, "claude", "s", 0, 0, 0)
-	intro := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)    // inside the $2/$10 promo
-	sticker := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC) // after the $3/$15 revert
-	seedUsageCacheAt(t, st, s, "claude-sonnet-5", 0, 0, 1_000_000, 0, intro, "intro")
-	seedUsageCacheAt(t, st, s, "claude-sonnet-5", 0, 0, 1_000_000, 0, sticker, "sticker")
+	s := seedSessionWithStats(t, st, admin.ID, proj, "codex", "s", 0, 0, 0)
+	launch := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)   // before the 2026-08-21 reprice
+	reduced := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC) // after it
+	seedUsageCacheAt(t, st, s, "gpt-5.6-sol", 0, 0, 1_000_000, 0, launch, "launch")
+	seedUsageCacheAt(t, st, s, "gpt-5.6-sol", 0, 0, 1_000_000, 0, reduced, "reduced")
 
-	// Intro read saves 1M*(2-0.20)=1.80; sticker read saves 1M*(3-0.30)=2.70; total 4.50.
-	// A flat single-window price would give 3.60 (both intro) or 5.40 (both sticker), so
-	// 4.50 proves each side was priced at its own window.
-	const want = 1.80 + 2.70
+	// Launch read saves 1M*(5-0.50)=4.50; reduced read saves 1M*(4-0.40)=3.60; total 8.10.
+	// A flat single-window price would give 9.00 (both launch) or 7.20 (both reduced), so
+	// 8.10 proves each side was priced at its own window.
+	const want = 4.50 + 3.60
 
 	scoped, err := st.CacheStats(ctx, store.AnalyticsFilter{ProjectID: proj})
 	if err != nil {
 		t.Fatalf("cache stats: %v", err)
 	}
 	if math.Abs(scoped.SavingsUSD-want) > 1e-9 {
-		t.Errorf("scoped savings = %v, want %v (1.80 intro + 2.70 sticker)", scoped.SavingsUSD, want)
+		t.Errorf("scoped savings = %v, want %v (4.50 launch + 3.60 reduced)", scoped.SavingsUSD, want)
 	}
 
 	// The per-session recompute is the oracle the parse-time rollup reconciles against, so it
