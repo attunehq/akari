@@ -305,3 +305,35 @@ func TestFetchRejectsABoundaryRepeatLargerThanTheSurplus(t *testing.T) {
 		t.Fatal("fetch accepted a boundary repeat larger than the reported surplus, want an error")
 	}
 }
+
+// The event key's ordinal must survive a resume, which is the property the whole
+// dedup rests on. It survives because identical rows share an instant (the
+// fingerprint hashes occurred_at) and the window is a time range, so a resumed walk
+// admits a fingerprint group whole or not at all and never renumbers part of one.
+func TestIdenticalRowsKeepTheirKeysAcrossAResume(t *testing.T) {
+	const body = `{"timestamp":"1788230654170","model":"m","conversationId":"c","tokenUsage":{"inputTokens":1,"outputTokens":1,"totalCents":5}}`
+	// A full-history walk sees both identical rows.
+	full := &feedServer{pages: []string{page(2, []string{body, body})}}
+	first, err := fetchFrom(t, full.start(t), time.Time{})
+	if err != nil {
+		t.Fatalf("full walk: %v", err)
+	}
+
+	// A later collection resumes from a watermark at that same instant. The window
+	// still contains the whole group, so the keys come back identical.
+	at := time.UnixMilli(1788230654170).UTC()
+	resumed := &feedServer{pages: []string{page(2, []string{body, body})}}
+	second, err := fetchFrom(t, resumed.start(t), at.Add(-time.Second))
+	if err != nil {
+		t.Fatalf("resumed walk: %v", err)
+	}
+	if len(first) != 2 || len(second) != 2 {
+		t.Fatalf("walks returned %d and %d events, want 2 each", len(first), len(second))
+	}
+	for i := range first {
+		if first[i].EventKey != second[i].EventKey {
+			t.Errorf("event %d keyed %s on a full walk and %s on a resume; a resumed group must keep its ordinals or the server drops or doubles a charge",
+				i, first[i].EventKey, second[i].EventKey)
+		}
+	}
+}

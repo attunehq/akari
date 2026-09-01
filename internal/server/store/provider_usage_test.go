@@ -651,3 +651,72 @@ func TestRecollectingAFoldedWindowLeavesNothingDue(t *testing.T) {
 	}
 	assertDue(t, st, sid, true, "after a genuinely new event arrived")
 }
+
+// TestUnattachedUsageHealsOnTheNextCollection covers the interleaving neither the
+// insert nor the announce can see on its own.
+//
+// A collection and an announce can each read a snapshot that predates the other's
+// commit: the insert resolves the conversation to no session because the session is
+// not visible yet, and the announce's claim of still-unattached rows finds nothing
+// because the event is not visible yet. Neither rechecks, so without a sweep the
+// spend would stay account-grain forever, since a later collection re-reporting the
+// event hits ON CONFLICT DO NOTHING and never re-resolves it. Storing the event
+// before the session exists reproduces the state that interleaving leaves behind.
+func TestUnattachedUsageHealsOnTheNextCollection(t *testing.T) {
+	t.Parallel()
+	st := storetest.NewStore(t)
+	ctx := context.Background()
+
+	user, err := st.Register(ctx, "katherine", "h", "")
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	proj, err := st.UpsertProject(ctx, "github.com/katherine/almanac", "github.com", "katherine", "almanac", "almanac", "remote")
+	if err != nil {
+		t.Fatalf("project: %v", err)
+	}
+
+	const conversation = "9f2c14ab-77de-4e51-a0b3-6c5182ee7d19"
+	at := time.Date(2026, 8, 26, 15, 0, 0, 0, time.UTC)
+	batch := []store.ProviderUsageEvent{
+		providerEvent("evt-a", conversation, "cursor-grok-4.6-high", at, 40, 50, 60, 4.5),
+	}
+	if _, err := st.RecordProviderUsage(ctx, user.ID, "cursor", "acct", batch); err != nil {
+		t.Fatalf("collection before the session exists: %v", err)
+	}
+	assertUnattachedCount(t, st, user.ID, 1, "before the session exists")
+
+	// The session lands, but through a path that does not claim the row: this is the
+	// state the lost-wakeup interleaving leaves, not the ordinary announce.
+	msgs := []store.MessageDelta{{Ordinal: 0, Role: "user", Content: "chart the occultation"}}
+	sid := ingestOnly(t, st, user.ID, proj, "cursor", conversation, msgs, nil)
+	if _, err := st.Pool.Exec(ctx,
+		`UPDATE provider_usage_events SET session_id = NULL WHERE user_id = $1`, user.ID); err != nil {
+		t.Fatalf("reset the attachment to reproduce the race: %v", err)
+	}
+	if _, err := st.Pool.Exec(ctx,
+		`UPDATE session_raw SET usage_dirty = false WHERE session_id = $1`, sid); err != nil {
+		t.Fatalf("clear the dirty flag: %v", err)
+	}
+
+	// The next ordinary collection re-reports the same event, which inserts nothing.
+	// The sweep is what has to notice the session is now there.
+	res, err := st.RecordProviderUsage(ctx, user.ID, "cursor", "acct", batch)
+	if err != nil {
+		t.Fatalf("healing collection: %v", err)
+	}
+	if res.Inserted != 0 {
+		t.Errorf("healing collection inserted %d events, want 0", res.Inserted)
+	}
+	if res.SessionsMarked != 1 {
+		t.Errorf("healing collection marked %d sessions, want 1", res.SessionsMarked)
+	}
+	assertUnattachedCount(t, st, user.ID, 0, "after the healing collection")
+	assertDue(t, st, sid, true, "after the sweep attached the stranded event")
+
+	rebuildWith(t, st, sid, store.ProjectionDelta{Messages: msgs})
+	if _, _, _, _, cost, rows := ledgerTotals(t, st, sid); rows != 1 || math.Abs(cost-4.5) > 1e-9 {
+		t.Errorf("ledger has %d rows costing %v, want 1 costing 4.5", rows, cost)
+	}
+	assertRollupMatchesLedger(t, st, sid, "after healing a stranded event")
+}

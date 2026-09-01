@@ -144,10 +144,18 @@ func (s *Store) RecordProviderUsage(ctx context.Context, userID int64, provider,
 			   ON CONFLICT (user_id, provider, account_id, event_key) DO NOTHING
 			   RETURNING session_id
 			 ), marked AS (
+			   -- No NOT usage_dirty guard. A row that fails a predicate is not locked,
+			   -- so guarding here would let this mark no-op against a rebuild that is
+			   -- in flight and holding session_raw FOR UPDATE: the rebuild would clear
+			   -- the flag without folding an event that committed after it read, and
+			   -- nothing would re-mark it (the re-reported event hits ON CONFLICT DO
+			   -- NOTHING and returns no row). Unguarded, the UPDATE always takes the
+			   -- lock, so it serializes behind that rebuild and re-marks after it
+			   -- commits. The set is already narrow: only sessions of rows this
+			   -- statement actually inserted.
 			   UPDATE session_raw sr
 			      SET usage_dirty = true
-			    WHERE NOT sr.usage_dirty
-			      AND sr.session_id IN (SELECT session_id FROM inserted WHERE session_id IS NOT NULL)
+			    WHERE sr.session_id IN (SELECT session_id FROM inserted WHERE session_id IS NOT NULL)
 			   RETURNING 1
 			 )
 			 SELECT (SELECT count(*) FROM inserted), (SELECT count(*) FROM marked)`,
@@ -158,6 +166,46 @@ func (s *Store) RecordProviderUsage(ctx context.Context, userID int64, provider,
 		if err != nil {
 			return fmt.Errorf("insert provider usage events: %w", err)
 		}
+
+		// Then sweep any usage still unattached whose session is now visible, and
+		// mark whatever that moves.
+		//
+		// This is a separate statement on purpose: READ COMMITTED gives it a fresh
+		// snapshot, so it sees sessions the insert above could not. That closes the
+		// interleaving where a collection and an announce miss each other, each
+		// reading a snapshot that predates the other's commit: the insert resolves to
+		// NULL because the session is not visible yet, the announce's claim of
+		// still-unattached rows finds nothing because the event is not visible yet,
+		// and neither rechecks. Without a sweep that spend would stay account-grain
+		// forever, since a later collection re-reporting the event hits ON CONFLICT DO
+		// NOTHING and never re-resolves it.
+		//
+		// Sweeping every unattached row rather than only this batch's makes the
+		// attachment self-healing against any cause, not just that one race. It is a
+		// hash join of one user's sessions against their unattached rows, once per
+		// collection, and it normally moves nothing, so it marks nothing and costs no
+		// rebuild.
+		var sweptMarks int
+		if err := tx.QueryRow(ctx,
+			`WITH swept AS (
+			   UPDATE provider_usage_events p
+			      SET session_id = s.id
+			     FROM sessions s
+			    WHERE p.user_id = $1 AND p.provider = $2 AND p.session_id IS NULL
+			      AND s.user_id = $1 AND s.agent = $2
+			      AND `+sessionConversationID+` = p.conversation_id
+			   RETURNING s.id AS session_id
+			 ), marked AS (
+			   UPDATE session_raw sr
+			      SET usage_dirty = true
+			    WHERE sr.session_id IN (SELECT session_id FROM swept)
+			   RETURNING 1
+			 )
+			 SELECT (SELECT count(*) FROM marked)`,
+			userID, provider).Scan(&sweptMarks); err != nil {
+			return fmt.Errorf("resolve unattached provider usage: %w", err)
+		}
+		out.SessionsMarked += sweptMarks
 		return nil
 	})
 	if err != nil {

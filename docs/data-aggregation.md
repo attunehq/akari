@@ -125,7 +125,17 @@ happen after a session's last rebuild (the vendor feed and the transcript arrive
 independently, in either order), attaching or newly claiming rows sets
 `session_raw.usage_dirty`, which is a fourth reason a session is due
 (`internal/server/store/due.go`) alongside a moved epoch, moved bytes, and a due
-retry.
+retry. The flag means "usage arrived that no rebuild has folded", so it is set
+only for rows a write actually stored or moved. Setting it for every session that
+merely holds attached usage would re-flag sessions the rebuild already folded, and
+since the rebuild clears the flag while the rows stay attached, each collection
+would set it again: an unbounded refold of the Cursor corpus, once per pass.
+
+Attachment is also self-healing. Each collection sweeps any still-unattached row
+whose session is now visible, because a collection and an announce can each read a
+snapshot that predates the other's commit and so miss each other; a later
+collection re-reporting the event cannot fix it on its own, since the event dedups
+and never re-resolves. The sweep normally moves nothing and so costs no rebuild.
 
 The join is on the conversation id, not on `source_session_id` directly: a Cursor
 transcript carries no id of its own, so akari derives one from the file's location

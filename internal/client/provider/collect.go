@@ -41,11 +41,17 @@ type uploader interface {
 }
 
 // watermarkOverlap is how far before the server's newest stored event a collection
-// restarts. The feed windows on a millisecond instant, so resuming exactly at the
-// watermark risks the boundary event falling on the wrong side of the comparison.
-// Re-fetching a second of already-stored events costs nothing (the server dedups on
-// the event key) and losing one costs a permanently missing charge.
-const watermarkOverlap = time.Second
+// restarts. Re-fetching already-stored events costs nothing (the server dedups on
+// the event key) and losing one costs a permanently missing charge, so the window
+// is deliberately far wider than the boundary instant it has to cover.
+//
+// The watermark is the newest occurred_at akari holds, but the feed is a billing
+// pipeline: it can publish an event whose occurred_at is hours old. If a collection
+// runs in between, the watermark has already advanced past that instant and a
+// window that started at it would never see the late row again, losing the charge
+// silently and permanently. Two days is the bound on how late a publication akari
+// still catches, and it costs about one extra page on an ordinary account.
+const watermarkOverlap = 48 * time.Hour
 
 // Collect runs every enabled vendor collection for this client and returns one
 // result per vendor.

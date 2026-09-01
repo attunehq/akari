@@ -312,6 +312,15 @@ func normalize(raw []feedEvent) []Event {
 // within the walk breaks the tie, and it is stable across machines and re-fetches
 // because the feed returns a window in a fixed order: the same event lands at the
 // same ordinal every time, which is exactly what the server's deduplication needs.
+// The ordinal is stable across resumed windows, which is what makes the key safe
+// to dedup on. It is stable because a fingerprint group cannot be split across two
+// walks: eventFingerprint hashes occurred_at, so every member of a group shares one
+// instant, and the fetch window is a half-open time range, so it admits all of that
+// instant's rows or none of them. The walk is all-or-nothing for the same reason
+// (page exhaustion and a short or unexplained surplus both error rather than
+// truncate), so nothing else can split a group either. Change either property and
+// this numbering stops being a stable identity: a group split across two windows
+// would renumber from zero and collide with keys already stored.
 func withEventKeys(events []Event) []Event {
 	seen := make(map[string]int, len(events))
 	for i := range events {
