@@ -80,7 +80,19 @@ func runWatch(ctx context.Context, args []string) (runErr error) {
 	// settle window elapses, so it never finalizes eagerly.
 	sync := syncer.New(resolver, client, machine, false)
 
-	w := watch.New(roots, sync.SyncOne, watch.Options{Excludes: cfg.Excludes, Logf: logf})
+	// Vendor usage collection shares the watch loop rather than running as its own
+	// daemon: it needs the same config, the same upload client, and the same
+	// lifetime, and it is one slow ticker rather than a second process to supervise.
+	collect := func(c context.Context) {
+		if err := collectProviderUsage(c, cfg, client, home); err != nil {
+			logf("akari watch: %v", err)
+		}
+	}
+	w := watch.New(roots, sync.SyncOne, watch.Options{
+		Excludes:     cfg.Excludes,
+		CollectUsage: collect,
+		Logf:         logf,
+	})
 	logf("akari watch: watching %d root(s); press Ctrl-C to stop", len(roots))
 
 	if err := w.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {

@@ -50,7 +50,29 @@ type Client struct {
 	// `**/tmp/**` ignores any path with a `tmp` segment. Empty means discover
 	// everything.
 	Excludes []string `toml:"excludes"`
+	// Cursor configures collection of Cursor's account-wide usage, which is the
+	// only place a Cursor session's model, tokens, and cost are recorded at all.
+	Cursor CursorProvider `toml:"cursor"`
 }
+
+// CursorProvider configures the cursor.com usage collection.
+//
+// Collection is on by default and costs nothing on a machine with no Cursor
+// install: the credential simply does not resolve and the collection is skipped.
+type CursorProvider struct {
+	// Disabled turns the collection off. It is spelled negatively so the zero value
+	// (an existing config file with no [cursor] table) keeps collection on, which is
+	// what a user who installed akari to see their usage wants.
+	Disabled bool `toml:"disabled"`
+	// Cookie is a cursor.com `Cookie:` header to authenticate with instead of the
+	// signed-in Cursor.app session. Setting it pins collection to that account: akari
+	// never falls back to a local token behind an explicit credential, because that
+	// would silently collect a different account's usage.
+	Cookie string `toml:"cookie"`
+}
+
+// Enabled reports whether the Cursor collection should run.
+func (c CursorProvider) Enabled() bool { return !c.Disabled }
 
 // ResolveMachine determines the machine identity a client reports for its
 // sessions. Ephemeral and containerized hosts (CI jobs, autoscaled workers,

@@ -145,6 +145,15 @@ func runSync(ctx context.Context, args []string) error {
 	sum, interrupted := syncAll(work, deadline, files, opts.concurrency, run)
 	sum.discoveryFailed = discover.ErrorCount(discoveryErr)
 
+	// Vendor usage collection runs after the transcripts land, so a Cursor session
+	// synced by this same run is already announced when its billing events arrive
+	// and resolves immediately instead of waiting for the next collection. A dry run
+	// reports what it would do and sends nothing.
+	var providerErr error
+	if !opts.dryRun {
+		providerErr = collectProviderUsage(work, cfg, client, home)
+	}
+
 	printSummary(len(files), sum, opts.dryRun)
 	if interrupted {
 		// ctx (the bare shutdown context) carries Ctrl-C; if it is still live the
@@ -162,7 +171,7 @@ func runSync(ctx context.Context, args []string) error {
 	if discoveryErr != nil {
 		discoveryErr = fmt.Errorf("discover sessions: %w", discoveryErr)
 	}
-	return errors.Join(discoveryErr, uploadErr)
+	return errors.Join(discoveryErr, uploadErr, providerErr)
 }
 
 // outcome carries one file's finished work from a sync goroutine to the single

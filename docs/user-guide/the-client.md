@@ -273,6 +273,11 @@ follow_root_link = true
 
 # Skip paths matching these globs during discovery, for sync and watch alike.
 excludes = ["**/scratch/**", "*.private.jsonl"]
+
+# Cursor usage collection is on by default; turn it off, or pin it to a
+# particular account with a cookie copied from cursor.com.
+[cursor]
+disabled = true
 ```
 
 The keys:
@@ -298,6 +303,12 @@ The keys:
   `sync` and `watch`. Patterns match the full path with `/` separators;
   `**/scratch/**` ignores any path with a `scratch` segment, `*.private.jsonl`
   excludes by suffix. Empty discovers everything.
+- **`cursor`** (optional): the Cursor usage collection described below.
+  `disabled = true` turns it off. `cookie = "..."` supplies a
+  `WorkosCursorSessionToken` cookie header to use instead of the credential
+  Cursor.app holds locally; setting it pins collection to that account and stops
+  the local fallback, so a wrong value fails loudly rather than quietly collecting
+  someone else's usage.
 
 ## Environment variables
 
@@ -387,6 +398,34 @@ directory and session id, then resolves that directory's git `origin` remote to 
 project key. A file whose header cannot be read is skipped entirely; a directory
 with no usable remote produces a standalone or orphaned project rather than being
 dropped ([Glossary](./glossary.md#projects)).
+
+## Cursor usage collection
+
+Cursor transcripts do not record which model ran or what a request cost, and much
+of a Cursor subscription's spend never produces a transcript at all: cloud agents,
+IDE chats, and the Grok bot all bill without leaving a file on your machine. So
+alongside transcript sync, the client reads Cursor's own usage feed and uploads it,
+which is what lets Cursor spend and Cursor models appear on the overview and the
+Insights charts beside every other agent.
+
+It runs after each `sync` pass, and once at startup then every 30 minutes under
+`watch`. Each run asks the server where the account's records end and fetches only
+from there, so the first run collects the account's history and later runs collect
+a short window. `--dry-run` skips it, as it skips every other upload.
+
+The credential is the one Cursor.app already holds: the client reads its access
+token out of the app's local state database, read-only, and never refreshes or
+writes it. A machine with no Cursor install, or one signed out, collects nothing
+and says so, which is the normal state for most machines in a fleet. Only one
+machine needs to collect an account: the records are keyed per account and per
+event, so a second machine collecting the same window adds nothing and duplicates
+nothing.
+
+Spend is recorded at Cursor's reported token cost, not at what the request deducted
+from your plan, so a Cursor request and a Claude request on the same chart are the
+same kind of number. Usage whose conversation matches a session akari has synced is
+attributed to that session; everything else counts fleet-wide only, since akari has
+no way to know which project a cloud agent ran in.
 
 ## How the upload works
 

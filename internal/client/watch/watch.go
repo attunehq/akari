@@ -32,11 +32,18 @@ type Options struct {
 	Poll            time.Duration // mtime/size re-stat interval for the polling fallback
 	Discover        time.Duration // interval to re-walk the roots for newly created files
 	Rescan          time.Duration // rediscovery safety net interval
+	Usage           time.Duration // vendor account-usage collection interval
 	PressureBackoff time.Duration // pause after a network, server, or process-capacity failure
 	// Excludes are glob patterns of paths to skip (see discover.Excluder). They
 	// keep an ignored location out of discovery, the poll, and event handling.
 	Excludes []string
-	Logf     func(string, ...any)
+	// CollectUsage collects vendor-reported account usage (see client/provider). It
+	// runs on its own slow ticker rather than alongside a file sync because what it
+	// fetches is account-wide: no file changing on this machine makes it due, and no
+	// machine having the file makes it undue. Nil disables the ticker entirely, which
+	// is what the watcher's own tests use.
+	CollectUsage func(context.Context)
+	Logf         func(string, ...any)
 }
 
 func (o Options) withDefaults() Options {
@@ -51,6 +58,14 @@ func (o Options) withDefaults() Options {
 	}
 	if o.Rescan <= 0 {
 		o.Rescan = 15 * time.Minute
+	}
+	// Vendor usage is billing data, settled on the vendor's side minutes after the
+	// fact and read by nobody in real time, so it collects on a far slower cadence
+	// than anything file-driven. Each pass is a handful of requests against one
+	// account, so a long interval costs a user nothing but keeps akari from polling
+	// a third party every few seconds.
+	if o.Usage <= 0 {
+		o.Usage = 30 * time.Minute
 	}
 	if o.PressureBackoff <= 0 {
 		o.PressureBackoff = 30 * time.Second
@@ -140,6 +155,19 @@ func (w *Watcher) run(ctx context.Context, fsw *fsnotify.Watcher) error {
 	defer disco.Stop()
 	defer rescan.Stop()
 
+	// A nil collector leaves the channel nil, which blocks forever in the select
+	// below, so the loop keeps exactly the shape it had without the collection.
+	var usageC <-chan time.Time
+	if w.opt.CollectUsage != nil {
+		usage := time.NewTicker(w.opt.Usage)
+		defer usage.Stop()
+		usageC = usage.C
+		// Collect once at startup rather than waiting out a full interval, so a
+		// freshly started daemon reports the account's usage now instead of in half an
+		// hour.
+		w.opt.CollectUsage(ctx)
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -166,6 +194,9 @@ func (w *Watcher) run(ctx context.Context, fsw *fsnotify.Watcher) error {
 					delete(pending, f)
 				}
 			}
+
+		case <-usageC:
+			w.opt.CollectUsage(ctx)
 
 		case <-poll.C:
 			// Fallback for changes the OS watcher missed: re-stat only the files we
