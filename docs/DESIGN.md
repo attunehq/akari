@@ -549,11 +549,13 @@ parser epoch are all the same case ("the projection is behind the raw bytes")
 handled by the same code: refold the stored bytes from zero and swap the result
 in atomically.
 
-**Dirty tracking.** `session_raw` carries two bookkeeping columns beside the raw
-cursor: `parsed_byte_len`, the raw length the last successful rebuild covered,
-and `parser_epoch`, the `parse.Epoch` it ran at. A session is due when
-`parsed_byte_len <> byte_len` or when `parser_epoch` is behind the running
-binary's constant. The epoch comparison is monotonic on purpose: a session
+**Dirty tracking.** `session_raw` carries three bookkeeping columns beside the
+raw cursor: `parsed_byte_len`, the raw length the last successful rebuild
+covered, `parser_epoch`, the `parse.Epoch` it ran at, and `usage_dirty`, set
+when vendor-reported usage attaches to the session (below). A session is due
+when `parsed_byte_len <> byte_len`, when `parser_epoch` is behind the running
+binary's constant, or when `usage_dirty` is set. The epoch comparison is
+monotonic on purpose: a session
 stamped ahead of the running epoch (a newer binary's work, seen by the older
 binary during a rolling deploy) is never due, even when byte-dirty, so an old
 worker cannot rebuild it back down to the older parser; the newer instance
@@ -585,7 +587,11 @@ derived is computed in that fold, over complete information and into empty
 tables: usage dedup (Claude's repeated usage blocks collapse in memory, not via
 ON CONFLICT arithmetic), per-event pricing at each event's `occurred_at`
 (or a provider-reported cost when the reducer attached one), the
-session rollups (summed from the exact row set being written, so the
+vendor usage the client collected for this session out of a provider's own
+billing feed (`provider_usage_events`, folded into the same usage set so it
+obeys the same dedup and the same rollup invariant; docs/data-aggregation.md
+covers the split between usage that resolves to a session and the account-wide
+majority that does not), the session rollups (summed from the exact row set being written, so the
 rollup/ledger invariant in docs/data-aggregation.md holds by construction), the
 per-turn usage rollup, prompt-hygiene facts and the duplicate-prompt flag
 (judged against the in-memory ordered prefix), relative tool paths against the

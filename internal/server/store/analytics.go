@@ -412,14 +412,20 @@ func (s *Store) epochGatedSnapshot(ctx context.Context, fn func(tx pgx.Tx) error
 	return true, nil
 }
 
-// clause builds the conjunctive WHERE additions for a usage_events query joined to
-// sessions as `s`: the optional project, user-set, agent, and machine scopes, plus
-// the optional trailing time bound on ue.occurred_at. Agent and machine read the
+// clause builds the conjunctive WHERE additions for a usage_ledger query aliased
+// as `ue`: the optional project, user-set, agent, and machine scopes, plus the
+// optional trailing time bound on ue.occurred_at. Agent and machine read the
 // verbatim session columns the session list filters on, so the panel and the table
 // narrow by the same values. Placeholders are numbered so it can follow an existing
 // WHERE clause that already opened the predicate.
+//
+// The scope columns come off the view rather than a joined sessions row, so the
+// same predicate narrows both of the view's arms. For the transcript arm they are
+// the session's own columns; for the provider arm the project and machine are NULL,
+// which no equality matches, so account-wide usage that belongs to no project and
+// no machine falls out of a scoped read on its own. See migration 0060.
 func (f AnalyticsFilter) clause() (string, []any) {
-	return f.clauseFor("ue.occurred_at")
+	return f.clauseOn("ue", "ue.occurred_at")
 }
 
 // clauseFor is clause with the trailing-window bound applied to an arbitrary
@@ -433,15 +439,24 @@ func (f AnalyticsFilter) clause() (string, []any) {
 // undated session has no place on a windowed view, the same reasoning the usage
 // base applies to undated usage.
 func (f AnalyticsFilter) clauseFor(timeExpr string) (string, []any) {
+	return f.clauseOn("s", timeExpr)
+}
+
+// clauseOn is clauseFor with the scope columns read off an arbitrary relation
+// rather than a joined sessions row. The session-derived reads pass "s" (through
+// clauseFor); the two union views carry project_id, user_id, agent, and machine
+// themselves and pass their own alias, so a scoped read over them needs no join
+// and narrows both arms with one predicate.
+func (f AnalyticsFilter) clauseOn(alias, timeExpr string) (string, []any) {
 	var clauses string
 	var args []any
 	if f.ProjectID != 0 {
 		args = append(args, f.ProjectID)
-		clauses += fmt.Sprintf(" AND s.project_id = $%d", len(args))
+		clauses += fmt.Sprintf(" AND %s.project_id = $%d", alias, len(args))
 	}
 	if len(f.UserIDs) > 0 {
 		args = append(args, f.UserIDs)
-		clauses += fmt.Sprintf(" AND s.user_id = ANY($%d)", len(args))
+		clauses += fmt.Sprintf(" AND %s.user_id = ANY($%d)", alias, len(args))
 	}
 	if f.Username != "" {
 		// Scope by name through a scalar subquery rather than a pre-resolved id, so
@@ -449,15 +464,15 @@ func (f AnalyticsFilter) clauseFor(timeExpr string) (string, []any) {
 		// exactly as the session list's u.username = $ filter does. No separate
 		// lookup means no error path to swallow into a silent all-user fallback.
 		args = append(args, f.Username)
-		clauses += fmt.Sprintf(" AND s.user_id = (SELECT id FROM users WHERE username = $%d)", len(args))
+		clauses += fmt.Sprintf(" AND %s.user_id = (SELECT id FROM users WHERE username = $%d)", alias, len(args))
 	}
 	if f.Agent != "" {
 		args = append(args, f.Agent)
-		clauses += fmt.Sprintf(" AND s.agent = $%d", len(args))
+		clauses += fmt.Sprintf(" AND %s.agent = $%d", alias, len(args))
 	}
 	if f.Machine != "" {
 		args = append(args, f.Machine)
-		clauses += fmt.Sprintf(" AND s.machine = $%d", len(args))
+		clauses += fmt.Sprintf(" AND %s.machine = $%d", alias, len(args))
 	}
 	if !f.Since.IsZero() {
 		args = append(args, f.Since)
@@ -494,7 +509,7 @@ func (f AnalyticsFilter) clauseForRollupDay(dayExpr string) (string, []any) {
 		}
 		day.Until = floor
 	}
-	return day.clauseFor(dayExpr)
+	return day.clauseOn("sud", dayExpr)
 }
 
 func (s *Store) analyticsSeries(ctx context.Context, q querier, f AnalyticsFilter) ([]DayPoint, error) {
@@ -506,8 +521,7 @@ func (s *Store) analyticsSeries(ctx context.Context, q querier, f AnalyticsFilte
 		        coalesce(sum(ue.output_tokens), 0),
 		        coalesce(sum(ue.cache_read_tokens), 0),
 		        coalesce(sum(ue.cache_write_tokens), 0)
-		   FROM usage_events ue
-		   JOIN sessions s ON s.id = ue.session_id
+		   FROM usage_ledger ue
 		  WHERE ue.occurred_at IS NOT NULL`+filter+`
 		  GROUP BY day
 		  ORDER BY day`, args...)
@@ -551,8 +565,7 @@ func (s *Store) analyticsByModel(ctx context.Context, q querier, f AnalyticsFilt
 		        coalesce(sum(ue.reasoning_tokens), 0),
 		        count(DISTINCT ue.session_id),
 		        coalesce(bool_and(ue.cost_source <> 'unknown'), false)
-		   FROM usage_events ue
-		   JOIN sessions s ON s.id = ue.session_id
+		   FROM usage_ledger ue
 		  WHERE ue.occurred_at IS NOT NULL`+filter+`
 		  GROUP BY 1
 		  ORDER BY 2 DESC, coalesce(sum(ue.input_tokens + ue.output_tokens + ue.cache_read_tokens + ue.cache_write_tokens), 0) DESC`, args...)
@@ -576,7 +589,7 @@ func (s *Store) analyticsByAgent(ctx context.Context, q querier, f AnalyticsFilt
 	// reading the ledger here loses nothing the old session-rollup path carried.
 	filter, args := f.clause()
 	rows, err := q.Query(ctx,
-		`SELECT s.agent,
+		`SELECT ue.agent,
 		        coalesce(sum(ue.cost_usd), 0),
 		        coalesce(sum(ue.input_tokens), 0),
 		        coalesce(sum(ue.output_tokens), 0),
@@ -585,10 +598,9 @@ func (s *Store) analyticsByAgent(ctx context.Context, q querier, f AnalyticsFilt
 		        coalesce(sum(ue.reasoning_tokens), 0),
 		        count(DISTINCT ue.session_id),
 		        coalesce(bool_and(ue.cost_source <> 'unknown'), false)
-		   FROM usage_events ue
-		   JOIN sessions s ON s.id = ue.session_id
+		   FROM usage_ledger ue
 		  WHERE ue.occurred_at IS NOT NULL`+filter+`
-		  GROUP BY s.agent
+		  GROUP BY ue.agent
 		  ORDER BY 2 DESC, count(DISTINCT ue.session_id) DESC`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query analytics by agent: %w", err)
@@ -619,9 +631,8 @@ func (s *Store) analyticsByUser(ctx context.Context, q querier, f AnalyticsFilte
 		        coalesce(sum(ue.reasoning_tokens), 0),
 		        count(DISTINCT ue.session_id),
 		        coalesce(bool_and(ue.cost_source <> 'unknown'), false)
-		   FROM usage_events ue
-		   JOIN sessions s ON s.id = ue.session_id
-		   JOIN users u ON u.id = s.user_id
+		   FROM usage_ledger ue
+		   JOIN users u ON u.id = ue.user_id
 		  WHERE ue.occurred_at IS NOT NULL`+filter+`
 		  GROUP BY u.username
 		  ORDER BY 2 DESC, count(DISTINCT ue.session_id) DESC`, args...)

@@ -315,6 +315,23 @@ func (s *Store) RebuildSession(ctx context.Context, sessionID int64, epoch int, 
 				d.Usage = nil
 			}
 		}
+		// Provider-reported usage is the rebuild's second input, beside the raw
+		// bytes: a vendor account API reports the model, tokens, and cost that this
+		// session's transcript never recorded (Cursor; see provider_usage.go).
+		// Folding it here rather than writing usage_events directly is what keeps
+		// the rebuild the ledger's only writer, so sessions.total_*, the per-turn
+		// rollup, and session_usage_daily stay equal to the ledger by construction
+		// for these sessions exactly as they do for parsed ones.
+		//
+		// It is appended after the subagent-claim check because that suppression is
+		// about a parent transcript double-reporting a child's parsed spend. Cursor
+		// bills each transcript, subagent transcripts included, under its own
+		// conversation id, so there is nothing to suppress.
+		provider, err := providerUsageForSessionTx(ctx, tx, sessionID)
+		if err != nil {
+			return err
+		}
+		d.Usage = append(d.Usage, provider...)
 		return rebuildTx(ctx, tx, sessionID, epoch, byteLen, d)
 	})
 	if err != nil {
@@ -589,7 +606,8 @@ func rebuildTx(ctx context.Context, tx pgx.Tx, sessionID int64, epoch int, byteL
 		    SET parsed_byte_len = $2, parser_epoch = $3,
 		        projection_revision = projection_revision + 1,
 		        parse_error = '', parse_error_epoch = 0, parse_error_byte_len = 0,
-		        parse_retry_at = NULL, parse_retry_backoff_secs = 0
+		        parse_retry_at = NULL, parse_retry_backoff_secs = 0,
+		        usage_dirty = false
 		  WHERE session_id = $1`,
 		sessionID, byteLen, epoch); err != nil {
 		return fmt.Errorf("stamp parse cursor for session %d: %w", sessionID, err)

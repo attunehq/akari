@@ -320,8 +320,7 @@ func (s *Store) fleetMixFrom(ctx context.Context, q querier, f AnalyticsFilter, 
 		`SELECT `+g.sqlBucketDay("sud.day")+` AS b,
 		        sud.model,
 		        coalesce(sum(sud.input_tokens + sud.output_tokens + sud.cache_read_tokens + sud.cache_write_tokens), 0)
-		   FROM session_usage_daily sud
-		   JOIN sessions s ON s.id = sud.session_id
+		   FROM usage_daily sud
 		  WHERE sud.day IS NOT NULL`+filter+`
 		  GROUP BY 1, 2`, args...)
 	if err != nil {
@@ -397,8 +396,7 @@ func (s *Store) fleetMixFrom(ctx context.Context, q querier, f AnalyticsFilter, 
 	ffilter, fargs := unbounded.clauseForRollupDay("sud.day")
 	frows, err := q.Query(ctx,
 		`SELECT sud.model, min(sud.day)
-		   FROM session_usage_daily sud
-		   JOIN sessions s ON s.id = sud.session_id
+		   FROM usage_daily sud
 		  WHERE sud.day IS NOT NULL`+ffilter+`
 		  GROUP BY sud.model`, fargs...)
 	if err != nil {
@@ -486,8 +484,7 @@ func (s *Store) modelCostFrom(ctx context.Context, q querier, f AnalyticsFilter)
 		        coalesce(sum(sud.cost_usd), 0),
 		        coalesce(sum(sud.input_tokens + sud.output_tokens + sud.cache_read_tokens + sud.cache_write_tokens), 0),
 		        count(DISTINCT sud.session_id)::int
-		   FROM session_usage_daily sud
-		   JOIN sessions s ON s.id = sud.session_id
+		   FROM usage_daily sud
 		  WHERE sud.day IS NOT NULL`+filter+`
 		  GROUP BY 1
 		 HAVING coalesce(sum(sud.cost_usd), 0) > 0
@@ -538,7 +535,7 @@ func (s *Store) signalTrendsFrom(ctx context.Context, q querier, f AnalyticsFilt
 		`SELECT %s AS b, coalesce(sig.grade, '') AS grade, coalesce(sig.outcome, 'unknown') AS outcome, count(*)
 		   FROM sessions s
 		   LEFT JOIN session_signals sig
-		     ON sig.session_id = s.id AND `+signalsCurrent+`
+		     ON sig.session_id = s.id AND `+signalsCurrentOn("s")+`
 		  WHERE s.started_at IS NOT NULL%s
 		  GROUP BY 1, 2, 3`, g.sqlBucket("s.started_at"), filter), args...)
 	if err != nil {
@@ -661,7 +658,7 @@ func (s *Store) signalTrendsFrom(ctx context.Context, q querier, f AnalyticsFilt
 		        count(*) FILTER (WHERE sig.unstructured_start)
 		   FROM sessions s
 		   LEFT JOIN session_signals sig
-		     ON sig.session_id = s.id AND `+signalsCurrent+`
+		     ON sig.session_id = s.id AND `+signalsCurrentOn("s")+`
 		  WHERE s.started_at IS NOT NULL%s
 		  GROUP BY 1`, g.sqlBucket("s.started_at"), filter), args, func(hrows pgx.Rows) error {
 		var b time.Time
@@ -692,7 +689,7 @@ func (s *Store) signalTrendsFrom(ctx context.Context, q querier, f AnalyticsFilt
 		`SELECT %s AS b, coalesce(sum(sig.context_reset_count), 0)
 		   FROM sessions s
 		   JOIN session_signals sig
-		     ON sig.session_id = s.id AND `+signalsCurrent+`
+		     ON sig.session_id = s.id AND `+signalsCurrentOn("s")+`
 		  WHERE s.started_at IS NOT NULL AND sig.peak_context_tokens IS NOT NULL%s
 		  GROUP BY 1`, g.sqlBucket("s.started_at"), filter), args, func(crows pgx.Rows) error {
 		var b time.Time
@@ -745,7 +742,7 @@ func (s *Store) contextHistogramFrom(ctx context.Context, q querier, f Analytics
 		`SELECT sig.peak_context_tokens
 		   FROM sessions s
 		   JOIN session_signals sig
-		     ON sig.session_id = s.id AND `+signalsCurrent+`
+		     ON sig.session_id = s.id AND `+signalsCurrentOn("s")+`
 		  WHERE s.started_at IS NOT NULL AND sig.peak_context_tokens IS NOT NULL%s`,
 		filter), args...)
 	if err != nil {
@@ -804,10 +801,9 @@ func (s *Store) economicsFrom(ctx context.Context, q querier, f AnalyticsFilter,
 		        coalesce(sum(sud.cache_read_tokens), 0),
 		        coalesce(sum(sud.input_tokens), 0),
 		        coalesce(sum(sud.cache_write_tokens), 0)
-		   FROM session_usage_daily sud
-		   JOIN sessions s ON s.id = sud.session_id
+		   FROM usage_daily sud
 		   LEFT JOIN session_signals sig
-		     ON sig.session_id = s.id AND `+signalsCurrent+`
+		     ON sig.session_id = sud.session_id AND `+signalsCurrentOn("sud")+`
 		  WHERE sud.day IS NOT NULL%s
 		  GROUP BY 1`, g.sqlBucketDay("sud.day"), filter), args, func(rows pgx.Rows) error {
 		var b time.Time
@@ -882,8 +878,7 @@ func (s *Store) cacheSavingsTrend(ctx context.Context, q querier, f AnalyticsFil
 		        sud.model,
 		        coalesce(sum(sud.cache_read_tokens), 0),
 		        coalesce(sum(sud.cache_write_tokens), 0)
-		   FROM session_usage_daily sud
-		   JOIN sessions s ON s.id = sud.session_id
+		   FROM usage_daily sud
 		  WHERE sud.day IS NOT NULL`+filter+`
 		  GROUP BY 1, 2`, args...)
 	if err != nil {

@@ -164,7 +164,7 @@ func (s *Store) windowSessionPage(ctx context.Context, query querier, f SessionF
 		  FROM usage_events ue
 		  JOIN sessions s ON s.id = ue.session_id
 		  JOIN users u ON u.id = s.user_id
-		  LEFT JOIN session_signals sig ON sig.session_id = s.id AND ` + signalsCurrent + `
+		  LEFT JOIN session_signals sig ON sig.session_id = s.id AND ` + signalsCurrentOn("s") + `
 		  ` + titleLateralSQL + `
 		 WHERE ` + where + `
 		 GROUP BY s.id, u.username, title.content, sig.grade, sig.outcome
@@ -278,7 +278,7 @@ func globalSessionSelect(matchLateral, matchCol, matchCutCol string) string {
 	  FROM sessions s
 	  JOIN users u ON u.id = s.user_id
 	  JOIN projects p ON p.id = s.project_id
-	  LEFT JOIN session_signals sig ON sig.session_id = s.id AND ` + signalsCurrent + `
+	  LEFT JOIN session_signals sig ON sig.session_id = s.id AND ` + signalsCurrentOn("s") + `
 	  ` + titleLateralSQL + matchLateral
 }
 

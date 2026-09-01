@@ -336,4 +336,23 @@ package parse
 // and project overviews. This adds fields to every usage golden; the Grok golden
 // also moves because fixture ticks were already in the raw JSON and previously
 // discarded.
-const Epoch = 28
+// Epoch 28 -> 29: fold provider-reported usage into the rebuild. A vendor account
+// API can report the model, tokens, and cost a transcript never recorded, and the
+// rebuild is now the writer that moves those rows into the session's ledger
+// (store.RebuildSession reads provider_usage_events beside the raw bytes; migration
+// 0060). Cursor is the only such vendor: its transcript carries no model, no token
+// counts, and no cost, so every Cursor session previously priced at zero and
+// reported no model anywhere.
+//
+// The rows land with a NULL message ordinal, because a Cursor billing event covers
+// a whole agent run rather than one model response and there is no turn to attribute
+// it to. Folding them here rather than writing usage_events directly is what keeps
+// every session-keyed invariant intact: sessions.total_*, message_turn_usage, and
+// session_usage_daily are all summed from the one row set the rebuild writes, so
+// they equal the ledger by construction for these sessions exactly as they do for
+// parsed ones.
+//
+// This is a rebuild-output change, so it takes the bump, but the golden fixtures
+// carry no provider usage and do not move; the bump makes the corpus re-fold so
+// already-collected events reach sessions ingested before this change.
+const Epoch = 29

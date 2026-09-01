@@ -612,7 +612,7 @@ func (s *Store) galleryFrom(ctx context.Context, q querier, f AnalyticsFilter) (
 		        count(*) OVER () AS total
 		   FROM sessions s
 		   LEFT JOIN session_signals sig
-		     ON sig.session_id = s.id AND `+signalsCurrent+`
+		     ON sig.session_id = s.id AND `+signalsCurrentOn("s")+`
 		  WHERE `+spanFilter+`%s
 		  ORDER BY s.started_at DESC`, archetypeCaseExpr, filter), args, func(rows pgx.Rows) error {
 		var gs GallerySession
@@ -641,7 +641,7 @@ func (s *Store) galleryFrom(ctx context.Context, q querier, f AnalyticsFilter) (
 		          coalesce(sig.outcome, 'unknown') AS outcome
 		     FROM sessions s
 		     LEFT JOIN session_signals sig
-		       ON sig.session_id = s.id AND `+signalsCurrent+`
+		       ON sig.session_id = s.id AND `+signalsCurrentOn("s")+`
 		    WHERE `+spanFilter+`%s
 		 )
 		 SELECT coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY dur), 0),
@@ -776,9 +776,8 @@ func (s *Store) subagentTrendsFrom(ctx context.Context, q querier, f AnalyticsFi
 	if err := eachRow(ctx, q, "subagent cost trend", fmt.Sprintf(
 		`SELECT %s AS b,
 		        coalesce(sum(sud.cost_usd), 0),
-		        coalesce(sum(sud.cost_usd) FILTER (WHERE s.relationship_type = 'subagent'), 0)
-		   FROM session_usage_daily sud
-		   JOIN sessions s ON s.id = sud.session_id
+		        coalesce(sum(sud.cost_usd) FILTER (WHERE sud.relationship_type = 'subagent'), 0)
+		   FROM usage_daily sud
 		  WHERE sud.day IS NOT NULL%s
 		  GROUP BY b`, g.sqlBucketDay("sud.day"), filter), args, func(crows pgx.Rows) error {
 		var b time.Time

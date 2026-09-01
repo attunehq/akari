@@ -86,7 +86,7 @@ func (r SubagentRow) Failed() bool { return r.Outcome == "errored" }
 // Subagents returns the sessions whose parent is the given session, each with its
 // verdict and its first-prompt title, so the parent's subagents table reads as what each
 // child was asked to do and how it ended rather than a bare id list. The verdict comes
-// from the same signalsCurrent-gated LEFT JOIN the feed row uses, so a child's outcome
+// from the same signalsCurrentOn("s")-gated LEFT JOIN the feed row uses, so a child's outcome
 // here matches its own session page.
 func (s *Store) Subagents(ctx context.Context, parentID int64) ([]SubagentRow, error) {
 	return s.subagents(ctx, s.Pool, parentID)
@@ -104,7 +104,7 @@ func (s *Store) subagents(ctx context.Context, q querier, parentID int64) ([]Sub
 		       coalesce(title.content, '')
 		  FROM sessions s
 		  JOIN users u ON u.id = s.user_id
-		  LEFT JOIN session_signals sig ON sig.session_id = s.id AND `+signalsCurrent+`
+		  LEFT JOIN session_signals sig ON sig.session_id = s.id AND `+signalsCurrentOn("s")+`
 		  `+titleLateralSQL+`
 		 WHERE s.parent_session_id = $1
 		 ORDER BY s.id`, parentID)

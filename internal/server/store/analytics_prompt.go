@@ -60,7 +60,7 @@ func (s *Store) promptHygieneFrom(ctx context.Context, q querier, f AnalyticsFil
 		        coalesce(sum(CASE WHEN sig.unstructured_start THEN 1 ELSE 0 END), 0)
 		   FROM sessions s
 		   JOIN session_signals sig
-		     ON sig.session_id = s.id AND `+signalsCurrent+`
+		     ON sig.session_id = s.id AND `+signalsCurrentOn("s")+`
 		  WHERE TRUE`+filter,
 		args...).Scan(&h.Prompts, &h.Short, &h.Duplicate, &h.NoCodeContext, &h.Sessions, &h.UnstructuredStarts)
 	if err != nil {

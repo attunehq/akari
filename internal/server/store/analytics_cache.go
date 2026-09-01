@@ -126,8 +126,7 @@ func (s *Store) cacheStats(ctx context.Context, q querier, f AnalyticsFilter) (C
 		        coalesce(sum(ue.output_tokens), 0),
 		        coalesce(sum(ue.cache_read_tokens), 0),
 		        coalesce(sum(ue.cache_write_tokens), 0)
-		   FROM usage_events ue
-		   JOIN sessions s ON s.id = ue.session_id
+		   FROM usage_ledger ue
 		  WHERE ue.occurred_at IS NOT NULL`+filter+`
 		  GROUP BY ue.model, date_trunc('day', ue.occurred_at AT TIME ZONE 'UTC')`, args...)
 	if err != nil {

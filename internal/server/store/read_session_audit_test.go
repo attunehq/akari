@@ -96,7 +96,7 @@ func TestSubagentsCarryVerdicts(t *testing.T) {
 
 // TestSubagentVerdictIgnoresStaleSignals pins the freshness gate: a child whose
 // projection moved after its grade (signals_stale set) reads as unmeasured here, the
-// same signalsCurrent rule every fleet read applies, so the fold summary never counts
+// same signalsCurrentOn("s") rule every fleet read applies, so the fold summary never counts
 // a failure the child's own page would not show.
 func TestSubagentVerdictIgnoresStaleSignals(t *testing.T) {
 	t.Parallel()

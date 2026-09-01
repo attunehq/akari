@@ -17,7 +17,7 @@ import (
 // verdict (see quality.Classify); a historical import, long past this window, settles.
 const abandonedIdleMinutes = 30
 
-// signalsCurrent is the predicate that admits only a usable signals row: one whose
+// signalsCurrentOn is the predicate that admits only a usable signals row: one whose
 // session is not flagged signals_stale (the projection has not moved since the
 // grade). It is the single definition of "a current, gradeable signal" that every
 // fleet read shares. There is no version gate: every derived representation
@@ -25,7 +25,12 @@ const abandonedIdleMinutes = 30
 // row is never at a superseded scoring model for longer than one rebuild. It
 // carries no join key: a caller pairs it with its own sig.session_id = s.id in a
 // JOIN ON or an EXISTS, or drops it straight into a CASE.
-const signalsCurrent = "NOT s.signals_stale"
+//
+// alias names the relation carrying signals_stale. Almost every caller joins the
+// sessions row itself and passes "s"; a read over one of the union views passes the
+// view's alias instead, because the view carries the column and no sessions row is
+// in scope (see migration 0060).
+func signalsCurrentOn(alias string) string { return "NOT " + alias + ".signals_stale" }
 
 // SessionSignals is a session's stored behavioral signals: its outcome, its quality
 // score and grade (nil when unscored), and the tool-health counts the score is built
@@ -799,7 +804,7 @@ func (s *Store) sessionSignals(ctx context.Context, q querier, sessionID int64) 
 		        sig.assistant_turns, sig.thinking_turns, sig.thinking_tail_tokens, sig.thinking_peak_tokens
 		   FROM session_signals sig
 		   JOIN sessions s ON s.id = sig.session_id
-		  WHERE sig.session_id = $1 AND `+signalsCurrent, sessionID).Scan(
+		  WHERE sig.session_id = $1 AND `+signalsCurrentOn("s"), sessionID).Scan(
 		&sig.SessionID, &sig.Outcome, &sig.OutcomeConfidence, &sig.Score, &sig.Grade,
 		&sig.ToolCalls, &sig.ToolFailures, &sig.ToolRetries, &sig.EditChurn, &sig.LongestFailureStreak,
 		&sig.PromptCount, &sig.ShortPromptCount, &sig.DuplicatePromptCount, &sig.NoCodeContextCount, &sig.UnstructuredStart,

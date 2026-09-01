@@ -341,7 +341,7 @@ func (f SessionFilter) conds(sinceCol string) (conds []string, args []any) {
 	//     with a different outcome, folding the explicit 'unknown' row together with the
 	//     missing-row cases.
 	if g := f.Grade; g != "" {
-		gate := signalsCurrent
+		gate := signalsCurrentOn("s")
 		if g == "unscored" {
 			conds = append(conds, "NOT EXISTS (SELECT 1 FROM session_signals sig WHERE sig.session_id = s.id AND "+
 				gate+" AND sig.grade IS NOT NULL)")
@@ -352,7 +352,7 @@ func (f SessionFilter) conds(sinceCol string) (conds []string, args []any) {
 		}
 	}
 	if o := f.Outcome; o != "" {
-		gate := signalsCurrent
+		gate := signalsCurrentOn("s")
 		args = append(args, o)
 		if o == "unknown" {
 			conds = append(conds, "NOT EXISTS (SELECT 1 FROM session_signals sig WHERE sig.session_id = s.id AND "+
@@ -540,7 +540,7 @@ type SessionRow struct {
 	// row, nil when the session is unscored or has not settled yet. Outcome is that
 	// row's outcome (completed / abandoned / errored / unknown), empty when no current
 	// row exists. Both come from a LEFT JOIN in globalSessionSelect gated by
-	// signalsCurrent, so a feed row's grade and outcome match the drill filters and
+	// signalsCurrentOn("s"), so a feed row's grade and outcome match the drill filters and
 	// the Insights panels rather than reading a stale verdict.
 	Grade   *string
 	Outcome string

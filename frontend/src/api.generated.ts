@@ -1307,6 +1307,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ingest/provider-usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record vendor-reported account usage events */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ProviderUsageBatch"];
+                };
+            };
+            responses: {
+                /** @description Events recorded */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: components["responses"]["Forbidden"];
+                /** @description Too many events in one request */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ingest/provider-usage/watermark": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read where a provider usage collection should resume */
+        get: {
+            parameters: {
+                query: {
+                    account_id: string;
+                    provider: "cursor";
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Newest stored event instant, or null */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ingest/session": {
         parameters: {
             query?: never;
@@ -2282,6 +2366,26 @@ export interface components {
             Short: number;
             /** Format: int64 */
             UnstructuredStarts: number;
+        };
+        ProviderUsageBatch: {
+            account_id: string;
+            events: components["schemas"]["ProviderUsageEvent"][];
+            /** @enum {string} */
+            provider: "cursor";
+        };
+        ProviderUsageEvent: {
+            cache_read_tokens?: number;
+            cache_write_tokens?: number;
+            conversation_id?: string;
+            /** @default false */
+            cost_known: boolean;
+            cost_usd?: number;
+            event_key: string;
+            input_tokens?: number;
+            model?: string;
+            /** Format: date-time */
+            occurred_at: string;
+            output_tokens?: number;
         };
         PublicOverviewResponse: {
             analytics: components["schemas"]["Analytics"];

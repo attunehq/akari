@@ -2126,6 +2126,81 @@
         ],
         "type": "object"
       },
+      "ProviderUsageBatch": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderUsageEvent"
+            },
+            "maxItems": 2000,
+            "type": "array"
+          },
+          "provider": {
+            "enum": [
+              "cursor"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "account_id",
+          "events"
+        ],
+        "type": "object"
+      },
+      "ProviderUsageEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "cache_read_tokens": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cache_write_tokens": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "conversation_id": {
+            "type": "string"
+          },
+          "cost_known": {
+            "default": false,
+            "type": "boolean"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "event_key": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "input_tokens": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "output_tokens": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "event_key",
+          "occurred_at"
+        ],
+        "type": "object"
+      },
       "PublicOverviewResponse": {
         "additionalProperties": false,
         "properties": {
@@ -5821,6 +5896,73 @@
           }
         },
         "summary": "Check which content-addressed blobs are missing",
+        "tags": [
+          "Ingest"
+        ]
+      }
+    },
+    "/api/v1/ingest/provider-usage": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderUsageBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Events recorded"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "413": {
+            "description": "Too many events in one request"
+          }
+        },
+        "summary": "Record vendor-reported account usage events",
+        "tags": [
+          "Ingest"
+        ]
+      }
+    },
+    "/api/v1/ingest/provider-usage/watermark": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "enum": [
+                "cursor"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Newest stored event instant, or null"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "summary": "Read where a provider usage collection should resume",
         "tags": [
           "Ingest"
         ]

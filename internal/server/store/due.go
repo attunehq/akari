@@ -63,7 +63,7 @@ func attemptedEpoch(tbl string) string {
 // makes this guarantee hold). So "the next page" is simply the first limit
 // ready sessions again, and a drain loops until the page comes back empty.
 //
-// The query is a UNION of three arms rather than one OR so that each arm
+// The query is a UNION of four arms rather than one OR so that each arm
 // terminates at its own LIMIT on its own partial index, whatever the planner's
 // current statistics say (a single OR-ed predicate under an outer LIMIT has
 // been observed to plan as a full index walk). Each arm reads an index that
@@ -76,6 +76,10 @@ func attemptedEpoch(tbl string) string {
 //     session whose failure covers its current bytes at the running epoch or
 //     above is absent: retrying identical input would fail identically, and an
 //     attempt recorded ahead belongs to a newer binary);
+//   - usage_dirty: provider-reported usage landed for the session, so the
+//     projection is behind for a reason neither the byte length nor the epoch
+//     can express (both sat still; the second rebuild input moved). See
+//     store/provider_usage.go;
 //   - retry_elapsed: one range over deferral times picks up exactly the parked
 //     retries whose backoff has elapsed. This arm needs no dirty-or-stale
 //     recheck because a deferral only exists on a session that was due when
@@ -103,6 +107,8 @@ func (s *Store) DueSessions(ctx context.Context, epoch int, limit int) ([]DueSes
 			arm(`sr.parse_retry_at IS NULL AND sr.parsed_byte_len <> sr.byte_len`)+
 			` UNION `+
 			arm(`sr.parse_retry_at IS NULL AND `+attemptedEpoch("sr.")+` < $1`)+
+			` UNION `+
+			arm(`sr.parse_retry_at IS NULL AND sr.usage_dirty`)+
 			` UNION `+
 			arm(`sr.parse_retry_at <= now()`)+
 			`) u

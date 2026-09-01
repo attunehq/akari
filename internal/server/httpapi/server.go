@@ -159,6 +159,11 @@ func (s *Server) Routes() http.Handler {
 
 	// Client-side CAS upload: the client lifts tool bodies out of the transcript
 	// and uploads them here before sending the transcript that references them.
+	// Provider-reported account usage: vendor billing events for agents whose
+	// transcripts carry no model, tokens, or cost (see store/provider_usage.go).
+	mux.HandleFunc("GET /api/v1/ingest/provider-usage/watermark", s.requireIngest(s.handleProviderUsageWatermark))
+	mux.HandleFunc("POST /api/v1/ingest/provider-usage", s.requireIngest(s.handleProviderUsage))
+
 	mux.HandleFunc("POST /api/v1/ingest/blobs/check", s.requireIngest(s.handleBlobCheck))
 	mux.HandleFunc("PUT /api/v1/ingest/blob/{sha256}", s.requireIngest(s.handleBlobUpload))
 

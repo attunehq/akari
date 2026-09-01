@@ -316,6 +316,21 @@ func announceIntoProjectTx(ctx context.Context, tx pgx.Tx, p AnnounceParams) (An
 		`INSERT INTO session_raw (session_id) VALUES ($1) ON CONFLICT DO NOTHING`, r.SessionID); err != nil {
 		return AnnounceResult{}, err
 	}
+	// Provider-reported usage can be collected before the session it belongs to is
+	// ever announced: the vendor bills an account, and akari discovers a transcript.
+	// Whichever of the two arrives second performs the join, so announce claims any
+	// events already waiting on this session's conversation id and marks the session
+	// for the rebuild that folds them into its ledger.
+	attached, err := resolveProviderUsageForSessionTx(ctx, tx, r.SessionID, p.UserID, p.Agent, p.SourceSessionID)
+	if err != nil {
+		return AnnounceResult{}, err
+	}
+	if attached {
+		if _, err := tx.Exec(ctx,
+			`UPDATE session_raw SET usage_dirty = true WHERE session_id = $1`, r.SessionID); err != nil {
+			return AnnounceResult{}, fmt.Errorf("mark announced session %d for provider usage fold: %w", r.SessionID, err)
+		}
+	}
 	return r, tx.QueryRow(ctx,
 		`SELECT byte_len, content_sha256, parse_retry_at IS NOT NULL
 		   FROM session_raw WHERE session_id = $1`, r.SessionID).
