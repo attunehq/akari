@@ -150,15 +150,21 @@ func runSync(ctx context.Context, args []string) error {
 	// and resolves immediately instead of waiting for the next collection. A dry run
 	// reports what it would do and sends nothing.
 	//
-	// An interrupted pass skips it. The collection is a fresh network phase of its
-	// own (a feed walk plus its upload batches), and everywhere else in this command
-	// a first Ctrl-C or an elapsed --time-limit means "start no new work, finish what
-	// is in flight, exit". Starting minutes of new requests after the operator asked
-	// the run to stop would break that, and skipping costs nothing: the collection
-	// resumes from the server's watermark on the next pass.
+	// An interrupted pass skips it, and a pass interrupted mid-collection stops it.
+	// Everywhere else in this command a first Ctrl-C or an elapsed --time-limit means
+	// "start no new work, finish what is in flight, exit", and the collection is a
+	// fresh network phase of its own: a feed walk of up to 200 requests plus its
+	// upload batches.
+	//
+	// Unlike a file upload it runs on the cancellable deadline rather than on work,
+	// because there is no in-flight state worth finishing. The collection is
+	// idempotent and resumes from the server's watermark, so abandoning it mid-walk
+	// costs nothing and the next pass picks up where this one stopped. Leaving it on
+	// work would mean a Ctrl-C could not stop minutes of requests the operator has
+	// already asked to end.
 	var providerErr error
 	if !opts.dryRun && !interrupted {
-		providerErr = collectProviderUsage(work, cfg, client, home)
+		providerErr = collectProviderUsage(deadline, cfg, client, home)
 	}
 
 	printSummary(len(files), sum, opts.dryRun)

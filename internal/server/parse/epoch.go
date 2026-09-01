@@ -352,7 +352,15 @@ package parse
 // they equal the ledger by construction for these sessions exactly as they do for
 // parsed ones.
 //
+// Context health reads only transcript-derived usage, selected by the negative
+// sentinel offset provider rows carry. A run-total billing row is not the size of
+// any context window that ever existed, so folding one in would report a peak of
+// tens of millions of tokens and invent resets between whole runs, on bands that
+// sit on an absolute token scale. That changes stored signal output, which is the
+// other half of this bump.
+//
 // This is a rebuild-output change, so it takes the bump, but the golden fixtures
 // carry no provider usage and do not move; the bump makes the corpus re-fold so
-// already-collected events reach sessions ingested before this change.
+// already-collected events reach sessions ingested before this change and so
+// already-graded sessions re-grade without a provider row skewing their context.
 const Epoch = 29

@@ -753,3 +753,59 @@ func TestOversizedTokenCountsClampInsteadOfWrapping(t *testing.T) {
 		t.Errorf("stored input tokens %d, want %d", in, math.MaxInt32)
 	}
 }
+
+// Provider usage must not reach the context-health signals. A vendor billing event
+// covers a whole agent run, so its token sum is a run total rather than the size of
+// any context window that ever existed; folding one in would report a peak context
+// of tens of millions and invent resets between whole runs. The peak-context bands
+// are on an absolute token scale, so the damage would not self-correct.
+func TestProviderUsageIsNotReadAsTurnContext(t *testing.T) {
+	t.Parallel()
+	st := storetest.NewStore(t)
+	ctx := context.Background()
+
+	user, err := st.Register(ctx, "jean", "h", "")
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	proj, err := st.UpsertProject(ctx, "github.com/jean/navigator", "github.com", "jean", "navigator", "navigator", "remote")
+	if err != nil {
+		t.Fatalf("project: %v", err)
+	}
+
+	const conversation = "3a71c0de-5f28-4b90-9c11-77ab4e2d6f83"
+	msgs := []store.MessageDelta{
+		{Ordinal: 0, Role: "user", Content: "plot a course"},
+		{Ordinal: 1, Role: "assistant", Content: "plotted"},
+	}
+	sid := ingestOnly(t, st, user.ID, proj, "cursor", conversation, msgs, nil)
+
+	// One run's whole billing, at a token scale no context window ever reaches.
+	at := time.Date(2026, 8, 27, 11, 0, 0, 0, time.UTC)
+	if _, err := st.RecordProviderUsage(ctx, user.ID, "cursor", "acct", []store.ProviderUsageEvent{
+		providerEvent("evt-a", conversation, "cursor-grok-4.6-high-fast", at, 3264, 812, 32000000, 12.5),
+	}); err != nil {
+		t.Fatalf("record provider usage: %v", err)
+	}
+	rebuildWith(t, st, sid, store.ProjectionDelta{Messages: msgs})
+	settleSession(t, st, ctx, sid)
+	if err := st.RefreshSessionSignals(ctx, sid); err != nil {
+		t.Fatalf("refresh signals: %v", err)
+	}
+
+	// The spend still lands in the ledger; only the signal is withheld.
+	if _, _, _, _, cost, rows := ledgerTotals(t, st, sid); rows != 1 || math.Abs(cost-12.5) > 1e-9 {
+		t.Fatalf("ledger has %d rows costing %v, want 1 costing 12.5", rows, cost)
+	}
+
+	sig, err := st.SessionSignalsByID(ctx, sid)
+	if err != nil {
+		t.Fatalf("read signals: %v", err)
+	}
+	if sig.PeakContextTokens != nil {
+		t.Errorf("peak context measured as %d tokens from a run-total billing row, want unmeasured", *sig.PeakContextTokens)
+	}
+	if sig.ContextResetCount != nil {
+		t.Errorf("context resets measured as %d from a run-total billing row, want unmeasured", *sig.ContextResetCount)
+	}
+}

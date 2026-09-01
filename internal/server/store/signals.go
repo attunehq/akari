@@ -347,11 +347,27 @@ func gatherObservedThinking(ctx context.Context, tx pgx.Tx, sessionID int64, f *
 // order is total even for the (schema-permitted but parser-never-emitted) case of a NULL
 // or repeated source offset, keeping the reset count deterministic. A session with no
 // usage leaves both facts nil, so the row stores NULL rather than a measured-looking zero.
+//
+// Only transcript-derived rows are read, which is what the source offset selects:
+// provider-reported usage carries the negative sentinel offset that separates it
+// from parsed rows everywhere else (see providerUsageForSessionTx), and a parsed
+// row's offset is its byte position. A vendor billing event covers a whole agent
+// run (a 22-turn Cursor transcript is commonly one event), so its token sum is a
+// run total, not the size of any context window that ever existed. Folding one in
+// would report a peak context of tens of millions of tokens and invent resets
+// between "turns" that are really whole runs, and the peak-context bands are on an
+// absolute token scale (docs/signals.md), so the damage is not self-correcting. A
+// session whose usage is entirely provider-reported measures no context health at
+// all, which is the honest answer.
+//
+// The test is the offset, not the message ordinal: codex and grok legitimately
+// emit parsed usage with no open turn to anchor to, and that usage is still a real
+// context observation.
 func gatherContextHealth(ctx context.Context, tx pgx.Tx, sessionID int64, f *signalFacts) error {
 	rows, err := tx.Query(ctx,
 		`SELECT input_tokens + cache_read_tokens + cache_write_tokens
 		   FROM usage_events
-		  WHERE session_id = $1
+		  WHERE session_id = $1 AND coalesce(source_offset, 0) >= 0
 		  ORDER BY source_offset, source_index, id`, sessionID)
 	if err != nil {
 		return fmt.Errorf("gather context health for session %d: %w", sessionID, err)

@@ -23,7 +23,16 @@ const (
 	// maxPages bounds one collection so a paging bug cannot loop forever. At the
 	// page size above this is 200k events, far past any real account's history.
 	maxPages = 200
+	// pageTimeout bounds one request. http.DefaultClient has no timeout, so without
+	// this a stalled connection would hang the whole collection with nothing to
+	// interrupt it but the caller's context, which a walk of up to maxPages requests
+	// should not depend on for liveness.
+	pageTimeout = 60 * time.Second
 )
+
+// defaultHTTP is the client a Fetcher uses when none is injected. Tests inject the
+// httptest server's client instead.
+var defaultHTTP = &http.Client{Timeout: pageTimeout}
 
 // Event is one billing event, normalized for upload. It is deliberately narrower
 // than the feed's row: akari stores what its ledger has columns for, and drops the
@@ -213,7 +222,7 @@ func (f *Fetcher) fetchPage(ctx context.Context, s Session, page int, since time
 
 	httpc := f.HTTP
 	if httpc == nil {
-		httpc = http.DefaultClient
+		httpc = defaultHTTP
 	}
 	resp, err := httpc.Do(req)
 	if err != nil {
