@@ -363,4 +363,16 @@ package parse
 // carry no provider usage and do not move; the bump makes the corpus re-fold so
 // already-collected events reach sessions ingested before this change and so
 // already-graded sessions re-grade without a provider row skewing their context.
-const Epoch = 29
+//
+// Epoch 29 -> 30: price claude-fable-5-1 and claude-mythos-5-1 (both at Fable 5's
+// $10/$50 with a $12.50 cache write, but a $0.25 cache read: the 5.1 pair is the
+// only Anthropic model priced at 0.025x input on cache hits rather than 0.1x; see
+// internal/pricing). Both were unknown to the pricing table before, so their usage
+// events carry a zero cost and read as unpriced, and their identifiers folded into
+// Other on public overviews. This bump rebuilds the corpus so every 5.1 usage row
+// re-prices through pricing.Cost and its per-session cache-savings rollup re-folds
+// at the lower read rate in one pass. It is a pricing change, not a reducer-shape
+// change, and no golden fixture uses a 5.1 model, so the projection delta for the
+// fixtures is byte-for-byte identical and the golden snapshots do not move; the
+// bump is the reprice signal and stands on its own.
+const Epoch = 30

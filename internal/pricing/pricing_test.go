@@ -124,15 +124,23 @@ func TestDatedWindowsStartAtUTCMidnight(t *testing.T) {
 }
 
 func TestRateAtFableAndMythos(t *testing.T) {
-	// Fable 5, Mythos 5, and the Mythos preview all price at $10/$50.
-	for _, model := range []string{
-		"claude-fable-5",
-		"claude-mythos-5",
-		"claude-mythos-preview",
-	} {
-		r, ok := RateAt(model, anytime)
-		if !ok || r.Input != 10 || r.Output != 50 {
-			t.Errorf("%s rate = %+v (ok=%v), want input 10 / output 50", model, r, ok)
+	// Every Fable and Mythos model prices at $10/$50 with a $12.50 cache write.
+	// Only the cache read differs: 5 and the preview take the standard 0.1x, and
+	// 5.1 takes the 0.025x rate that no other Anthropic model uses.
+	cases := []struct {
+		model string
+		read  float64
+	}{
+		{"claude-fable-5", 1.00},
+		{"claude-mythos-5", 1.00},
+		{"claude-mythos-preview", 1.00},
+		{"claude-fable-5-1", 0.25},
+		{"claude-mythos-5-1", 0.25},
+	}
+	for _, c := range cases {
+		r, ok := RateAt(c.model, anytime)
+		if !ok || r.Input != 10 || r.Output != 50 || r.CacheWrite != 12.50 || r.CacheRead != c.read {
+			t.Errorf("%s rate = %+v (ok=%v), want 10/50 with write 12.50 and read %v", c.model, r, ok, c.read)
 		}
 	}
 }

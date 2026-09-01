@@ -95,9 +95,13 @@ var glm53FlashSticker = time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
 // future and sibling models stay unknown. When adding a model, add its exact ID; do
 // not widen an existing key.
 var table = map[string][]DatedRate{
-	// Fable 5 and Mythos 5 share pricing.
-	"claude-fable-5":  flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1.00}),
-	"claude-mythos-5": flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1.00}),
+	// Fable and Mythos share pricing at each version: $10/$50 with a 1.25x cache
+	// write. The 5.1 pair breaks the usual 0.1x cache read, which every other
+	// Anthropic model follows, and charges 0.025x ($0.25/MTok) instead.
+	"claude-fable-5":    flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1.00}),
+	"claude-mythos-5":   flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1.00}),
+	"claude-fable-5-1":  flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 0.25}),
+	"claude-mythos-5-1": flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 0.25}),
 
 	// Opus: 4.0/4.1 at $15/$75, 4.5 onward at $5/$25, which Opus 5 holds (it is a
 	// drop-in upgrade at Opus 4.8's rate). "claude-opus-4" is Opus 4.0's dateless
