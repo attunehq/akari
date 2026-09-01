@@ -1,6 +1,7 @@
 package discover
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -82,22 +83,214 @@ func discoverOpenCode(root Root, walkDir string, ex Excluder) (files []File, err
 	}
 	defer db.Close()
 
-	sessions, err := listOpenCodeSessions(db)
+	// Read the schema and session list from one short snapshot.
+	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, fmt.Errorf("read opencode database %s: %w", dbPath, err)
+	}
+	defer tx.Rollback()
+
+	if err := probeOpenCodeSchema(tx); err != nil {
+		return nil, fmt.Errorf("opencode database %s: %w", dbPath, err)
+	}
+	sessions, err := listOpenCodeSessions(tx)
 	if err != nil {
 		return nil, fmt.Errorf("list opencode sessions in %s: %w", dbPath, err)
 	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("read opencode database %s: %w", dbPath, err)
+	}
 	out := make([]File, 0, len(sessions))
+	skipped := 0
+	firstSkipped := ""
 	for _, sess := range sessions {
 		path := filepath.Join(cacheDir, sess.ID+".jsonl")
 		if ex.Excluded(path) {
 			continue
 		}
-		if err := materializeOpenCodeSession(db, sess, path); err != nil {
+		supported, err := materializeOpenCodeSession(db, sess, path)
+		if err != nil {
 			return out, fmt.Errorf("materialize opencode session %s: %w", sess.ID, err)
+		}
+		if !supported {
+			skipped++
+			if firstSkipped == "" {
+				firstSkipped = sess.ID
+			}
+			continue
 		}
 		out = append(out, File{Agent: "opencode", Root: walkDir, Path: path})
 	}
+	if skipped > 0 {
+		return out, fmt.Errorf(
+			"skip %d OpenCode session(s), including %s: session_message has turns or content missing from the legacy tables, so this akari build cannot read them without truncation; export them with `opencode export <session-id>`",
+			skipped, firstSkipped)
+	}
 	return out, nil
+}
+
+var openCodeColumns = map[string][]string{
+	"session":   {"id", "parent_id", "workspace_id", "directory", "title", "slug", "agent", "model", "time_created", "time_updated"},
+	"workspace": {"id", "branch"},
+	"message":   {"id", "session_id", "time_created", "data"},
+	"part":      {"id", "message_id", "session_id", "time_created", "data"},
+}
+
+type openCodeQuerier interface {
+	Query(query string, args ...any) (*sql.Rows, error)
+}
+
+func probeOpenCodeSchema(db openCodeQuerier) error {
+	hasSessionMessage, err := probeOpenCodeSessionMessage(db)
+	if err != nil {
+		return err
+	}
+
+	for _, table := range []string{"session", "workspace", "message", "part"} {
+		cols, err := openCodeTableColumns(db, table)
+		if err != nil {
+			return fmt.Errorf("inspect table %q: %w", table, err)
+		}
+		if len(cols) == 0 {
+			if hasSessionMessage {
+				return fmt.Errorf("table %q is missing, so this akari build cannot read the OpenCode database without truncation; export sessions with `opencode export <session-id>`", table)
+			}
+			return fmt.Errorf("table %q is missing, so this is not a schema akari can read", table)
+		}
+		for _, want := range openCodeColumns[table] {
+			if !cols[want] {
+				return fmt.Errorf("table %q has no column %q, so the schema has changed", table, want)
+			}
+		}
+	}
+	return nil
+}
+
+func probeOpenCodeSessionMessage(db openCodeQuerier) (bool, error) {
+	sessionMessageCols, err := openCodeTableColumns(db, "session_message")
+	if err != nil {
+		return false, fmt.Errorf("inspect table %q: %w", "session_message", err)
+	}
+	for _, want := range []string{"id", "session_id", "type", "data"} {
+		if len(sessionMessageCols) > 0 && !sessionMessageCols[want] {
+			return false, fmt.Errorf("table %q has no column %q, so the schema has changed", "session_message", want)
+		}
+	}
+	return len(sessionMessageCols) > 0, nil
+}
+
+func openCodeTableColumns(db openCodeQuerier, table string) (map[string]bool, error) {
+	rows, err := db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	cols := map[string]bool{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		cols[name] = true
+	}
+	return cols, rows.Err()
+}
+
+func openCodeSessionSupported(db openCodeQuerier, sessionID string) (bool, error) {
+	hasSessionMessage, err := probeOpenCodeSessionMessage(db)
+	if err != nil {
+		return false, err
+	}
+	if !hasSessionMessage {
+		return true, nil
+	}
+
+	// Projection-only events such as model switches have no legacy message.
+	// User and assistant projections must retain both the turn and its content.
+	rows, err := db.Query(`
+		SELECT sm.type,
+		       sm.data,
+		       EXISTS (SELECT 1 FROM message m WHERE m.id = sm.id AND m.session_id = sm.session_id),
+		       (SELECT count(*) FROM part p WHERE p.message_id = sm.id AND p.session_id = sm.session_id AND json_extract(p.data, '$.type') = 'text'),
+		       (SELECT count(*) FROM part p WHERE p.message_id = sm.id AND p.session_id = sm.session_id AND json_extract(p.data, '$.type') = 'file'),
+		       (SELECT count(*) FROM part p WHERE p.message_id = sm.id AND p.session_id = sm.session_id AND json_extract(p.data, '$.type') = 'agent'),
+		       (SELECT count(*) FROM part p WHERE p.message_id = sm.id AND p.session_id = sm.session_id AND json_extract(p.data, '$.type') = 'reasoning'),
+		       (SELECT count(*) FROM part p WHERE p.message_id = sm.id AND p.session_id = sm.session_id AND json_extract(p.data, '$.type') = 'tool'),
+		       (SELECT count(*) FROM part p
+		         WHERE p.message_id = sm.id
+		           AND p.session_id = sm.session_id
+		           AND json_extract(p.data, '$.type') = 'text'
+		           AND json_extract(p.data, '$.synthetic') = 1
+		           AND (json_extract(p.data, '$.text') LIKE 'Reading MCP resource:%'
+		             OR json_extract(p.data, '$.text') LIKE 'Read tool failed to read %'))
+		  FROM session_message sm
+		 WHERE sm.session_id = ?
+		   AND sm.type IN ('user', 'assistant')
+		 ORDER BY sm.id`, sessionID)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var projectedType string
+		var data []byte
+		var hasMessage bool
+		var got openCodePartCounts
+		if err := rows.Scan(&projectedType, &data, &hasMessage, &got.text, &got.file, &got.agent, &got.reasoning, &got.tool, &got.fileAsText); err != nil {
+			return false, err
+		}
+		want, known := projectedOpenCodePartCounts(projectedType, data)
+		if !hasMessage || !known || want.exceeds(got) {
+			return false, nil
+		}
+	}
+	return true, rows.Err()
+}
+
+type openCodePartCounts struct {
+	text       int
+	file       int
+	agent      int
+	reasoning  int
+	tool       int
+	fileAsText int
+}
+
+func projectedOpenCodePartCounts(projectedType string, data []byte) (openCodePartCounts, bool) {
+	var counts openCodePartCounts
+	switch projectedType {
+	case "user":
+		if gjson.GetBytes(data, "text").String() != "" {
+			counts.text = 1
+		}
+		counts.file = len(gjson.GetBytes(data, "files").Array())
+		counts.agent = len(gjson.GetBytes(data, "agents").Array())
+	case "assistant":
+		for _, content := range gjson.GetBytes(data, "content").Array() {
+			switch content.Get("type").String() {
+			case "text":
+				counts.text++
+			case "reasoning":
+				counts.reasoning++
+			case "tool":
+				counts.tool++
+			default:
+				return openCodePartCounts{}, false
+			}
+		}
+	default:
+		return openCodePartCounts{}, false
+	}
+	return counts, true
+}
+
+func (c openCodePartCounts) exceeds(other openCodePartCounts) bool {
+	missingFiles := max(c.file-other.file, 0)
+	return missingFiles > other.fileAsText ||
+		c.text+missingFiles > other.text ||
+		c.agent > other.agent ||
+		c.reasoning > other.reasoning ||
+		c.tool > other.tool
 }
 
 func openOpenCodeDB(path string) (*sql.DB, error) {
@@ -130,7 +323,7 @@ type openCodeSession struct {
 	TimeUpdated int64
 }
 
-func listOpenCodeSessions(db *sql.DB) ([]openCodeSession, error) {
+func listOpenCodeSessions(db openCodeQuerier) ([]openCodeSession, error) {
 	rows, err := db.Query(`
 		SELECT s.id,
 		       coalesce(s.parent_id, ''),
@@ -180,17 +373,30 @@ type openCodePart struct {
 	Data        []byte
 }
 
-func materializeOpenCodeSession(db *sql.DB, sess openCodeSession, path string) error {
+func materializeOpenCodeSession(db *sql.DB, sess openCodeSession, path string) (bool, error) {
+	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	supported, err := openCodeSessionSupported(tx, sess.ID)
+	if err != nil || !supported {
+		return supported, err
+	}
 	if !openCodeMaterializeStale(path, sess.TimeUpdated) {
-		return nil
+		return true, tx.Commit()
 	}
-	msgs, err := listOpenCodeMessages(db, sess.ID)
+	msgs, err := listOpenCodeMessages(tx, sess.ID)
 	if err != nil {
-		return err
+		return false, err
 	}
-	parts, err := listOpenCodeParts(db, sess.ID)
+	parts, err := listOpenCodeParts(tx, sess.ID)
 	if err != nil {
-		return err
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
 	}
 	byMsg := make(map[string][]openCodePart, len(msgs))
 	for _, p := range parts {
@@ -200,7 +406,7 @@ func materializeOpenCodeSession(db *sql.DB, sess openCodeSession, path string) e
 	tmp := path + ".tmp"
 	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
-		return err
+		return false, err
 	}
 	ok := false
 	defer func() {
@@ -210,19 +416,19 @@ func materializeOpenCodeSession(db *sql.DB, sess openCodeSession, path string) e
 		}
 	}()
 	if err := writeOpenCodeJSONL(f, sess, msgs, byMsg, stale); err != nil {
-		return err
+		return false, err
 	}
 	if err := f.Sync(); err != nil {
-		return err
+		return false, err
 	}
 	if err := f.Close(); err != nil {
-		return err
+		return false, err
 	}
 	if err := os.Rename(tmp, path); err != nil {
-		return err
+		return false, err
 	}
 	ok = true
-	return nil
+	return true, nil
 }
 
 func openCodeMaterializeStale(path string, updated int64) bool {
@@ -247,7 +453,7 @@ func openCodeMaterializeStale(path string, updated int64) bool {
 	return got != updated
 }
 
-func listOpenCodeMessages(db *sql.DB, sessionID string) ([]openCodeMessage, error) {
+func listOpenCodeMessages(db openCodeQuerier, sessionID string) ([]openCodeMessage, error) {
 	rows, err := db.Query(`
 		SELECT id, time_created, data
 		  FROM message
@@ -268,7 +474,7 @@ func listOpenCodeMessages(db *sql.DB, sessionID string) ([]openCodeMessage, erro
 	return out, rows.Err()
 }
 
-func listOpenCodeParts(db *sql.DB, sessionID string) ([]openCodePart, error) {
+func listOpenCodeParts(db openCodeQuerier, sessionID string) ([]openCodePart, error) {
 	rows, err := db.Query(`
 		SELECT id, message_id, time_created, data
 		  FROM part

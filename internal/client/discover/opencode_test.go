@@ -215,3 +215,230 @@ func writeOpenCodeFixtureDB(t *testing.T, path string, inProgress bool) {
 		t.Fatal(err)
 	}
 }
+
+func TestDiscoverOpenCodeAcceptsDualWrittenProjection(t *testing.T) {
+	dir := t.TempDir()
+	cache := t.TempDir()
+	prev := openCodeCacheDir
+	openCodeCacheDir = func(string) (string, error) { return cache, nil }
+	t.Cleanup(func() { openCodeCacheDir = prev })
+
+	dbPath := filepath.Join(dir, "opencode.db")
+	writeOpenCodeFixtureDB(t, dbPath, false)
+	addSessionMessageTable(t, dbPath)
+	execOpenCodeFixture(t, dbPath, `
+		INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES
+			('msg_u', 'ses_1', 'user', 1, 1, 1, '{"text":"Fix login","files":[],"agents":[]}'),
+			('msg_a', 'ses_1', 'assistant', 2, 2, 2, '{"content":[{"type":"text","id":"txt_1","text":"ok"}]}'),
+			('switch_1', 'ses_1', 'model-switched', 3, 3, 3, '{}')`)
+
+	files, _, err := Discover([]Root{{Agent: "opencode", Dir: dir}}, Excluder{})
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("files = %d, want 1", len(files))
+	}
+}
+
+func TestDiscoverOpenCodeSkipsSessionMissingLegacyTurns(t *testing.T) {
+	dir := t.TempDir()
+	cache := t.TempDir()
+	prev := openCodeCacheDir
+	openCodeCacheDir = func(string) (string, error) { return cache, nil }
+	t.Cleanup(func() { openCodeCacheDir = prev })
+
+	dbPath := filepath.Join(dir, "opencode.db")
+	writeOpenCodeFixtureDB(t, dbPath, false)
+	addSessionMessageTable(t, dbPath)
+	execOpenCodeFixture(t, dbPath, `
+		INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated)
+		VALUES ('ses_2', 'p1', 'kind-panda', '/home/grace/app', 'Add search', '1.18.25', 2, 2);
+		INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+		VALUES ('msg_u_2', 'ses_2', 'user', 1, 2, 2, '{"text":"Add search"}')`)
+
+	files, _, err := Discover([]Root{{Agent: "opencode", Dir: dir}}, Excluder{})
+	if err == nil {
+		t.Fatal("discover succeeded, want an incomplete-session error")
+	}
+	if !strings.Contains(err.Error(), "ses_2") || !strings.Contains(err.Error(), "opencode export") {
+		t.Errorf("error = %v, want the skipped session and export recovery", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("files = %d, want the readable session", len(files))
+	}
+	if filepath.Base(files[0].Path) != "ses_1.jsonl" {
+		t.Errorf("file = %s, want ses_1.jsonl", files[0].Path)
+	}
+	if _, statErr := os.Stat(filepath.Join(cache, "ses_2.jsonl")); !os.IsNotExist(statErr) {
+		t.Errorf("unsupported session cache error = %v, want not found", statErr)
+	}
+}
+
+func TestDiscoverOpenCodeSkipsSessionMissingLegacyParts(t *testing.T) {
+	for _, partID := range []string{"prt_u", "prt_a"} {
+		t.Run(partID, func(t *testing.T) {
+			dir := t.TempDir()
+			cache := t.TempDir()
+			prev := openCodeCacheDir
+			openCodeCacheDir = func(string) (string, error) { return cache, nil }
+			t.Cleanup(func() { openCodeCacheDir = prev })
+
+			dbPath := filepath.Join(dir, "opencode.db")
+			writeOpenCodeFixtureDB(t, dbPath, false)
+			addSessionMessageTable(t, dbPath)
+			execOpenCodeFixture(t, dbPath, `
+				INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES
+					('msg_u', 'ses_1', 'user', 1, 1, 1, '{"text":"Fix login"}'),
+					('msg_a', 'ses_1', 'assistant', 2, 2, 2, '{"content":[{"type":"text","id":"txt_1","text":"ok"}]}');
+				DELETE FROM part WHERE id = '`+partID+`'`)
+
+			files, _, err := Discover([]Root{{Agent: "opencode", Dir: dir}}, Excluder{})
+			if err == nil {
+				t.Fatal("discover succeeded, want an incomplete-session error")
+			}
+			if len(files) != 0 {
+				t.Fatalf("files = %d, want 0", len(files))
+			}
+			if _, statErr := os.Stat(filepath.Join(cache, "ses_1.jsonl")); !os.IsNotExist(statErr) {
+				t.Errorf("unsupported session cache error = %v, want not found", statErr)
+			}
+		})
+	}
+}
+
+func TestDiscoverOpenCodeAcceptsProjectedResourceAsLegacyText(t *testing.T) {
+	dir := t.TempDir()
+	cache := t.TempDir()
+	prev := openCodeCacheDir
+	openCodeCacheDir = func(string) (string, error) { return cache, nil }
+	t.Cleanup(func() { openCodeCacheDir = prev })
+
+	dbPath := filepath.Join(dir, "opencode.db")
+	writeOpenCodeFixtureDB(t, dbPath, false)
+	addSessionMessageTable(t, dbPath)
+	execOpenCodeFixture(t, dbPath, `
+		INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES
+			('msg_u', 'ses_1', 'user', 1, 1, 1, '{"text":"Fix login","files":[{"uri":"mcp://docs/login","mime":"text/plain"}]}'),
+			('msg_a', 'ses_1', 'assistant', 2, 2, 2, '{"content":[{"type":"text","id":"txt_1","text":"ok"}]}');
+		INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
+		VALUES ('prt_resource', 'msg_u', 'ses_1', 1, 1, '{"type":"text","synthetic":true,"text":"Reading MCP resource: login (mcp://docs/login)"}')`)
+
+	files, _, err := Discover([]Root{{Agent: "opencode", Dir: dir}}, Excluder{})
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("files = %d, want 1", len(files))
+	}
+}
+
+func TestDiscoverOpenCodeSkipsProjectedFileWithoutLegacyContent(t *testing.T) {
+	dir := t.TempDir()
+	cache := t.TempDir()
+	prev := openCodeCacheDir
+	openCodeCacheDir = func(string) (string, error) { return cache, nil }
+	t.Cleanup(func() { openCodeCacheDir = prev })
+
+	dbPath := filepath.Join(dir, "opencode.db")
+	writeOpenCodeFixtureDB(t, dbPath, false)
+	addSessionMessageTable(t, dbPath)
+	execOpenCodeFixture(t, dbPath, `
+		INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES
+			('msg_u', 'ses_1', 'user', 1, 1, 1, '{"text":"Fix login","files":[{"uri":"file:///home/grace/login.png","mime":"image/png"}]}'),
+			('msg_a', 'ses_1', 'assistant', 2, 2, 2, '{"content":[{"type":"text","id":"txt_1","text":"ok"}]}')`)
+
+	files, _, err := Discover([]Root{{Agent: "opencode", Dir: dir}}, Excluder{})
+	if err == nil {
+		t.Fatal("discover succeeded, want an incomplete-session error")
+	}
+	if len(files) != 0 {
+		t.Fatalf("files = %d, want 0", len(files))
+	}
+}
+
+func TestDiscoverOpenCodeAcceptsEmptySessionMessage(t *testing.T) {
+	dir := t.TempDir()
+	cache := t.TempDir()
+	prev := openCodeCacheDir
+	openCodeCacheDir = func(string) (string, error) { return cache, nil }
+	t.Cleanup(func() { openCodeCacheDir = prev })
+
+	dbPath := filepath.Join(dir, "opencode.db")
+	writeOpenCodeFixtureDB(t, dbPath, false)
+	addSessionMessageTable(t, dbPath)
+
+	files, _, err := Discover([]Root{{Agent: "opencode", Dir: dir}}, Excluder{})
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("files = %d, want 1", len(files))
+	}
+}
+
+func TestDiscoverOpenCodeRefusesChangedColumns(t *testing.T) {
+	dir := t.TempDir()
+	cache := t.TempDir()
+	prev := openCodeCacheDir
+	openCodeCacheDir = func(string) (string, error) { return cache, nil }
+	t.Cleanup(func() { openCodeCacheDir = prev })
+
+	dbPath := filepath.Join(dir, "opencode.db")
+	writeOpenCodeFixtureDB(t, dbPath, false)
+	execOpenCodeFixture(t, dbPath, `ALTER TABLE session DROP COLUMN workspace_id`)
+
+	_, _, err := Discover([]Root{{Agent: "opencode", Dir: dir}}, Excluder{})
+	if err == nil {
+		t.Fatal("discover succeeded, want a refusal")
+	}
+	if !strings.Contains(err.Error(), "workspace_id") {
+		t.Errorf("error = %v, want it to name the missing column", err)
+	}
+}
+
+func TestDiscoverOpenCodeExplainsMissingLegacyTable(t *testing.T) {
+	dir := t.TempDir()
+	cache := t.TempDir()
+	prev := openCodeCacheDir
+	openCodeCacheDir = func(string) (string, error) { return cache, nil }
+	t.Cleanup(func() { openCodeCacheDir = prev })
+
+	dbPath := filepath.Join(dir, "opencode.db")
+	writeOpenCodeFixtureDB(t, dbPath, false)
+	addSessionMessageTable(t, dbPath)
+	execOpenCodeFixture(t, dbPath, `DROP TABLE part`)
+
+	_, _, err := Discover([]Root{{Agent: "opencode", Dir: dir}}, Excluder{})
+	if err == nil {
+		t.Fatal("discover succeeded, want a missing-table error")
+	}
+	if !strings.Contains(err.Error(), `table "part" is missing`) || !strings.Contains(err.Error(), "opencode export") {
+		t.Errorf("error = %v, want the missing table and export recovery", err)
+	}
+}
+
+func addSessionMessageTable(t *testing.T, path string) {
+	t.Helper()
+	execOpenCodeFixture(t, path, `CREATE TABLE session_message (
+		id TEXT PRIMARY KEY,
+		session_id TEXT NOT NULL,
+		type TEXT NOT NULL,
+		seq INTEGER NOT NULL,
+		time_created INTEGER NOT NULL,
+		time_updated INTEGER NOT NULL,
+		data TEXT NOT NULL
+	)`)
+}
+
+func execOpenCodeFixture(t *testing.T, path, stmt string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(stmt); err != nil {
+		t.Fatal(err)
+	}
+}
