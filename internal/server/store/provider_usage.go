@@ -189,13 +189,20 @@ func (s *Store) RecordProviderUsage(ctx context.Context, userID int64, provider,
 		var sweptMarks int
 		if err := tx.QueryRow(ctx,
 			`WITH swept AS (
+			   -- Same oldest-session rule as the insert. A join would take whichever
+			   -- matching session the planner returned, so a conversation ingested under
+			   -- two project slugs could land its swept rows on a different session than
+			   -- its inserted ones and split one conversation's spend across both.
 			   UPDATE provider_usage_events p
-			      SET session_id = s.id
-			     FROM sessions s
+			      SET session_id = (SELECT s.id FROM sessions s
+			                         WHERE s.user_id = $1 AND s.agent = $2
+			                           AND `+sessionConversationID+` = p.conversation_id
+			                         ORDER BY s.id LIMIT 1)
 			    WHERE p.user_id = $1 AND p.provider = $2 AND p.session_id IS NULL
-			      AND s.user_id = $1 AND s.agent = $2
-			      AND `+sessionConversationID+` = p.conversation_id
-			   RETURNING s.id AS session_id
+			      AND EXISTS (SELECT 1 FROM sessions s
+			                   WHERE s.user_id = $1 AND s.agent = $2
+			                     AND `+sessionConversationID+` = p.conversation_id)
+			   RETURNING session_id
 			 ), marked AS (
 			   UPDATE session_raw sr
 			      SET usage_dirty = true

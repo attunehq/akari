@@ -287,22 +287,26 @@ func TestFetchReportsARejectedSessionAsNoSession(t *testing.T) {
 	}
 }
 
-// A boundary that repeats more rows than the reported count can explain is the
-// dangerous case: capping the drop at the surplus would leave the excess repeats in
-// the output, where withEventKeys gives each a distinct ordinal and the server
-// stores one charge twice. The walk has to reject it, exactly as it rejects a
-// surplus the boundaries cannot explain at all.
-func TestFetchRejectsABoundaryRepeatLargerThanTheSurplus(t *testing.T) {
+// Two genuinely identical adjacent events can straddle a page boundary. They are
+// indistinguishable from a repeat, so the feed's own count is the authority: with a
+// correct total there is no surplus, nothing may be dropped, and the walk must be
+// accepted. Rejecting it would fail every collection for that account until the rows
+// aged out of the window.
+func TestFetchKeepsIdenticalEventsAcrossABoundaryWhenTheCountAllowsThem(t *testing.T) {
 	first := rows(1788000000000, pageSize)
-	// The next page repeats the previous page's last four rows, but the feed's own
-	// count admits only two of them as duplication.
-	second := append(append([]string{}, first[pageSize-4:]...), rows(1788000009000, 2)...)
+	// The next page opens with a row identical to the previous page's last, but the
+	// feed's count says every row is real.
+	second := append(append([]string{}, first[pageSize-1:]...), rows(1788000009000, 1)...)
 	f := &feedServer{pages: []string{
-		page(pageSize+2+2, first),
-		page(pageSize+2+2, second),
+		page(pageSize+2, first),
+		page(pageSize+2, second),
 	}}
-	if _, err := fetchFrom(t, f.start(t), time.Time{}); err == nil {
-		t.Fatal("fetch accepted a boundary repeat larger than the reported surplus, want an error")
+	events, err := fetchFrom(t, f.start(t), time.Time{})
+	if err != nil {
+		t.Fatalf("fetch rejected a walk its own count says is complete: %v", err)
+	}
+	if len(events) != pageSize+2 {
+		t.Fatalf("fetched %d events, want the reported %d", len(events), pageSize+2)
 	}
 }
 

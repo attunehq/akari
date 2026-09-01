@@ -167,14 +167,28 @@ func (w *Watcher) run(ctx context.Context, fsw *fsnotify.Watcher) error {
 	// run off the loop for the same reason. The guard makes passes single-flight, so a
 	// tick that lands while a slow pass is still running is dropped rather than
 	// stacking a second walk of the same feed on top of it.
+	//
+	// An in-flight pass is cancelled and then joined before run returns. run also
+	// returns on errWatcherClosed with ctx still live, so without its own cancellable
+	// context a collection would keep issuing requests after the watcher reported
+	// shutdown and then be killed mid-request by process exit. The defers are ordered
+	// so the cancel runs first and the wait cannot block on a pass that is still
+	// walking the feed. Abandoning a pass is free: it is idempotent and resumes from
+	// the server's watermark.
+	collectCtx, cancelCollect := context.WithCancel(ctx)
 	var collecting atomic.Bool
+	var collectors sync.WaitGroup
+	defer collectors.Wait()
+	defer cancelCollect()
 	collect := func() {
 		if w.opt.CollectUsage == nil || !collecting.CompareAndSwap(false, true) {
 			return
 		}
+		collectors.Add(1)
 		go func() {
+			defer collectors.Done()
 			defer collecting.Store(false)
-			w.opt.CollectUsage(ctx)
+			w.opt.CollectUsage(collectCtx)
 		}()
 	}
 	if w.opt.CollectUsage != nil {

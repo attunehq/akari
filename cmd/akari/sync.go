@@ -162,8 +162,14 @@ func runSync(ctx context.Context, args []string) error {
 	// costs nothing and the next pass picks up where this one stopped. Leaving it on
 	// work would mean a Ctrl-C could not stop minutes of requests the operator has
 	// already asked to end.
+	//
+	// The gate reads the deadline as well as syncAll's flag: with an empty file list
+	// the loop body never runs, so nothing sets interrupted, and a limit or Ctrl-C
+	// landing in between would otherwise start the collection on an already-cancelled
+	// context and report a context-cancelled error where every other shutdown path
+	// exits quietly.
 	var providerErr error
-	if !opts.dryRun && !interrupted {
+	if !opts.dryRun && !interrupted && deadline.Err() == nil {
 		providerErr = collectProviderUsage(deadline, cfg, client, home)
 	}
 
