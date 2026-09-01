@@ -166,3 +166,34 @@ func TestProviderNamesAreAgents(t *testing.T) {
 		}
 	}
 }
+
+// A negative cost has no vendor meaning and would subtract from real spend once it
+// reached usage_ledger and, after the fold, a session's own totals. The boundary
+// floors it at zero the same way it floors the token counts.
+func TestProviderUsageClampsANegativeCost(t *testing.T) {
+	t.Parallel()
+	srv, st, _ := newTestServerWithReparse(t)
+	c, ownerID := ingestClient(t, srv.URL, st)
+	ctx := context.Background()
+
+	at := time.Date(2026, 8, 17, 20, 17, 0, 0, time.UTC)
+	e := providerEvent("negative", at, true, -12.5)
+	e.Input, e.Output, e.CacheRead = -1, -2, -3
+	if _, err := c.SendProviderUsage(ctx, "cursor", "acct", []upload.ProviderUsageEvent{e}); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+
+	var cost float64
+	var in, out, cr int
+	if err := st.Pool.QueryRow(ctx,
+		`SELECT cost_usd, input_tokens, output_tokens, cache_read_tokens
+		   FROM provider_usage_events WHERE user_id = $1`, ownerID).Scan(&cost, &in, &out, &cr); err != nil {
+		t.Fatalf("read stored event: %v", err)
+	}
+	if cost != 0 {
+		t.Errorf("stored cost %v, want 0: a negative charge would cancel real spend", cost)
+	}
+	if in != 0 || out != 0 || cr != 0 {
+		t.Errorf("stored tokens in=%d out=%d cr=%d, want all 0", in, out, cr)
+	}
+}

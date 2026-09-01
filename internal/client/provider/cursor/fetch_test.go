@@ -286,3 +286,22 @@ func TestFetchReportsARejectedSessionAsNoSession(t *testing.T) {
 		t.Errorf("fetch against a 401 returned %v, want ErrNoSession", err)
 	}
 }
+
+// A boundary that repeats more rows than the reported count can explain is the
+// dangerous case: capping the drop at the surplus would leave the excess repeats in
+// the output, where withEventKeys gives each a distinct ordinal and the server
+// stores one charge twice. The walk has to reject it, exactly as it rejects a
+// surplus the boundaries cannot explain at all.
+func TestFetchRejectsABoundaryRepeatLargerThanTheSurplus(t *testing.T) {
+	first := rows(1788000000000, pageSize)
+	// The next page repeats the previous page's last four rows, but the feed's own
+	// count admits only two of them as duplication.
+	second := append(append([]string{}, first[pageSize-4:]...), rows(1788000009000, 2)...)
+	f := &feedServer{pages: []string{
+		page(pageSize+2+2, first),
+		page(pageSize+2+2, second),
+	}}
+	if _, err := fetchFrom(t, f.start(t), time.Time{}); err == nil {
+		t.Fatal("fetch accepted a boundary repeat larger than the reported surplus, want an error")
+	}
+}

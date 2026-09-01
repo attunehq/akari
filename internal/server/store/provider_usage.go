@@ -58,15 +58,17 @@ type ProviderUsageEvent struct {
 }
 
 // ProviderUsageResult reports what one RecordProviderUsage call changed: how many
-// events were new, and how many sessions those events made due for a rebuild.
+// events were new, and how many sessions those new events made due for a rebuild.
+// A collection that stores nothing marks nothing, so a re-fetched window costs no
+// rebuild.
 type ProviderUsageResult struct {
 	Inserted       int
 	SessionsMarked int
 }
 
 // RecordProviderUsage stores a batch of provider-reported usage events for one
-// vendor account, resolves each to a session where one is known, and marks every
-// touched session for a rebuild.
+// vendor account, resolves each to a session where one is known, and marks the
+// sessions its newly stored events resolved to for a rebuild.
 //
 // provider names both the vendor and the akari agent whose sessions its events can
 // attach to. The two are the same string by construction: the column's CHECK admits
@@ -106,48 +108,56 @@ func (s *Store) RecordProviderUsage(ctx context.Context, userID int64, provider,
 		// than DO UPDATE: an event's reported figures are immutable once billed, so a
 		// second sighting carries no new information, and leaving the stored row
 		// untouched keeps its session resolution and the rebuild it already triggered.
-		tag, err := tx.Exec(ctx,
-			`INSERT INTO provider_usage_events
-			   (user_id, provider, account_id, event_key, conversation_id, session_id,
-			    model, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
-			    cost_usd, cost_source, model_name_public, occurred_at)
-			 SELECT $1, $2, $3, e.event_key, e.conversation_id,
-			        -- One conversation can be ingested under two project slugs (the same
-			        -- agent run observed from two worktrees), so this join is not unique.
-			        -- The spend happened once, so it attaches to one session: the oldest,
-			        -- which makes the choice deterministic across machines and repeat
-			        -- collections rather than whichever row the planner happens to return.
-			        (SELECT id FROM sessions
-			          WHERE user_id = $1 AND agent = $2
-			            AND `+sessionConversationID+` = e.conversation_id
-			          ORDER BY id LIMIT 1),
-			        e.model, e.input_tokens, e.output_tokens, e.cache_write_tokens,
-			        e.cache_read_tokens, e.cost_usd, e.cost_source, e.model_name_public,
-			        e.occurred_at
-			   FROM unnest($4::text[], $5::text[], $6::text[], $7::int[], $8::int[],
-			               $9::int[], $10::int[], $11::double precision[], $12::text[],
-			               $13::boolean[], $14::timestamptz[])
-			     AS e(event_key, conversation_id, model, input_tokens, output_tokens,
-			          cache_write_tokens, cache_read_tokens, cost_usd, cost_source,
-			          model_name_public, occurred_at)
-			 ON CONFLICT (user_id, provider, account_id, event_key) DO NOTHING`,
+		//
+		// The insert and the dirty mark are one statement so the mark can key off the
+		// rows the insert actually wrote. Marking every session that merely holds
+		// attached usage would re-flag sessions the rebuild already folded, and since
+		// the rebuild clears the flag while the rows stay attached, every later
+		// collection would set them again: a refold of the whole Cursor corpus once
+		// per pass, forever. The flag has to mean "usage arrived that no rebuild has
+		// seen", which is exactly the newly inserted rows.
+		err := tx.QueryRow(ctx,
+			`WITH inserted AS (
+			   INSERT INTO provider_usage_events
+			     (user_id, provider, account_id, event_key, conversation_id, session_id,
+			      model, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
+			      cost_usd, cost_source, model_name_public, occurred_at)
+			   SELECT $1, $2, $3, e.event_key, e.conversation_id,
+			          -- One conversation can be ingested under two project slugs (the same
+			          -- agent run observed from two worktrees), so this join is not unique.
+			          -- The spend happened once, so it attaches to one session: the oldest,
+			          -- which makes the choice deterministic across machines and repeat
+			          -- collections rather than whichever row the planner happens to return.
+			          (SELECT id FROM sessions
+			            WHERE user_id = $1 AND agent = $2
+			              AND `+sessionConversationID+` = e.conversation_id
+			            ORDER BY id LIMIT 1),
+			          e.model, e.input_tokens, e.output_tokens, e.cache_write_tokens,
+			          e.cache_read_tokens, e.cost_usd, e.cost_source, e.model_name_public,
+			          e.occurred_at
+			     FROM unnest($4::text[], $5::text[], $6::text[], $7::int[], $8::int[],
+			                 $9::int[], $10::int[], $11::double precision[], $12::text[],
+			                 $13::boolean[], $14::timestamptz[])
+			       AS e(event_key, conversation_id, model, input_tokens, output_tokens,
+			            cache_write_tokens, cache_read_tokens, cost_usd, cost_source,
+			            model_name_public, occurred_at)
+			   ON CONFLICT (user_id, provider, account_id, event_key) DO NOTHING
+			   RETURNING session_id
+			 ), marked AS (
+			   UPDATE session_raw sr
+			      SET usage_dirty = true
+			    WHERE NOT sr.usage_dirty
+			      AND sr.session_id IN (SELECT session_id FROM inserted WHERE session_id IS NOT NULL)
+			   RETURNING 1
+			 )
+			 SELECT (SELECT count(*) FROM inserted), (SELECT count(*) FROM marked)`,
 			userID, provider, accountID,
 			cols.eventKey, cols.conversationID, cols.model, cols.input, cols.output,
 			cols.cacheWrite, cols.cacheRead, cols.cost, cols.costSource,
-			cols.modelPublic, cols.occurredAt)
+			cols.modelPublic, cols.occurredAt).Scan(&out.Inserted, &out.SessionsMarked)
 		if err != nil {
 			return fmt.Errorf("insert provider usage events: %w", err)
 		}
-		out.Inserted = int(tag.RowsAffected())
-
-		// Mark every session that now holds unfolded provider usage. The rebuild is
-		// what moves those rows into the ledger and into sessions.total_*, so a fetch
-		// that resolved to a session is not complete until the drain runs.
-		marked, err := markProviderUsageDirtyTx(ctx, tx, userID, provider)
-		if err != nil {
-			return err
-		}
-		out.SessionsMarked = marked
 		return nil
 	})
 	if err != nil {
@@ -193,27 +203,6 @@ func (c *providerUsageColumns) append(key string, e ProviderUsageEvent) {
 	c.cost = append(c.cost, e.CostUSD)
 	c.modelPublic = append(c.modelPublic, e.ModelNamePublic)
 	c.occurredAt = append(c.occurredAt, e.OccurredAt)
-}
-
-// markProviderUsageDirtyTx flags the raw rows of every session that owns provider
-// usage for this user and provider, so the due scan picks them up. It is
-// deliberately not narrowed to the rows just inserted: the flag is idempotent, the
-// set is bounded by one user's Cursor sessions, and re-flagging a session whose
-// rebuild is already pending costs one clean rebuild rather than a missed one.
-func markProviderUsageDirtyTx(ctx context.Context, tx pgx.Tx, userID int64, provider string) (int, error) {
-	tag, err := tx.Exec(ctx,
-		`UPDATE session_raw sr
-		    SET usage_dirty = true
-		  WHERE NOT sr.usage_dirty
-		    AND sr.session_id IN (
-		          SELECT DISTINCT p.session_id
-		            FROM provider_usage_events p
-		           WHERE p.user_id = $1 AND p.provider = $2 AND p.session_id IS NOT NULL)`,
-		userID, provider)
-	if err != nil {
-		return 0, fmt.Errorf("mark provider usage dirty: %w", err)
-	}
-	return int(tag.RowsAffected()), nil
 }
 
 // ProviderUsageWatermark returns the newest event instant stored for one vendor

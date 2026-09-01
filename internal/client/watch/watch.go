@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -158,6 +159,24 @@ func (w *Watcher) run(ctx context.Context, fsw *fsnotify.Watcher) error {
 	// A nil collector leaves the channel nil, which blocks forever in the select
 	// below, so the loop keeps exactly the shape it had without the collection.
 	var usageC <-chan time.Time
+	// collect runs one usage pass off the run loop. A first collection walks the
+	// account's whole history, which is many requests: running it inline would stall
+	// this goroutine for its full duration, and this goroutine is what drains the
+	// fsnotify channel (whose kernel queue can overflow and drop events), fires the
+	// debounce deadlines, and services the poll and rescan tickers. File syncs already
+	// run off the loop for the same reason. The guard makes passes single-flight, so a
+	// tick that lands while a slow pass is still running is dropped rather than
+	// stacking a second walk of the same feed on top of it.
+	var collecting atomic.Bool
+	collect := func() {
+		if w.opt.CollectUsage == nil || !collecting.CompareAndSwap(false, true) {
+			return
+		}
+		go func() {
+			defer collecting.Store(false)
+			w.opt.CollectUsage(ctx)
+		}()
+	}
 	if w.opt.CollectUsage != nil {
 		usage := time.NewTicker(w.opt.Usage)
 		defer usage.Stop()
@@ -165,7 +184,7 @@ func (w *Watcher) run(ctx context.Context, fsw *fsnotify.Watcher) error {
 		// Collect once at startup rather than waiting out a full interval, so a
 		// freshly started daemon reports the account's usage now instead of in half an
 		// hour.
-		w.opt.CollectUsage(ctx)
+		collect()
 	}
 
 	for {
@@ -196,7 +215,7 @@ func (w *Watcher) run(ctx context.Context, fsw *fsnotify.Watcher) error {
 			}
 
 		case <-usageC:
-			w.opt.CollectUsage(ctx)
+			collect()
 
 		case <-poll.C:
 			// Fallback for changes the OS watcher missed: re-stat only the files we

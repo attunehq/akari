@@ -149,8 +149,15 @@ func runSync(ctx context.Context, args []string) error {
 	// synced by this same run is already announced when its billing events arrive
 	// and resolves immediately instead of waiting for the next collection. A dry run
 	// reports what it would do and sends nothing.
+	//
+	// An interrupted pass skips it. The collection is a fresh network phase of its
+	// own (a feed walk plus its upload batches), and everywhere else in this command
+	// a first Ctrl-C or an elapsed --time-limit means "start no new work, finish what
+	// is in flight, exit". Starting minutes of new requests after the operator asked
+	// the run to stop would break that, and skipping costs nothing: the collection
+	// resumes from the server's watermark on the next pass.
 	var providerErr error
-	if !opts.dryRun {
+	if !opts.dryRun && !interrupted {
 		providerErr = collectProviderUsage(work, cfg, client, home)
 	}
 

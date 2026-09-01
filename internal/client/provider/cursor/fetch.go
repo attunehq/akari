@@ -136,9 +136,18 @@ func dropBoundaryRepeats(pages [][]Event, want int) ([]Event, error) {
 	remaining := total - want
 	out := append([]Event(nil), pages[0]...)
 	for i := 1; i < len(pages); i++ {
-		drop := min(boundaryOverlap(pages[i-1], pages[i]), remaining)
-		out = append(out, pages[i][drop:]...)
-		remaining -= drop
+		// A boundary that repeats more rows than the surplus can explain means the
+		// count and the pages disagree about what is duplication. Capping the drop at
+		// the surplus would leave the excess repeats in the output, each keyed
+		// distinctly by its ordinal, and the server would store one charge twice: the
+		// silent miscount this whole function exists to prevent. Reject instead, on the
+		// same reasoning as a surplus the boundaries cannot explain at all.
+		overlap := boundaryOverlap(pages[i-1], pages[i])
+		if overlap > remaining {
+			return nil, fmt.Errorf("cursor usage feed repeated %d events across the boundary of pages %d and %d, more than the %d-event surplus its own count reports", overlap, i, i+1, remaining)
+		}
+		out = append(out, pages[i][overlap:]...)
+		remaining -= overlap
 	}
 	if remaining != 0 || len(out) != want {
 		return nil, fmt.Errorf("cursor usage feed returned %d events for an expected %d, and the surplus is not page overlap", total, want)

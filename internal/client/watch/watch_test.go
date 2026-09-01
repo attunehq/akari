@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -274,5 +275,82 @@ func TestWatchIgnoresNonSessionFiles(t *testing.T) {
 		case <-deadline:
 			t.Fatal("timed out waiting for rollout sync")
 		}
+	}
+}
+
+// A first usage collection walks a vendor's whole account history, which can take
+// minutes. Running it on the run loop's goroutine would stall the goroutine that
+// drains fsnotify (whose kernel queue can overflow and drop events), fires the
+// debounce deadlines, and services the poll and rescan tickers, so transcript sync
+// would degrade to the collection's duration. It has to run off the loop.
+func TestWatchCollectsUsageWithoutStallingTheLoop(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "proj", "sess.jsonl")
+	writeSession(t, path)
+
+	fn, synced := recorder()
+	release := make(chan struct{})
+	entered := make(chan struct{}, 8)
+	opt := fastOptions()
+	opt.Usage = time.Hour // only the startup collection runs
+	opt.CollectUsage = func(context.Context) {
+		entered <- struct{}{}
+		<-release
+	}
+
+	w := New([]discover.Root{{Agent: "claude", Dir: dir}}, fn, opt)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- w.Run(ctx) }()
+	t.Cleanup(func() {
+		cancel()
+		close(release)
+		<-done
+	})
+
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the startup collection never ran")
+	}
+	// The collection is still blocked. Files must sync anyway.
+	waitFor(t, synced, path)
+}
+
+// Passes are single-flight: a tick landing while a slow pass is still running is
+// dropped rather than stacking a second walk of the same feed on top of it.
+func TestWatchDoesNotOverlapUsageCollections(t *testing.T) {
+	dir := t.TempDir()
+	writeSession(t, filepath.Join(dir, "proj", "sess.jsonl"))
+
+	fn, _ := recorder()
+	release := make(chan struct{})
+	var running, peak atomic.Int32
+	opt := fastOptions()
+	opt.Usage = 10 * time.Millisecond // tick hard while the first pass is blocked
+	opt.CollectUsage = func(context.Context) {
+		n := running.Add(1)
+		for {
+			p := peak.Load()
+			if n <= p || peak.CompareAndSwap(p, n) {
+				break
+			}
+		}
+		<-release
+		running.Add(-1)
+	}
+
+	w := New([]discover.Root{{Agent: "claude", Dir: dir}}, fn, opt)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- w.Run(ctx) }()
+
+	time.Sleep(200 * time.Millisecond) // many ticks elapse against one blocked pass
+	close(release)
+	cancel()
+	<-done
+
+	if got := peak.Load(); got > 1 {
+		t.Errorf("%d usage collections overlapped, want at most 1", got)
 	}
 }

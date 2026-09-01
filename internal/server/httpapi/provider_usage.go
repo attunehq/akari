@@ -97,7 +97,12 @@ func (s *Server) handleProviderUsage(w http.ResponseWriter, r *http.Request) {
 		// An unreported cost is stored as unknown at zero, never as a reported zero.
 		// The store's CHECK enforces the same pairing, so this is the boundary that
 		// keeps a malformed client from writing a priced-looking unknown.
-		cost, source := e.CostUSD, store.CostSourceProvider
+		//
+		// Cost floors at zero for the same reason the token counts do: it flows through
+		// usage_ledger into the Overview headline and, once folded, into a session's
+		// own totals, where a negative would silently cancel real spend. No vendor
+		// reports a negative charge, so clamping here cannot lose a real figure.
+		cost, source := max(e.CostUSD, 0), store.CostSourceProvider
 		if !e.CostKnown {
 			cost, source = 0, store.CostSourceUnknown
 		}

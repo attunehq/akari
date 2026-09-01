@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -578,4 +579,75 @@ func assertBreakdown(t *testing.T, rows []store.Breakdown, label string, wantCos
 		}
 	}
 	t.Errorf("breakdown has no %q row", label)
+}
+
+// TestRecollectingAFoldedWindowLeavesNothingDue is the regression for the rebuild
+// treadmill.
+//
+// The client's resume window is the watermark minus a second and the feed is
+// inclusive of it, so every collection re-reports at least the boundary event: a
+// steady-state pass always carries rows that are already stored and already folded.
+// Marking every session that merely holds attached usage would flag those sessions
+// again, and because the rebuild clears the flag while the rows stay attached, the
+// next pass would flag them again, forever. That is an unbounded refold of the whole
+// Cursor corpus once per collection, growing with the corpus, and it never converges.
+// The mark has to key off the rows the insert actually wrote.
+func TestRecollectingAFoldedWindowLeavesNothingDue(t *testing.T) {
+	t.Parallel()
+	st := storetest.NewStore(t)
+	ctx := context.Background()
+
+	user, err := st.Register(ctx, "anna", "h", "")
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	proj, err := st.UpsertProject(ctx, "github.com/anna/observatory", "github.com", "anna", "observatory", "observatory", "remote")
+	if err != nil {
+		t.Fatalf("project: %v", err)
+	}
+
+	const conversation = "5bdff57e-a71f-4c66-8d47-0a2d3f9e1b40"
+	msgs := []store.MessageDelta{{Ordinal: 0, Role: "user", Content: "plot the transit"}}
+	sid := ingestOnly(t, st, user.ID, proj, "cursor", conversation, msgs, nil)
+
+	at := time.Date(2026, 8, 24, 9, 0, 0, 0, time.UTC)
+	batch := []store.ProviderUsageEvent{
+		providerEvent("evt-a", conversation, "cursor-grok-4.6-high", at, 100, 200, 300, 1.25),
+	}
+	first, err := st.RecordProviderUsage(ctx, user.ID, "cursor", "acct", batch)
+	if err != nil {
+		t.Fatalf("first collection: %v", err)
+	}
+	if first.SessionsMarked != 1 {
+		t.Fatalf("first collection marked %d sessions, want 1", first.SessionsMarked)
+	}
+	rebuildWith(t, st, sid, store.ProjectionDelta{Messages: msgs})
+	assertDue(t, st, sid, false, "after the first collection folded")
+
+	// The steady-state pass: the same window, every row already stored and folded.
+	for pass := range 3 {
+		res, err := st.RecordProviderUsage(ctx, user.ID, "cursor", "acct", batch)
+		if err != nil {
+			t.Fatalf("re-collection %d: %v", pass, err)
+		}
+		if res.Inserted != 0 {
+			t.Errorf("re-collection %d inserted %d events, want 0", pass, res.Inserted)
+		}
+		if res.SessionsMarked != 0 {
+			t.Errorf("re-collection %d marked %d sessions for rebuild, want 0: a re-reported event that is already folded is not new work", pass, res.SessionsMarked)
+		}
+		assertDue(t, st, sid, false, fmt.Sprintf("after re-collection %d", pass))
+	}
+
+	// A genuinely new event on the same session still lands, so the narrowing did
+	// not trade the treadmill for a missed fold.
+	res, err := st.RecordProviderUsage(ctx, user.ID, "cursor", "acct", append(batch,
+		providerEvent("evt-b", conversation, "cursor-grok-4.6-high", at.Add(time.Hour), 10, 20, 30, 0.5)))
+	if err != nil {
+		t.Fatalf("collection with a new event: %v", err)
+	}
+	if res.Inserted != 1 || res.SessionsMarked != 1 {
+		t.Errorf("a new event inserted %d and marked %d, want 1 and 1", res.Inserted, res.SessionsMarked)
+	}
+	assertDue(t, st, sid, true, "after a genuinely new event arrived")
 }
