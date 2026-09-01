@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jssblck/akari/internal/pricing"
 )
 
 // sessionConversationID is the SQL expression for the vendor conversation a session
@@ -309,14 +310,23 @@ func resolveProviderUsageForSessionTx(ctx context.Context, tx pgx.Tx, sessionID 
 	}
 	// Only rows that are still unattached move, so a conversation ingested a second
 	// time under a different project slug never takes the events from the session
-	// already holding them. First announce wins, which agrees with the oldest-session
-	// rule the insert path applies.
+	// already holding them.
+	//
+	// The row goes to the oldest session for the conversation, not unconditionally to
+	// the announcing one, which is the same rule the insert and the sweep apply. The
+	// announcing session is usually that oldest one, but it is not when a conversation
+	// is being announced a second time under another slug while some of its rows are
+	// still stranded: attaching those to the announcer would split one conversation's
+	// spend across two sessions depending on which path happened to rescue each row.
 	tag, err := tx.Exec(ctx,
-		`UPDATE provider_usage_events
-		    SET session_id = $1
-		  WHERE user_id = $2 AND provider = $3 AND conversation_id = $4
-		    AND session_id IS NULL`,
-		sessionID, userID, agent, conversationIDOf(sourceID))
+		`UPDATE provider_usage_events p
+		    SET session_id = (SELECT s.id FROM sessions s
+		                       WHERE s.user_id = $1 AND s.agent = $2
+		                         AND `+sessionConversationID+` = p.conversation_id
+		                       ORDER BY s.id LIMIT 1)
+		  WHERE p.user_id = $1 AND p.provider = $2 AND p.conversation_id = $3
+		    AND p.session_id IS NULL`,
+		userID, agent, conversationIDOf(sourceID))
 	if err != nil {
 		return false, fmt.Errorf("resolve provider usage for session %d: %w", sessionID, err)
 	}
@@ -341,7 +351,7 @@ func providerUsageForSessionTx(ctx context.Context, tx pgx.Tx, sessionID int64) 
 	rows, err := tx.Query(ctx,
 		`SELECT provider, event_key, model, input_tokens, output_tokens,
 		        cache_write_tokens, cache_read_tokens, cost_usd, cost_source,
-		        model_name_public, occurred_at
+		        occurred_at
 		   FROM provider_usage_events
 		  WHERE session_id = $1
 		  ORDER BY occurred_at, id`, sessionID)
@@ -355,9 +365,17 @@ func providerUsageForSessionTx(ctx context.Context, tx pgx.Tx, sessionID int64) 
 		var provider, eventKey, costSource string
 		if err := rows.Scan(&provider, &eventKey, &u.Model, &u.Input, &u.Output,
 			&u.CacheWrite, &u.CacheRead, &u.CostUSD, &costSource,
-			&u.ModelNamePublic, &u.OccurredAt); err != nil {
+			&u.OccurredAt); err != nil {
 			return nil, fmt.Errorf("scan provider usage for session %d: %w", sessionID, err)
 		}
+		// Disclosure is decided here against the running catalog, not read from the
+		// stored column, so it is rebuild-derived exactly as it is for a parsed row.
+		// A stored event is immutable, so the ingest-time decision never gets another
+		// look; if the catalog later withdrew a model, reading that column would keep
+		// publishing a name akari no longer discloses. parse.Epoch already moves on a
+		// pricing-table change, so the corpus re-folds and every attached row picks up
+		// the current answer.
+		u.ModelNamePublic = pricing.ModelNamePublic(u.Model)
 		u.CostSource = CostSource(costSource)
 		u.DedupKey = "provider:" + provider + ":" + eventKey
 		u.SourceOffset = -1

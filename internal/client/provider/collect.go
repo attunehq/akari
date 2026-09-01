@@ -63,6 +63,18 @@ func Collect(ctx context.Context, cfg config.Client, up uploader, home string, e
 }
 
 func collectCursor(ctx context.Context, cfg config.Client, up uploader, home string, env func(string) string) Result {
+	r := collect(ctx, cfg, up, home, env)
+	// A shutdown mid-collection is not a failure of the collection. Every other
+	// shutdown path in the client exits quietly, and reporting "context canceled" here
+	// would make an ordinary Ctrl-C a non-zero sync exit and a logged watch error.
+	// Nothing is lost: the pass is idempotent and resumes from the server's watermark.
+	if r.Err != nil && ctx.Err() != nil {
+		return Result{Provider: r.Provider, Skipped: true, Reason: "interrupted", Fetched: r.Fetched}
+	}
+	return r
+}
+
+func collect(ctx context.Context, cfg config.Client, up uploader, home string, env func(string) string) Result {
 	r := Result{Provider: "cursor"}
 	if !cfg.Cursor.Enabled() {
 		r.Skipped, r.Reason = true, "cursor usage collection is off"

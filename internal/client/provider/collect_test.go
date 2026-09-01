@@ -98,3 +98,25 @@ func testToken(t *testing.T) string {
 	}
 	return "header." + base64.RawURLEncoding.EncodeToString(payload) + ".signature"
 }
+
+// A shutdown mid-collection is not a collection failure. Every other shutdown path
+// in the client exits quietly, so reporting the context error would turn an
+// ordinary Ctrl-C into a non-zero sync exit and a logged watch error. Nothing is
+// lost either: the pass is idempotent and resumes from the server's watermark.
+func TestCollectReportsAnInterruptAsASkip(t *testing.T) {
+	token := testToken(t)
+	cfg := config.Client{Cursor: config.CursorProvider{Cookie: "WorkosCursorSessionToken=acct%3A%3A" + token}}
+	rec := &recorder{watermarkErr: context.Canceled}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	results := Collect(ctx, cfg, rec, t.TempDir(), func(string) string { return "" })
+
+	r := results[0]
+	if r.Err != nil {
+		t.Errorf("an interrupted collection reported err=%v, want a quiet skip", r.Err)
+	}
+	if !r.Skipped {
+		t.Error("an interrupted collection was not reported as skipped")
+	}
+}
