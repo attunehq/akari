@@ -89,10 +89,11 @@ func (o Options) withDefaults() Options {
 
 // Watcher watches a set of roots and syncs changed session files.
 type Watcher struct {
-	roots []discover.Root
-	sync  SyncFunc
-	opt   Options
-	ex    discover.Excluder
+	roots        []discover.Root
+	sync         SyncFunc
+	opt          Options
+	ex           discover.Excluder
+	discoverFunc func([]discover.Root, discover.Excluder) ([]discover.File, []string, error)
 
 	// discoveryLog dedupes the log line w.discover() emits; see logDiscoveryStatus.
 	// It is only ever touched from run()'s single goroutine.
@@ -102,7 +103,13 @@ type Watcher struct {
 // New builds a Watcher.
 func New(roots []discover.Root, sync SyncFunc, opt Options) *Watcher {
 	o := opt.withDefaults()
-	return &Watcher{roots: roots, sync: sync, opt: o, ex: discover.NewExcluder(o.Excludes)}
+	return &Watcher{
+		roots:        roots,
+		sync:         sync,
+		opt:          o,
+		ex:           discover.NewExcluder(o.Excludes),
+		discoverFunc: discover.Discover,
+	}
 }
 
 type fileMeta struct {
@@ -496,7 +503,7 @@ func (w *Watcher) fileFor(path string) (discover.File, bool) {
 }
 
 func (w *Watcher) discover() []discover.File {
-	files, notices, err := discover.Discover(w.roots, w.ex)
+	files, notices, err := w.discoverFunc(w.roots, w.ex)
 	w.logDiscoveryStatus(notices, err)
 	return files
 }

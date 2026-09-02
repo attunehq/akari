@@ -38,6 +38,11 @@ func TestStoreEventsCoalesceIntoOneDiscoveryPass(t *testing.T) {
 	known := map[discover.File]fileMeta{}
 	pending := map[discover.File]time.Time{}
 	sr := &storeRefresh{}
+	discoveries := 0
+	w.discoverFunc = func([]discover.Root, discover.Excluder) ([]discover.File, []string, error) {
+		discoveries++
+		return nil, nil, nil
+	}
 
 	const events = 12
 	for i := range events {
@@ -46,6 +51,9 @@ func TestStoreEventsCoalesceIntoOneDiscoveryPass(t *testing.T) {
 			Op:   fsnotify.Write,
 		}, known, pending, sr)
 	}
+	if discoveries != 0 {
+		t.Fatalf("store burst ran %d inline discovery pass(es), want 0", discoveries)
+	}
 	if !sr.pending {
 		t.Fatal("store burst did not schedule a refresh")
 	}
@@ -53,15 +61,10 @@ func TestStoreEventsCoalesceIntoOneDiscoveryPass(t *testing.T) {
 		t.Fatalf("store burst populated %d pending file(s) before discovery", len(pending))
 	}
 
-	discoveries := 0
-	discoverFiles := func() []discover.File {
-		discoveries++
-		return nil
-	}
 	mark := func(discover.File) {}
-	flushTick(sr.settleAt.Add(-time.Nanosecond), debounce, sr, known, pending, discoverFiles, mark)
-	flushTick(sr.settleAt, debounce, sr, known, pending, discoverFiles, mark)
-	flushTick(sr.settleAt.Add(debounce), debounce, sr, known, pending, discoverFiles, mark)
+	flushTick(sr.settleAt.Add(-time.Nanosecond), debounce, sr, known, pending, w.discover, mark)
+	flushTick(sr.settleAt, debounce, sr, known, pending, w.discover, mark)
+	flushTick(sr.settleAt.Add(debounce), debounce, sr, known, pending, w.discover, mark)
 
 	if discoveries != 1 {
 		t.Fatalf("store burst caused %d discovery passes, want 1", discoveries)
