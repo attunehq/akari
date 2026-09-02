@@ -281,3 +281,52 @@ func TestResolveReportsExhaustedGitFailure(t *testing.T) {
 		t.Fatalf("failed result carried classification: %+v", res)
 	}
 }
+
+// An unreadable working directory is as stable an outcome as "not a repository":
+// nothing about a second attempt can change it. Retrying cost one macOS host
+// 13,248 logged failures in 33 minutes, three Git processes apiece, because every
+// rescan re-ran the lookup for every session that had ever run under ~/Documents.
+func TestRunGitDoesNotRetryInaccessibleDirectory(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		stderr string
+	}{
+		{"tcc denial", "fatal: Unable to read current working directory: Operation not permitted"},
+		{"directory removed", "fatal: cannot change to '/gone': No such file or directory"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var calls atomic.Int32
+			r := NewWith(func(_ context.Context, _ string, _ ...string) (string, error) {
+				calls.Add(1)
+				return "", errors.New(c.stderr)
+			}, nil)
+			r.retryDelay = func(int) time.Duration { return 0 }
+
+			if _, err := r.runGit(context.Background(), t.TempDir(), "rev-parse", "--is-inside-work-tree"); err == nil {
+				t.Fatal("expected an error")
+			}
+			if got := calls.Load(); got != 1 {
+				t.Fatalf("Git calls = %d, want 1", got)
+			}
+		})
+	}
+}
+
+// The inaccessible-directory markers are Git's own wording about the working
+// directory, not the kernel's errno text, so an ordinary permission failure on a
+// file inside a readable repository stays retryable.
+func TestRunGitStillRetriesPermissionDeniedInsideRepository(t *testing.T) {
+	var calls atomic.Int32
+	r := NewWith(func(_ context.Context, _ string, _ ...string) (string, error) {
+		calls.Add(1)
+		return "", errors.New("error: could not lock config file .git/config: Permission denied")
+	}, nil)
+	r.retryDelay = func(int) time.Duration { return 0 }
+
+	if _, err := r.runGit(context.Background(), t.TempDir(), "remote", "get-url", "--all", "origin"); err == nil {
+		t.Fatal("expected an error")
+	}
+	if got := calls.Load(); got != gitMaxAttempts {
+		t.Fatalf("Git calls = %d, want %d", got, gitMaxAttempts)
+	}
+}

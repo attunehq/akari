@@ -44,6 +44,7 @@ const (
 	gitResultUnknown definitiveGitResult = iota
 	gitResultNotRepository
 	gitResultNoRemote
+	gitResultInaccessible
 )
 
 // runGit retries operational failures within the lookup's existing five-second
@@ -99,6 +100,9 @@ func definitiveGitFailure(args []string, err error) definitiveGitResult {
 		return gitResultUnknown
 	}
 	message := strings.ToLower(err.Error())
+	if isInaccessibleDirectory(message) {
+		return gitResultInaccessible
+	}
 	if containsGitArg(args, "--is-inside-work-tree") &&
 		(strings.Contains(message, "not a git repository") ||
 			strings.Contains(message, "not a git repo") ||
@@ -111,6 +115,29 @@ func definitiveGitFailure(args []string, err error) definitiveGitResult {
 		return gitResultNoRemote
 	}
 	return gitResultUnknown
+}
+
+// isInaccessibleDirectory reports whether Git failed because it could not enter
+// or read the working directory at all, rather than because of anything about a
+// repository there. That is stable for as long as the directory stays as it is,
+// so retrying is pure cost. Two causes produce it:
+//
+//   - The directory is gone, so "git -C" cannot enter it and reports
+//     "cannot change to '<dir>'".
+//   - The process may not read it. On macOS a launchd agent without a TCC grant
+//     for ~/Documents, ~/Desktop or ~/Downloads can chdir into one but cannot
+//     getcwd() there, and Git reports "Unable to read current working directory".
+//     Because TCC keys on code signature, an ad-hoc-signed binary loses any
+//     grant on every re-sign, so this is the normal state and not an edge case.
+//
+// Both markers are Git's own wording rather than the kernel's errno text, which
+// keeps this from swallowing an ordinary "Permission denied" on some file inside
+// a repository that is otherwise perfectly readable. Matching English is safe for
+// the same reason the rest of definitiveGitFailure relies on it: systemGit pins
+// the subprocess to the C locale.
+func isInaccessibleDirectory(message string) bool {
+	return strings.Contains(message, "unable to read current working directory") ||
+		strings.Contains(message, "cannot change to ")
 }
 
 func containsGitArg(args []string, want string) bool {

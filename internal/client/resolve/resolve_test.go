@@ -466,6 +466,25 @@ func TestResolveClassifies(t *testing.T) {
 			wantReason: "is not a git repository",
 		},
 		{
+			// A launchd agent without a macOS TCC grant for ~/Documents can chdir
+			// into it but not getcwd() there. The directory is fine; this process
+			// simply may not read it, and no retry changes that.
+			name:       "unreadable cwd is standalone",
+			cwd:        existing,
+			git:        fakeGit(nil, map[string]error{"rev-parse": fmt.Errorf("fatal: Unable to read current working directory: Operation not permitted")}),
+			wantKind:   KindStandalone,
+			wantReason: "is not readable",
+		},
+		{
+			// The orphan check catches a missing cwd first, but it can vanish
+			// between that check and the Git call.
+			name:       "cwd that vanished mid-lookup is standalone",
+			cwd:        existing,
+			git:        fakeGit(nil, map[string]error{"rev-parse": fmt.Errorf("fatal: cannot change to '/gone': No such file or directory")}),
+			wantKind:   KindStandalone,
+			wantReason: "is not readable",
+		},
+		{
 			name:       "no origin is standalone",
 			cwd:        existing,
 			git:        fakeGit(map[string]string{"rev-parse": "true"}, map[string]error{"remote get-url": fmt.Errorf("no such remote")}),

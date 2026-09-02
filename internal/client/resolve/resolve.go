@@ -380,8 +380,16 @@ func (r *Resolver) evictLeastRecentlyUsed() {
 
 func (r *Resolver) resolveGit(ctx context.Context, cwd string) (key, root, reason string, config configFingerprint, err error) {
 	if _, err := r.runGit(ctx, cwd, "rev-parse", "--is-inside-work-tree"); err != nil {
-		if definitiveGitFailure([]string{"rev-parse", "--is-inside-work-tree"}, err) == gitResultNotRepository {
+		switch definitiveGitFailure([]string{"rev-parse", "--is-inside-work-tree"}, err) {
+		case gitResultNotRepository:
 			return "", "", cwd + " is not a git repository", configFingerprint{}, nil
+		case gitResultInaccessible:
+			// The directory cannot be entered or read, so there is nothing to
+			// classify and nothing that another attempt would change. Resolving
+			// it as standalone caches that verdict; returning an error would
+			// re-run three Git attempts and log a failure on every rescan of
+			// every session that ever ran there.
+			return "", "", cwd + " is not readable", configFingerprint{}, nil
 		}
 		return "", "", "", configFingerprint{}, fmt.Errorf("inspect repository: %w", err)
 	}
