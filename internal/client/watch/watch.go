@@ -35,6 +35,9 @@ type Options struct {
 	Rescan          time.Duration // rediscovery safety net interval
 	Usage           time.Duration // vendor account-usage collection interval
 	PressureBackoff time.Duration // pause after a network, server, or process-capacity failure
+	// StoreRefresh sets the hard deadline for a coalesced OpenCode/omp store
+	// discovery while the store is being written continuously. See storeRefresh.
+	StoreRefresh time.Duration
 	// Excludes are glob patterns of paths to skip (see discover.Excluder). They
 	// keep an ignored location out of discovery, the poll, and event handling.
 	Excludes []string
@@ -70,6 +73,13 @@ func (o Options) withDefaults() Options {
 	}
 	if o.PressureBackoff <= 0 {
 		o.PressureBackoff = 30 * time.Second
+	}
+	// A store event coalesces rather than discovering inline, so this sets the
+	// deadline for picking up a session in an actively-written store. The pass
+	// runs on the first flush tick at or after it; 5s is well under the 30s
+	// discover safety net and above the pathological per-transaction event rate.
+	if o.StoreRefresh <= 0 {
+		o.StoreRefresh = 5 * time.Second
 	}
 	if o.Logf == nil {
 		o.Logf = func(string, ...any) {}
@@ -147,6 +157,7 @@ func (w *Watcher) run(ctx context.Context, fsw *fsnotify.Watcher) error {
 	}
 
 	pending := map[discover.File]time.Time{}
+	sr := &storeRefresh{}
 	flush := time.NewTicker(flushInterval(w.opt.Debounce))
 	poll := time.NewTicker(w.opt.Poll)
 	disco := time.NewTicker(w.opt.Discover)
@@ -210,7 +221,7 @@ func (w *Watcher) run(ctx context.Context, fsw *fsnotify.Watcher) error {
 			if !ok {
 				return errWatcherClosed
 			}
-			w.handleEvent(fsw, ev, known, pending)
+			w.handleEvent(fsw, ev, known, pending, sr)
 
 		case err, ok := <-fsw.Errors:
 			if !ok {
@@ -221,12 +232,7 @@ func (w *Watcher) run(ctx context.Context, fsw *fsnotify.Watcher) error {
 			}
 
 		case now := <-flush.C:
-			for f, deadline := range pending {
-				if !now.Before(deadline) {
-					rs.mark(f)
-					delete(pending, f)
-				}
-			}
+			flushTick(now, w.opt.Debounce, sr, known, pending, w.discover, rs.mark)
 
 		case <-usageC:
 			collect()
@@ -362,24 +368,81 @@ func (r *runState) worker(ctx context.Context) {
 	}
 }
 
-// handleEvent reacts to one filesystem event: new directories are watched
-// recursively, and changed session files are scheduled after the debounce. An
-// accepted file also enters the poll's known set, so the fast poll covers a Write
-// the OS watcher may later miss on that file rather than leaving it uncovered until
-// the slower discover ticker folds it in.
-func (w *Watcher) handleEvent(fsw *fsnotify.Watcher, ev fsnotify.Event, known map[discover.File]fileMeta, pending map[discover.File]time.Time) {
-	if ev.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Rename) == 0 {
-		return
+// storeRefresh coalesces OpenCode/omp store events into a single discovery pass.
+//
+// One SQLite transaction touches the database, its -wal and its -shm, and an
+// active agent commits many times a second, so every such write used to run a
+// full discovery inline on the run loop: open the database, probe its schema,
+// list every session and lstat every materialized transcript. Measured at ~300ms
+// a pass against a 1.2GB store, that burned an entire core for as long as an
+// agent was running, and starved the same loop that drains fsnotify's queue.
+//
+// Events now schedule a pass instead of performing one. settleAt runs it once
+// writes go quiet, which is the common case; forceAt bounds the wait so a store
+// under continuous write still gets picked up rather than being starved by a
+// deadline that keeps moving.
+type storeRefresh struct {
+	pending  bool
+	settleAt time.Time
+	forceAt  time.Time
+}
+
+func (s *storeRefresh) schedule(now time.Time, settle, maxWait time.Duration) {
+	if !s.pending {
+		s.pending = true
+		s.forceAt = now.Add(maxWait)
 	}
-	if w.isOpenCodeStoreEvent(ev.Name) {
-		_ = fsw.Add(ev.Name)
-		deadline := time.Now().Add(w.opt.Debounce)
-		for _, f := range w.discover() {
+	s.settleAt = now.Add(settle)
+}
+
+func (s *storeRefresh) due(now time.Time) bool {
+	return s.pending && (!now.Before(s.settleAt) || !now.Before(s.forceAt))
+}
+
+// flushTick services both coalesced store discovery and ordinary file
+// debounces. StoreRefresh is intentionally sampled by this shared ticker rather
+// than owning another timer, so a refresh runs on the first flush tick at or
+// after its deadline, normally no more than flushInterval(debounce) later.
+// Normal timer and run-loop scheduling delay still applies.
+func flushTick(
+	now time.Time,
+	debounce time.Duration,
+	sr *storeRefresh,
+	known map[discover.File]fileMeta,
+	pending map[discover.File]time.Time,
+	discoverFiles func() []discover.File,
+	mark func(discover.File),
+) {
+	if sr.due(now) {
+		sr.pending = false
+		deadline := now.Add(debounce)
+		for _, f := range discoverFiles() {
 			pending[f] = deadline
 			if m, ok := statMeta(f.Path); ok {
 				known[f] = m
 			}
 		}
+	}
+	for f, deadline := range pending {
+		if !now.Before(deadline) {
+			mark(f)
+			delete(pending, f)
+		}
+	}
+}
+
+// handleEvent reacts to one filesystem event: new directories are watched
+// recursively, and changed session files are scheduled after the debounce. An
+// accepted file also enters the poll's known set, so the fast poll covers a Write
+// the OS watcher may later miss on that file rather than leaving it uncovered until
+// the slower discover ticker folds it in.
+func (w *Watcher) handleEvent(fsw *fsnotify.Watcher, ev fsnotify.Event, known map[discover.File]fileMeta, pending map[discover.File]time.Time, sr *storeRefresh) {
+	if ev.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Rename) == 0 {
+		return
+	}
+	if w.isOpenCodeStoreEvent(ev.Name) {
+		_ = fsw.Add(ev.Name)
+		sr.schedule(time.Now(), w.opt.Debounce, w.opt.StoreRefresh)
 		return
 	}
 	if w.withinOpenCodeRoot(ev.Name) {
