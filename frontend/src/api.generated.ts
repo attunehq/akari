@@ -1910,7 +1910,7 @@ export interface components {
         };
         AnnounceSession: {
             /** @enum {string} */
-            agent: "claude" | "codex" | "pi" | "cursor" | "grok" | "opencode";
+            agent: "claude" | "codex" | "pi" | "omp" | "cursor" | "grok" | "opencode";
             cwd?: string;
             git_branch?: string;
             /**

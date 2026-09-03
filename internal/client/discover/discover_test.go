@@ -315,6 +315,7 @@ func TestRoots(t *testing.T) {
 		{Agent: "codex", Dir: filepath.Join(home, ".codex", "sessions"), Optional: true},
 		{Agent: "codex", Dir: filepath.Join(home, ".codex", "archived_sessions"), Optional: true},
 		{Agent: "pi", Dir: filepath.Join(home, ".pi", "agent", "sessions"), Optional: true},
+		{Agent: "omp", Dir: filepath.Join(home, ".omp", "agent", "sessions"), Optional: true},
 		{Agent: "cursor", Dir: filepath.Join(home, ".cursor", "projects"), Optional: true},
 		{Agent: "grok", Dir: filepath.Join(home, ".grok", "sessions"), Optional: true},
 		{Agent: "opencode", Dir: filepath.Join(home, ".local", "share", "opencode"), Optional: true},
@@ -346,5 +347,46 @@ func TestRoots(t *testing.T) {
 	// PI_DIR points at the pi home; sessions live under agent/sessions.
 	if roots[2] != (Root{Agent: "pi", Dir: filepath.Join("/custom/pihome", "agent", "sessions")}) {
 		t.Errorf("pi override = %v", roots[2])
+	}
+
+	// OMP's default profile uses ~/.omp/agent, and its documented full-agent
+	// override relocates the sessions directory with the rest of the runtime.
+	env["PI_CODING_AGENT_DIR"] = "/custom/omp-agent"
+	roots = Roots(config.Client{}, func(k string) string { return env[k] }, home)
+	var gotOMP Root
+	for _, r := range roots {
+		if r.Agent == "omp" {
+			gotOMP = r
+		}
+	}
+	if want := (Root{Agent: "omp", Dir: filepath.Join("/custom/omp-agent", "sessions")}); gotOMP != want {
+		t.Errorf("omp agent-dir override = %v, want %v", gotOMP, want)
+	}
+
+	// A direct session-directory override wins over the broader agent directory.
+	env["PI_CODING_AGENT_SESSION_DIR"] = "/custom/omp-sessions"
+	roots = Roots(config.Client{}, func(k string) string { return env[k] }, home)
+	for _, r := range roots {
+		if r.Agent == "omp" {
+			gotOMP = r
+		}
+	}
+	if want := (Root{Agent: "omp", Dir: "/custom/omp-sessions"}); gotOMP != want {
+		t.Errorf("omp session-dir override = %v, want %v", gotOMP, want)
+	}
+
+	// Named profiles move under the selected config root and intentionally ignore
+	// the default profile's PI_CODING_AGENT_DIR.
+	delete(env, "PI_CODING_AGENT_SESSION_DIR")
+	env["OMP_PROFILE"] = "review"
+	env["PI_CONFIG_DIR"] = ".omp-alt"
+	roots = Roots(config.Client{}, func(k string) string { return env[k] }, home)
+	for _, r := range roots {
+		if r.Agent == "omp" {
+			gotOMP = r
+		}
+	}
+	if want := (Root{Agent: "omp", Dir: filepath.Join(home, ".omp-alt", "profiles", "review", "agent", "sessions")}); gotOMP != want {
+		t.Errorf("omp profile root = %v, want %v", gotOMP, want)
 	}
 }

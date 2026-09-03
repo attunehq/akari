@@ -139,6 +139,14 @@ func TestLocatePiBodies(t *testing.T) {
 	}
 }
 
+// TestLocateOMPMatchesFixture runs the streaming locator over OMP's pi-compatible
+// tool-call envelopes, including the extra entry kinds OMP interleaves with them.
+func TestLocateOMPMatchesFixture(t *testing.T) {
+	for _, line := range strings.Split(strings.TrimSpace(string(loadFixture(t, "omp.jsonl"))), "\n") {
+		locateParity(t, AgentOMP, line)
+	}
+}
+
 // TestLocateStreamsInBoundedWindows confirms the locator reads the body lazily: a
 // large body is located without the reader being asked for all of it up front. The
 // span machinery itself never buffers the value, so locating bodies in a huge line is

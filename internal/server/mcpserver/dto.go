@@ -196,7 +196,7 @@ type facetValuesDTO struct {
 
 type listSessionsInput struct {
 	ProjectID int64  `json:"project_id,omitempty" jsonschema:"restrict to one project id"`
-	Agent     string `json:"agent,omitempty" jsonschema:"restrict to one agent (claude, codex, pi, cursor, grok, opencode)"`
+	Agent     string `json:"agent,omitempty" jsonschema:"restrict to one agent (claude, codex, pi, omp, cursor, grok, opencode)"`
 	Username  string `json:"username,omitempty" jsonschema:"restrict to one account name"`
 	Machine   string `json:"machine,omitempty" jsonschema:"restrict to one machine"`
 	Days      int    `json:"days,omitempty" jsonschema:"restrict to sessions active within this many trailing days; 0 or omitted means all of history"`

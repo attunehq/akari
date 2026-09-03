@@ -14,7 +14,7 @@ order: 0
 
 You run one **server** (backed by Postgres) and point many thin **clients** at
 it, one per machine. The client discovers the session logs Claude Code, Codex,
-pi, Cursor, Grok, and OpenCode leave on disk, resolves each session's working directory to a canonical
+pi, OMP, Cursor, Grok, and OpenCode leave on disk, resolves each session's working directory to a canonical
 git remote, and streams the raw bytes to the server with a resumable, append-only
 protocol. The server stores those bytes losslessly, parses them into a normalized
 projection (messages, tool calls, token usage, cost from a compiled-in rate
@@ -76,8 +76,9 @@ A few constraints shape everything that follows:
 
 - **The client runs anywhere; the server is Linux-only.** Push from macOS,
   Windows, or Linux; host the server on Linux (a container or a systemd service).
-- **Supported agents are Claude Code, Codex, pi, Cursor, Grok, and OpenCode.** The client
-  reads the session logs each leaves in its standard location. Cursor is
+- **Supported agents are Claude Code, Codex, pi, OMP, Cursor, Grok, and
+  OpenCode.** The client reads the session logs each leaves in its standard
+  location. Cursor is
   transcript-only: its CLI logs no model or token data, so Cursor sessions carry
   conversation, tool calls, and outcomes but no cost.
 - **Authorization is deliberately flat.** Signed in means you see every session.

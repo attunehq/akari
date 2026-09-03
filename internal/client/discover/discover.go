@@ -72,7 +72,7 @@ func (e Excluder) ExcludedDir(path string) bool {
 // workflow files (which all carry their parent's sessionId inside) avoid
 // colliding on a single source id.
 type File struct {
-	Agent string // claude | codex | pi | cursor | grok | opencode
+	Agent string // claude | codex | pi | cursor | grok | opencode | omp
 	Root  string
 	Path  string
 }
@@ -96,10 +96,9 @@ type Root struct {
 	SessionDB string
 }
 
-// Roots builds the directories to scan for each agent. It honors each agent's own
-// documented environment override (akari defines none of its own) via the env
-// lookup, falls back to the standard location under home, and appends any extra
-// roots from the config.
+// Roots builds the directories to scan for each agent. It honors each agent's
+// documented relocation variables (and akari's OpenCode cache override), falls
+// back to standard locations, and appends any extra roots from the config.
 func Roots(cfg config.Client, env func(string) string, home string) []Root {
 	var roots []Root
 
@@ -123,6 +122,8 @@ func Roots(cfg config.Client, env func(string) string, home string) []Root {
 	} else {
 		roots = append(roots, Root{Agent: "pi", Dir: filepath.Join(home, ".pi", "agent", "sessions"), Optional: true})
 	}
+
+	roots = append(roots, ompSessionsRoot(env, home))
 
 	// Cursor's per-session transcript lives under projects/<slug>/agent-transcripts;
 	// the CLI documents no relocation variable.
@@ -148,6 +149,38 @@ func Roots(cfg config.Client, env func(string) string, home string) []Root {
 		roots = append(roots, Root{Agent: r.Agent, Dir: r.Path, FollowRootLink: r.FollowRootLink})
 	}
 	return roots
+}
+
+// ompSessionsRoot resolves OMP's active session directory. OMP retains the
+// legacy PI_* relocation variables: a direct session override wins, named
+// profiles live under the config root and ignore PI_CODING_AGENT_DIR, and the
+// default profile otherwise follows the full agent-directory override.
+func ompSessionsRoot(env func(string) string, home string) Root {
+	if dir := strings.TrimSpace(env("PI_CODING_AGENT_SESSION_DIR")); dir != "" {
+		return Root{Agent: "omp", Dir: dir}
+	}
+
+	profile := strings.TrimSpace(env("OMP_PROFILE"))
+	if profile == "" {
+		profile = strings.TrimSpace(env("PI_PROFILE"))
+	}
+	configDir := strings.TrimSpace(env("PI_CONFIG_DIR"))
+	configDirExplicit := configDir != ""
+	if !configDirExplicit {
+		configDir = ".omp"
+	}
+	if profile != "" && profile != "default" {
+		return Root{Agent: "omp", Dir: filepath.Join(home, configDir, "profiles", profile, "agent", "sessions")}
+	}
+
+	if dir := strings.TrimSpace(env("PI_CODING_AGENT_DIR")); dir != "" {
+		return Root{Agent: "omp", Dir: filepath.Join(dir, "sessions")}
+	}
+	return Root{
+		Agent:    "omp",
+		Dir:      filepath.Join(home, configDir, "agent", "sessions"),
+		Optional: !configDirExplicit,
+	}
 }
 
 // Error reports every root or entry that could not be traversed safely. Discover

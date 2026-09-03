@@ -11,7 +11,7 @@ Definitions for the terms the rest of the guide uses.
 ## The session
 
 A **session** is one agent run: a single, continuous interaction with a supported
-coding agent (Claude Code, Codex, pi, Cursor, Grok, or OpenCode), from the first message to
+coding agent (Claude Code, Codex, pi, OMP, Cursor, Grok, or OpenCode), from the first message to
 the last. Each agent writes its session to
 a log file on disk as it works, and that file is what akari ingests. OpenCode is
 the exception: it stores sessions in SQLite, and the client materializes JSONL

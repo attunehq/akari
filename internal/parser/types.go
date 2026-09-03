@@ -19,12 +19,16 @@ const (
 	AgentCursor   Agent = "cursor"
 	AgentGrok     Agent = "grok"
 	AgentOpenCode Agent = "opencode"
+	// AgentOMP is the native Oh My Pi session format. It is file-backed like pi
+	// but versioned separately because OMP adds titles, injected context,
+	// compactions, richer usage, and explicit lifecycle records.
+	AgentOMP Agent = "omp"
 )
 
 // Agents lists every supported format. Validation outside the parser (the announce
 // endpoint) derives from it, so this enum stays the one owner of "which agent
 // formats exist" and a format the parser handles is never rejected at announce.
-var Agents = []Agent{AgentClaude, AgentCodex, AgentPi, AgentCursor, AgentGrok, AgentOpenCode}
+var Agents = []Agent{AgentClaude, AgentCodex, AgentPi, AgentCursor, AgentGrok, AgentOpenCode, AgentOMP}
 
 // providerModel keeps the serving provider in the model identity when an agent
 // records it. Provider-qualified IDs let pricing distinguish two routes that use

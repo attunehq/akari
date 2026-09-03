@@ -146,6 +146,7 @@ const thinkingBytesPerToken: Record<string, number> = {
   claude: CLAUDE_THINKING_BYTES_PER_TOKEN,
   codex: 14.2,
   pi: 4.0,
+  omp: 4.0,
   grok: 4.0,
   opencode: 4.0,
 };

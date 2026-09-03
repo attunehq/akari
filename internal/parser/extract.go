@@ -351,7 +351,7 @@ func toolBodyFields(agent Agent, line []byte) []bodyField {
 		return claudeBodyFields(e)
 	case AgentCodex:
 		return codexBodyFields(e)
-	case AgentPi:
+	case AgentPi, AgentOMP:
 		return piBodyFields(e)
 	case AgentCursor:
 		return cursorBodyFields(e)

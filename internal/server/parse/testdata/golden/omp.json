@@ -1,0 +1,162 @@
+{
+  "Messages": [
+    {
+      "Ordinal": 0,
+      "Role": "user",
+      "Content": "Fix the login bug",
+      "ThinkingText": "",
+      "ThinkingBytes": 0,
+      "Model": "",
+      "HasThinking": false,
+      "HasToolUse": false,
+      "Timestamp": "2026-08-20T09:00:01Z"
+    },
+    {
+      "Ordinal": 1,
+      "Role": "context",
+      "Content": "Repository rules loaded",
+      "ThinkingText": "",
+      "ThinkingBytes": 0,
+      "Model": "",
+      "HasThinking": false,
+      "HasToolUse": false,
+      "Timestamp": "2026-08-20T09:00:01.1Z"
+    },
+    {
+      "Ordinal": 2,
+      "Role": "assistant",
+      "Content": "",
+      "ThinkingText": "Inspect the auth package",
+      "ThinkingBytes": 24,
+      "Model": "gpt-5.6-sol",
+      "HasThinking": true,
+      "HasToolUse": true,
+      "Timestamp": "2026-08-20T09:00:05Z"
+    },
+    {
+      "Ordinal": 3,
+      "Role": "assistant",
+      "Content": "The missing session guard is fixed.",
+      "ThinkingText": "",
+      "ThinkingBytes": 0,
+      "Model": "gpt-5.6-sol",
+      "HasThinking": false,
+      "HasToolUse": false,
+      "Timestamp": "2026-08-20T09:00:07Z"
+    }
+  ],
+  "ToolCalls": [
+    {
+      "MessageOrdinal": 2,
+      "CallIndex": 0,
+      "ToolName": "read",
+      "Category": "read",
+      "FilePath": "auth.go",
+      "Detail": "",
+      "InputBody": "{\"path\":\"auth.go\"}",
+      "InputSHA256": "",
+      "InputBytes": 18,
+      "InputMediaType": "application/json",
+      "CallUID": "call-1",
+      "AttributionAgent": "",
+      "AttributionSkill": "",
+      "AttributionPlugin": ""
+    }
+  ],
+  "ToolResults": [
+    {
+      "CallUID": "call-1",
+      "Body": "package auth",
+      "BodySHA256": "",
+      "Bytes": 12,
+      "MediaType": "text/plain",
+      "Status": "ok",
+      "StructBody": "",
+      "StructSHA256": "",
+      "StructBytes": 0,
+      "StructMediaType": ""
+    }
+  ],
+  "Usage": [
+    {
+      "MessageOrdinal": 2,
+      "Model": "gpt-5.6-sol",
+      "Input": 100,
+      "Output": 50,
+      "CacheWrite": 10,
+      "CacheRead": 25,
+      "Reasoning": 30,
+      "CostUSD": 0.002075,
+      "CostSource": "rate_table",
+      "ModelNamePublic": true,
+      "OccurredAt": "2026-08-20T09:00:05Z",
+      "DedupKey": "a1",
+      "SourceOffset": 1104,
+      "SourceIndex": 0
+    },
+    {
+      "MessageOrdinal": 3,
+      "Model": "gpt-5.6-sol",
+      "Input": 120,
+      "Output": 20,
+      "CacheWrite": 0,
+      "CacheRead": 80,
+      "Reasoning": 0,
+      "CostUSD": 0.00124,
+      "CostSource": "rate_table",
+      "ModelNamePublic": true,
+      "OccurredAt": "2026-08-20T09:00:07Z",
+      "DedupKey": "a2",
+      "SourceOffset": 2146,
+      "SourceIndex": 0
+    }
+  ],
+  "Attachments": null,
+  "Fallbacks": null,
+  "Events": [
+    {
+      "MessageOrdinal": null,
+      "Kind": "model_change",
+      "AttrsJSON": "{\"model\":\"gpt-5.6-sol\",\"provider\":\"openai-codex\"}",
+      "OccurredAt": "2026-08-20T09:00:00.1Z"
+    },
+    {
+      "MessageOrdinal": null,
+      "Kind": "thinking_level_change",
+      "AttrsJSON": "{\"level\":\"high\"}",
+      "OccurredAt": "2026-08-20T09:00:00.2Z"
+    },
+    {
+      "MessageOrdinal": 3,
+      "Kind": "compaction",
+      "AttrsJSON": "{\"pre_tokens\":64000}",
+      "OccurredAt": "2026-08-20T09:00:08Z"
+    },
+    {
+      "MessageOrdinal": 3,
+      "Kind": "api_error",
+      "AttrsJSON": "{\"message\":\"upstream reset\"}",
+      "OccurredAt": "2026-08-20T09:00:09Z"
+    },
+    {
+      "MessageOrdinal": 3,
+      "Kind": "turn_aborted",
+      "AttrsJSON": "{\"reason\":\"operator interrupted\"}",
+      "OccurredAt": "2026-08-20T09:00:10Z"
+    }
+  ],
+  "Identity": {
+    "CustomTitle": "Fix login session guard",
+    "Slug": "",
+    "PermissionMode": "",
+    "ReasoningEffort": "high",
+    "SubagentName": "",
+    "PRNumber": 0,
+    "PRURL": "",
+    "PRRepo": "",
+    "ParentSourceID": "01b00000-0000-7000-8000-000000000099",
+    "ChildSourceIDs": null
+  },
+  "Started": "2026-08-20T09:00:00Z",
+  "Ended": "2026-08-20T09:00:10Z"
+}

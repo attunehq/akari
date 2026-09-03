@@ -646,8 +646,8 @@ func openSameFile(path string, lst os.FileInfo) (*os.File, error) {
 // signature any parseable JSONL would resolve as a standalone or orphaned
 // "session". Each agent's signature is a shape a real transcript always writes
 // but unrelated JSONL does not: Claude's typed user/assistant entries carry a
-// message object, Codex wraps every record in a payload, and pi opens with a
-// session header (or writes typed message lines with a role).
+// message object, Codex wraps every record in a payload, and pi and OMP open
+// with session headers.
 func sessionSignature(agent string, e gjson.Result) bool {
 	switch agent {
 	case "claude":
@@ -672,6 +672,12 @@ func sessionSignature(agent string, e gjson.Result) bool {
 			return e.Get("message.role").Exists()
 		}
 		return false
+	case "omp":
+		// OMP begins with a versioned session header after its fixed-width title
+		// slot. Requiring both version and id rejects other JSONL under its
+		// recursive runtime root.
+		return e.Get("type").String() == "session" &&
+			e.Get("version").Exists() && e.Get("id").Exists()
 	case "cursor":
 		// A transcript line is a role entry carrying a message (there is no
 		// top-level type on those), or the turn_ended line that closes a turn.
@@ -726,6 +732,13 @@ func applyHeaderLine(agent string, e gjson.Result, h *Header) {
 		if v := e.Get("id").String(); v != "" {
 			h.sessionID = v
 		}
+	case "omp":
+		if v := e.Get("cwd").String(); v != "" {
+			h.Cwd = v
+		}
+		if v := e.Get("id").String(); v != "" {
+			h.sessionID = v
+		}
 	case "cursor":
 		// The transcript records neither cwd nor an id; both come from the file's
 		// location (see cursorPathHeader and sourceID's filename fallback).
@@ -752,7 +765,7 @@ func applyHeaderLine(agent string, e gjson.Result, h *Header) {
 // server keys sessions on (user, agent, source_session_id), so two files sharing
 // an id fold onto one row and clobber each other.
 //
-// Codex and pi write one id per file, so their in-file id stands. Claude is the
+// Codex, pi, and OMP write one id per file, so their in-file id stands. Claude is the
 // exception twice over: every subagent and workflow file repeats its parent's
 // sessionId, and a resumed or forked session writes a new file (named by a fresh
 // id) that still records the original sessionId inside. Both make the in-file

@@ -70,7 +70,7 @@ func LocateToolBodies(ctx context.Context, agent Agent, f io.ReaderAt, lineOff, 
 		return locateClaude(src, emit)
 	case AgentCodex:
 		return locateCodex(src, emit)
-	case AgentPi:
+	case AgentPi, AgentOMP:
 		return locatePi(src, emit)
 	case AgentCursor:
 		return locateCursor(src, emit)

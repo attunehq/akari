@@ -337,7 +337,7 @@ path = "/sessions"
 	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := LoadClient(path); err == nil || !strings.Contains(err.Error(), "must be claude, codex, pi, cursor, grok, or opencode") {
+	if _, err := LoadClient(path); err == nil || !strings.Contains(err.Error(), "must be claude, codex, pi, omp, cursor, grok, or opencode") {
 		t.Fatalf("LoadClient invalid agent error = %v", err)
 	}
 }
@@ -364,5 +364,26 @@ func TestSaveDoesNotDestroyOnRewrite(t *testing.T) {
 		if e.Name() != "config.toml" {
 			t.Errorf("stray file left behind: %s", e.Name())
 		}
+	}
+}
+
+func TestLoadClientAcceptsOMPRoot(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	raw := `server_url = "https://akari.example"
+token = "secret"
+
+[[extra_roots]]
+agent = "omp"
+path = "/srv/omp-sessions"
+`
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadClient(path)
+	if err != nil {
+		t.Fatalf("LoadClient: %v", err)
+	}
+	if len(cfg.ExtraRoots) != 1 || cfg.ExtraRoots[0].Agent != "omp" {
+		t.Errorf("extra roots = %+v", cfg.ExtraRoots)
 	}
 }

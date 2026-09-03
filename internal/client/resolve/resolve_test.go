@@ -138,6 +138,10 @@ func TestPeekHeaderRejectsNonSession(t *testing.T) {
 		// pi lines that are neither a session header (no id/cwd) nor a typed message.
 		{"pi", "n1.jsonl", `{"type":"session"}` + "\n"},
 		{"pi", "n2.jsonl", `{"type":"tool","output":"hello","cwd":"/x"}` + "\n"},
+		// OMP files require the versioned session header; title and lifecycle lines
+		// elsewhere under its recursive root are not sessions by themselves.
+		{"omp", "m1.jsonl", `{"type":"session","cwd":"/x"}` + "\n"},
+		{"omp", "m2.jsonl", `{"type":"custom","customType":"session_exit","data":{}}` + "\n"},
 		// Valid JSON that carries no recognizable shape at all.
 		{"claude", "n3.jsonl", `{"hello":"world"}` + "\n{}\n"},
 	}
@@ -164,6 +168,7 @@ func TestPeekHeaderAcceptsRealSessions(t *testing.T) {
 		// A pi file that opens with a typed message line (a tail with no header) still
 		// reads as a session; it just has no cwd, so it resolves as orphaned later.
 		{"pi", "p2.jsonl", `{"type":"message","message":{"role":"user","content":"hi"}}` + "\n", ""},
+		{"omp", "m.jsonl", `{"type":"title","v":1,"title":"Work"}` + "\n" + `{"type":"session","version":3,"id":"omp-1","cwd":"/e"}` + "\n", "/e"},
 	}
 	for _, c := range cases {
 		path := writeFile(t, dir, c.name, c.content)

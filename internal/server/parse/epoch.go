@@ -385,4 +385,14 @@ package parse
 // usage this epoch's own deploy window may already have stored at the sticker rate.
 // A pricing change, not a reducer-shape change, and no golden fixture uses Sonnet 5,
 // so the fixtures do not move; the bump is the reprice signal and stands on its own.
-const Epoch = 31
+//
+// Epoch 31 -> 32: add the OMP session format. OMP's message envelope descends
+// from pi's, so the new reducer shares that shape, but the format also records a
+// title slot, a combined provider/model selector, injected context, compactions,
+// per-turn reasoning tokens, explicit failed and aborted assistant turns, and
+// parent-session lineage (accepted as either an id or a session path), each of
+// which the pi reducer has no representation for. New-agent parsing itself
+// touches no existing projection; the claude, codex, cursor, grok, opencode, and
+// pi goldens stay byte-for-byte identical, and the new omp fixture joins the
+// snapshot set.
+const Epoch = 32

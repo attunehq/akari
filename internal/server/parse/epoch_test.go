@@ -25,6 +25,7 @@ var goldenFixtures = []struct {
 	{name: "codex", agent: "codex"},
 	{name: "cursor", agent: "cursor"},
 	{name: "grok", agent: "grok"},
+	{name: "omp", agent: "omp"},
 	{name: "opencode", agent: "opencode"},
 }
 

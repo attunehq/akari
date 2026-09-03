@@ -7,7 +7,7 @@ product
 ## Users
 
 Developers and small engineering teams who run AI coding agents (Claude Code,
-Codex, pi, Cursor, Grok, OpenCode) across several machines and want one shared, searchable history of
+Codex, pi, OMP, Cursor, Grok, OpenCode) across several machines and want one shared, searchable history of
 everything those agents did. They self-host akari; logged in means they see
 every session, so there is no per-user gatekeeping to design around.
 
