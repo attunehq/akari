@@ -385,4 +385,8 @@ package parse
 // usage this epoch's own deploy window may already have stored at the sticker rate.
 // A pricing change, not a reducer-shape change, and no golden fixture uses Sonnet 5,
 // so the fixtures do not move; the bump is the reprice signal and stands on its own.
-const Epoch = 31
+//
+// Epoch 31 -> 32: price GPT-6 Astra and allow its released identifier on public
+// overviews. Rebuild existing sessions to replace unknown costs and recompute
+// cache savings. Existing golden fixtures do not use Astra, so they are unchanged.
+const Epoch = 32
