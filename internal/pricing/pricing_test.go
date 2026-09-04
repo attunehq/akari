@@ -174,6 +174,33 @@ func TestRateAtGPT(t *testing.T) {
 	}
 }
 
+func TestGPT6AstraCost(t *testing.T) {
+	for _, tt := range []struct {
+		model string
+		want  float64
+	}{
+		{"gpt-6-astra", 0.163},
+		{" GPT-6-ASTRA ", 0.163},
+		{"gpt-6-astra-2026-09-04", 0.163},
+		{"openai/gpt-6-astra", 0.188},
+		{"openai-codex/gpt-6-astra", 0.188},
+	} {
+		t.Run(tt.model, func(t *testing.T) {
+			// Codex includes reasoning in output; qualified providers report it separately.
+			got, known := Cost(tt.model, anytime, 1000, 2000, 4000, 3000, 500)
+			if !known || math.Abs(got-tt.want) > 1e-9 {
+				t.Errorf("cost = %v (known=%v), want %v", got, known, tt.want)
+			}
+			if !ModelNamePublic(tt.model) {
+				t.Error("released Astra model should be public")
+			}
+			if got := CacheSavings(tt.model, anytime, 3000, 4000); math.Abs(got-0.017) > 1e-9 {
+				t.Errorf("cache savings = %v, want 0.017", got)
+			}
+		})
+	}
+}
+
 func TestProviderSpecificRates(t *testing.T) {
 	cases := []struct {
 		model                 string
@@ -289,6 +316,8 @@ func TestUnlistedModelsAreUnknown(t *testing.T) {
 		"claude-haiku-4-9", "claude-haiku-5",
 		"claude-fable-6", "claude-mythos-6",
 		"gpt-5.7", "gpt-6", "gpt-7",
+		"gpt-6-astra-pro", "gpt-6-astra-secret-eap",
+		"opencode/gpt-6-astra", "openrouter/openai/gpt-6-astra",
 		"gpt-5.4-turbo", "gpt-5.5-ultra", // same-version variants we never priced
 		"gpt-5.6-mini", "gpt-5.6-nano", // GPT-5.6's real tiers are sol/terra/luna, not mini/nano
 	} {
@@ -321,6 +350,9 @@ func TestModelNamePublicIsExactAndFailClosed(t *testing.T) {
 		{"anthropic/claude-opus-4-8", true},
 		{"claude-mythos-preview", false},
 		{"gpt-5.6-secret-eap", false},
+		{"gpt-6", false},
+		{"gpt-6-astra-secret-eap", false},
+		{"openrouter/openai/gpt-6-astra", false},
 		{"<synthetic>", false},
 		{"", false},
 	}

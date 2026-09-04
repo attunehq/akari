@@ -132,6 +132,13 @@ var table = map[string][]DatedRate{
 	"claude-haiku-4-5": flat(Rate{Input: 1, Output: 5, CacheWrite: 1.25, CacheRead: 0.10}),
 	"claude-3-5-haiku": flat(Rate{Input: 0.80, Output: 4, CacheWrite: 1, CacheRead: 0.08}),
 
+	// GPT-6 Astra standard short-context rates, verified 2026-09-04:
+	// https://developers.openai.com/api/docs/pricing
+	// The usage projection does not retain long-context or service-tier pricing.
+	// Codex includes reasoning in output; qualified routes price it separately.
+	"gpt-6-astra":        flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1}),
+	"openai/gpt-6-astra": flat(Rate{Input: 10, Output: 50, Reasoning: 50, CacheWrite: 12.50, CacheRead: 1}),
+
 	// OpenAI GPT-5 family as served through Codex.
 	//
 	// GPT-5.6 is a three-tier family: sol is the flagship, terra the mini-class
