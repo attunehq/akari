@@ -16,7 +16,7 @@ Overview at `/overview`. The browser formats timestamps in your local timezone.
 ## Overview
 
 **Overview** (at `/overview`) is the app's home: fleet-wide usage bounded to a
-trailing window. Pick the window (7, 30, or 90 days, a year, or all of history)
+trailing window. Pick the window (1, 3, 7, 30, or 90 days, a year, or all of history)
 and every figure on the panel follows it:
 
 - **Cost, combined tokens, and session totals** for the window, as stable tabular

@@ -10,7 +10,7 @@ import (
 // lower bound".
 func TestRangeSince(t *testing.T) {
 	now := time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC)
-	bounded := map[string]int{"7d": 7, "30d": 30, "90d": 90, "year": 365}
+	bounded := map[string]int{"1d": 1, "3d": 3, "7d": 7, "30d": 30, "90d": 90, "year": 365}
 	for key, days := range bounded {
 		want := now.AddDate(0, 0, -days)
 		if got := RangeSince(key, now); !got.Equal(want) {
@@ -28,7 +28,7 @@ func TestRangeSince(t *testing.T) {
 // unknown key falls back to the default range's unit so a stale ?range still
 // renders a sane grid.
 func TestTrendBucket(t *testing.T) {
-	for _, k := range []string{"7d", "30d"} {
+	for _, k := range []string{"1d", "3d", "7d", "30d"} {
 		if got := TrendBucket(k); got != "day" {
 			t.Errorf("TrendBucket(%q) = %q, want day", k, got)
 		}
@@ -50,7 +50,7 @@ func TestTrendBucket(t *testing.T) {
 // list, so an "all", empty, or hand-typed junk key leaves the feed unbounded rather than
 // falling to the overview's trailing-year default.
 func TestRangeBounds(t *testing.T) {
-	for _, k := range []string{"7d", "30d", "90d", "year"} {
+	for _, k := range []string{"1d", "3d", "7d", "30d", "90d", "year"} {
 		if !RangeBounds(k) {
 			t.Errorf("RangeBounds(%q) = false, want true (bounded window)", k)
 		}

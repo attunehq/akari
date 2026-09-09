@@ -97,7 +97,7 @@
   }
   .activity-panel.range-only .activity-controls > .segmented {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(7, 1fr);
   }
   .activity-panel.range-only .activity-controls > .activity-metric {
     display: none;

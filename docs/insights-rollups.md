@@ -28,11 +28,11 @@ design rationale. The implementation deviates from it in three places:
   own MVCC snapshot, so two views could disagree about a fact both display (the
   fleet mix's newest-arrival callout was the reported case). The fleet page now
   serves every range from one precomputed snapshot: `store.InsightsRanges`
-  computes all five windows under one exported snapshot and one clock, and a
+  computes every window under one exported snapshot and one clock, and a
   background loop recomputes the set hourly (`AKARI_INSIGHTS_REFRESH_INTERVAL`)
   and on fleet-reparse completion
   (`internal/server/httpapi/insights_refresh.go`). The rollup conversion is
-  what makes the full five-window pass cheap enough to run on a cadence.
+  what makes computing every window cheap enough to run on a cadence.
 
 ## The problem
 

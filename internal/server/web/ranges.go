@@ -15,6 +15,8 @@ type DateRange struct {
 // DateRanges are the windows the overview offers, narrowest first. The selector
 // renders them in this order, and ParseRange validates against their keys.
 var DateRanges = []DateRange{
+	{Key: "1d", Label: "1 day", Days: 1},
+	{Key: "3d", Label: "3 days", Days: 3},
 	{Key: "7d", Label: "7 days", Days: 7},
 	{Key: "30d", Label: "30 days", Days: 30},
 	{Key: "90d", Label: "90 days", Days: 90},
@@ -54,14 +56,15 @@ func RangeSince(key string, now time.Time) time.Time {
 }
 
 // TrendBucket picks the time-bucket unit the Insights trend charts aggregate a range
-// into: daily for the short windows (7d/30d) where a day still carries enough sessions
-// to read, weekly for the long windows (90d/year/all) where daily points would be noise.
-// The choice is the same for every chart in a view, so all the trend series share one
-// bucket grid and the range selector windows them together. An unknown key falls back to
-// the default range's unit, so a stale ?range still renders a sane grid.
+// into: daily for the short windows (1d/3d/7d/30d) where a day still carries enough
+// sessions to read, weekly for the long windows (90d/year/all) where daily points
+// would be noise. The choice is the same for every chart in a view, so all the trend
+// series share one bucket grid and the range selector windows them together. An
+// unknown key falls back to the default range's unit, so a stale ?range still
+// renders a sane grid.
 func TrendBucket(key string) string {
 	switch key {
-	case "7d", "30d":
+	case "1d", "3d", "7d", "30d":
 		return "day"
 	case "90d", "year", "all":
 		return "week"

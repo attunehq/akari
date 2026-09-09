@@ -136,8 +136,8 @@ func (s *Store) Insights(ctx context.Context, f AnalyticsFilter, panels Insights
 //
 // The filters share that snapshot too, and one clock: every window's trailing bound and
 // trend grid measure back from the same instant, and every window's panels read the same
-// corpus state. That is what lets the fleet /insights refresher compute all five trailing
-// windows in one pass that cannot disagree with itself: a session that lands mid-pass is
+// corpus state. That is what lets the fleet /insights refresher compute every trailing
+// window in one pass that cannot disagree with itself: a session that lands mid-pass is
 // either in every window that spans it or in none.
 //
 // A control transaction fixes the snapshot and exports it (pg_export_snapshot); every panel

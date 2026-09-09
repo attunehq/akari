@@ -58,6 +58,8 @@ function stubInsightsResponse(range: string) {
         generated_at: "2026-07-01T00:00:00Z",
         range,
         ranges: [
+          { Key: "1d", Label: "1 day", Days: 1 },
+          { Key: "3d", Label: "3 days", Days: 3 },
           { Key: "7d", Label: "7 days", Days: 7 },
           { Key: "30d", Label: "30 days", Days: 30 },
           { Key: "90d", Label: "90 days", Days: 90 },

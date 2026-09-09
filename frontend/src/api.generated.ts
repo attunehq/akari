@@ -369,7 +369,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    range?: "7d" | "30d" | "90d" | "year" | "all";
+                    range?: "1d" | "3d" | "7d" | "30d" | "90d" | "year" | "all";
                 };
                 header?: never;
                 path?: never;
@@ -453,7 +453,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    range?: "7d" | "30d" | "90d" | "year" | "all";
+                    range?: "1d" | "3d" | "7d" | "30d" | "90d" | "year" | "all";
                     user?: number[];
                 };
                 header?: never;
@@ -532,7 +532,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    range?: "7d" | "30d" | "90d" | "year" | "all";
+                    range?: "1d" | "3d" | "7d" | "30d" | "90d" | "year" | "all";
                     agent?: string;
                     machine?: string;
                     user?: string;
@@ -621,7 +621,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    range?: "7d" | "30d" | "90d" | "year" | "all";
+                    range?: "1d" | "3d" | "7d" | "30d" | "90d" | "year" | "all";
                 };
                 header?: never;
                 path: {
@@ -746,7 +746,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    range?: "7d" | "30d" | "90d" | "year" | "all";
+                    range?: "1d" | "3d" | "7d" | "30d" | "90d" | "year" | "all";
                 };
                 header?: never;
                 path: {
@@ -834,7 +834,7 @@ export interface paths {
                     grade?: "A" | "B" | "C" | "D" | "F" | "unscored";
                     outcome?: "completed" | "abandoned" | "errored" | "unknown";
                     after?: number;
-                    range?: "7d" | "30d" | "90d" | "year" | "all";
+                    range?: "1d" | "3d" | "7d" | "30d" | "90d" | "year" | "all";
                     sort?: "updated" | "messages" | "tokens" | "cost";
                     dir?: "asc" | "desc";
                     empty?: "1";

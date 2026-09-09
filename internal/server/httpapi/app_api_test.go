@@ -331,7 +331,7 @@ func TestSessionsAPIRejectsUnknownQueryParameters(t *testing.T) {
 func TestSessionFilterEnumValidation(t *testing.T) {
 	t.Parallel()
 	valid := []string{
-		"range=all", "range=30d", "dir=asc", "dir=desc", "empty=1",
+		"range=all", "range=1d", "range=3d", "range=30d", "dir=asc", "dir=desc", "empty=1",
 		"subagents=1", "spanned=1", "grade=A", "grade=unscored",
 		"outcome=completed", "outcome=unknown", "sort=updated", "sort=cost",
 	}
@@ -368,6 +368,8 @@ func TestAPIRangeValidation(t *testing.T) {
 	}{
 		{query: "", want: web.DefaultRange, wantStatus: http.StatusOK},
 		{query: "range=all", want: "all", wantStatus: http.StatusOK},
+		{query: "range=1d", want: "1d", wantStatus: http.StatusOK},
+		{query: "range=3d", want: "3d", wantStatus: http.StatusOK},
 		{query: "range=bogus", wantStatus: http.StatusBadRequest},
 	} {
 		recorder := httptest.NewRecorder()

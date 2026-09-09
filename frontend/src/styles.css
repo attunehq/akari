@@ -357,6 +357,7 @@ code {
 
 .segmented {
   display: inline-flex;
+  flex-wrap: wrap;
   padding: 3px;
   background: var(--surface);
   border: 1px solid var(--border);

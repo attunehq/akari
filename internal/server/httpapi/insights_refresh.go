@@ -25,20 +25,20 @@ import (
 // and it goes stale together.
 //
 // Hourly is deliberate: the page exists for a team lead reading trends over days to a
-// year, where an hour of staleness is invisible, and the full five-window pass costs a
-// handful of rollup reads since the insights materialization landed. The snapshot also
-// recomputes as soon as a fleet reparse finishes (kickRefresh), so a corpus rewrite
-// does not serve pre-reparse figures for the rest of the hour. The process holds the
-// snapshot in memory, so a new binary (the only thing that changes parser or scoring
-// output, gated by parse.Epoch) starts empty and cannot serve a cross-epoch snapshot.
+// year, where an hour of staleness is invisible, and computing every trailing window
+// costs a handful of rollup reads since the insights materialization landed. The
+// snapshot also recomputes as soon as a fleet reparse finishes (kickRefresh), so a
+// corpus rewrite does not serve pre-reparse figures for the rest of the hour. The
+// process holds the snapshot in memory, so a new binary (the only thing that changes
+// parser or scoring output, gated by parse.Epoch) starts empty and cannot serve a
+// cross-epoch snapshot.
 
 // insightsRefreshTimeout is the hard ceiling on one refresh pass. The pass is detached
 // from any single caller's context (a cold-start reader navigating away must not abort
 // the pass other waiters are blocked on, and the background loop must survive shutdown
 // races cleanly), so it needs its own bound or a hung database read would wedge every
 // later pass behind the singleflight. It sits far above the sub-second warm cost of
-// the five-window pass over the rollups, so it only ever cuts off a read that has
-// genuinely stalled.
+// a pass over the rollups, so it only ever cuts off a read that has genuinely stalled.
 const insightsRefreshTimeout = 2 * time.Minute
 
 // insightsComputeAll is the refresh pass: it computes the snapshot for every fleet

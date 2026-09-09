@@ -70,9 +70,9 @@ instead of a distinct one-off hostname per run. See
 
 The **fleet** is everything a server holds: all projects, all sessions, all
 machines. The Overview page reports fleet-wide, and the per-project analytics
-report the same figures narrowed to one project. A **trailing window** (7, 30, or
-90 days, a year, or all of history) bounds those rollups; every figure on a panel
-respects the window you choose.
+report the same figures narrowed to one project. A **trailing window** (1, 3, 7,
+30, or 90 days, a year, or all of history) bounds those rollups; every figure on
+a panel respects the window you choose.
 
 ## The transcript
 
