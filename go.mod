@@ -13,7 +13,7 @@ require (
 	github.com/tidwall/gjson v1.19.0
 	github.com/tidwall/match v1.2.0
 	golang.org/x/crypto v0.57.0
-	golang.org/x/image v0.45.0
+	golang.org/x/image v0.46.0
 	golang.org/x/mod v0.41.0
 	golang.org/x/sync v0.23.0
 	golang.org/x/sys v0.48.0
