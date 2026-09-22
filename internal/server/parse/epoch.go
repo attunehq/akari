@@ -389,4 +389,9 @@ package parse
 // Epoch 31 -> 32: price GPT-6 Astra and allow its released identifier on public
 // overviews. Rebuild existing sessions to replace unknown costs and recompute
 // cache savings. Existing golden fixtures do not use Astra, so they are unchanged.
-const Epoch = 32
+//
+// Epoch 32 -> 33: price Claude Opus 5.5, GPT-6 Sol and Luna, and Grok 4.7 at
+// their published standard rates and allow their released identifiers on public
+// overviews. Rebuild existing sessions to replace unknown costs and recompute
+// cache savings. Existing golden fixtures use none of these models and are unchanged.
+const Epoch = 33
