@@ -100,10 +100,11 @@ var table = map[string][]DatedRate{
 	"claude-fable-5-1":  flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 0.25}),
 	"claude-mythos-5-1": flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 0.25}),
 
-	// Opus: 4.0/4.1 at $15/$75, 4.5 onward at $5/$25, which Opus 5 holds (it is a
-	// drop-in upgrade at Opus 4.8's rate). "claude-opus-4" is Opus 4.0's dateless
-	// ID (claude-opus-4-20250514 normalizes to it); "claude-opus-5" carries no date
-	// snapshot at all.
+	// Opus: 4.0/4.1 at $15/$75, 4.5 through 5 at $5/$25. Opus 5.5 is
+	// $4/$20 with cache reads at 0.05x input instead of the usual 0.1x.
+	// https://platform.claude.com/docs/en/models/opus-5-5/overview
+	// Opus 5 is a drop-in upgrade at Opus 4.8's rate. "claude-opus-4" is
+	// Opus 4.0's dateless ID (claude-opus-4-20250514 normalizes to it).
 	"claude-opus-4":   flat(Rate{Input: 15, Output: 75, CacheWrite: 18.75, CacheRead: 1.50}),
 	"claude-opus-4-0": flat(Rate{Input: 15, Output: 75, CacheWrite: 18.75, CacheRead: 1.50}),
 	"claude-opus-4-1": flat(Rate{Input: 15, Output: 75, CacheWrite: 18.75, CacheRead: 1.50}),
@@ -112,6 +113,7 @@ var table = map[string][]DatedRate{
 	"claude-opus-4-7": flat(Rate{Input: 5, Output: 25, CacheWrite: 6.25, CacheRead: 0.50}),
 	"claude-opus-4-8": flat(Rate{Input: 5, Output: 25, CacheWrite: 6.25, CacheRead: 0.50}),
 	"claude-opus-5":   flat(Rate{Input: 5, Output: 25, CacheWrite: 6.25, CacheRead: 0.50}),
+	"claude-opus-5-5": flat(Rate{Input: 4, Output: 20, CacheWrite: 5, CacheRead: 0.20}),
 
 	// Sonnet: $3/$15 from 3.5 through 4.6, and $2/$10 for Sonnet 5. Sonnet 5's
 	// $2/$10 was announced as an introductory rate through 2026-08-31, and Akari
@@ -138,6 +140,13 @@ var table = map[string][]DatedRate{
 	// Codex includes reasoning in output; qualified routes price it separately.
 	"gpt-6-astra":        flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1}),
 	"openai/gpt-6-astra": flat(Rate{Input: 10, Output: 50, Reasoning: 50, CacheWrite: 12.50, CacheRead: 1}),
+	// GPT-6 Sol and Luna standard short-context rates, verified 2026-09-22:
+	// https://developers.openai.com/api/docs/pricing
+	// As with Astra, qualified OpenAI usage reports reasoning separately.
+	"gpt-6-sol":         flat(Rate{Input: 2, Output: 10, CacheWrite: 2.50, CacheRead: 0.20}),
+	"gpt-6-luna":        flat(Rate{Input: 0.10, Output: 0.50, CacheWrite: 0.125, CacheRead: 0.01}),
+	"openai/gpt-6-sol":  flat(Rate{Input: 2, Output: 10, Reasoning: 10, CacheWrite: 2.50, CacheRead: 0.20}),
+	"openai/gpt-6-luna": flat(Rate{Input: 0.10, Output: 0.50, Reasoning: 0.50, CacheWrite: 0.125, CacheRead: 0.01}),
 
 	// OpenAI GPT-5 family as served through Codex.
 	//
@@ -295,11 +304,14 @@ var table = map[string][]DatedRate{
 	// Grok models reached through OpenCode or OpenRouter. They were fitted from
 	// CLI telemetry (Aug 2026) and match sticker billing on some turns, with
 	// reasoning billed inside output. Live billed amounts often disagree (a
-	// promo multiplier, a different route). The two CLI models differ only on
-	// cached reads. cacheCreationTokens is live in the schema but zero on every
+	// promo multiplier, a different route). Grok 4.5 differs from 4.6 and 4.7
+	// only on cached reads. cacheCreationTokens is live in the schema but zero on every
 	// observed turn, and no write rate is published or derivable until one is
 	// nonzero, so CacheWrite stays unset like the pre-5.6 OpenAI keys.
+	// Grok 4.7 has the same standard rate as 4.6 below 200k prompt tokens:
+	// https://docs.x.ai/developers/release-notes
 	"grok-4.6":                 flat(Rate{Input: 2, Output: 6, CacheRead: 0.50}),
+	"grok-4.7":                 flat(Rate{Input: 2, Output: 6, CacheRead: 0.50}),
 	"grok-4.5":                 flat(Rate{Input: 2, Output: 6, CacheRead: 0.30}),
 	"opencode/grok-4.6":        flat(Rate{Input: 2, Output: 6, Reasoning: 6, CacheRead: 0.50}),
 	"opencode-go/grok-4.6":     flat(Rate{Input: 2, Output: 6, Reasoning: 6, CacheRead: 0.50}),

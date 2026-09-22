@@ -28,6 +28,7 @@ func TestRateAtDatedSnapshotsAndAliases(t *testing.T) {
 		{"claude-opus-4-7", 5, 25},
 		{"claude-opus-4-8", 5, 25},
 		{"claude-opus-5", 5, 25},
+		{"claude-opus-5-5", 4, 20},
 		// Sonnet at $3/$15 from 3.5 through 4.6, and Sonnet 5 at $2/$10.
 		{"claude-sonnet-5", 2, 10},
 		{"claude-sonnet-4-20250514", 3, 15},
@@ -198,6 +199,53 @@ func TestGPT6AstraCost(t *testing.T) {
 				t.Errorf("cache savings = %v, want 0.017", got)
 			}
 		})
+	}
+}
+
+func TestNewModelRates(t *testing.T) {
+	for _, tt := range []struct {
+		model                      string
+		input, output, write, read float64
+	}{
+		{"claude-opus-5-5", 4, 20, 5, 0.20},
+		{"anthropic/claude-opus-5-5", 4, 20, 5, 0.20},
+		{"gpt-6-sol", 2, 10, 2.50, 0.20},
+		{"openai-codex/gpt-6-sol", 2, 10, 2.50, 0.20},
+		{"openai/gpt-6-sol", 2, 10, 2.50, 0.20},
+		{"gpt-6-luna", 0.10, 0.50, 0.125, 0.01},
+		{"openai-codex/gpt-6-luna", 0.10, 0.50, 0.125, 0.01},
+		{"openai/gpt-6-luna", 0.10, 0.50, 0.125, 0.01},
+		{"grok-4.7", 2, 6, 0, 0.50},
+		{"xai/grok-4.7", 2, 6, 0, 0.50},
+	} {
+		t.Run(tt.model, func(t *testing.T) {
+			r, ok := RateAt(tt.model, anytime)
+			if !ok || r.Input != tt.input || r.Output != tt.output || r.CacheWrite != tt.write || r.CacheRead != tt.read {
+				t.Errorf("rate = %+v (ok=%v), want %v/%v write %v read %v", r, ok, tt.input, tt.output, tt.write, tt.read)
+			}
+			if !ModelNamePublic(tt.model) {
+				t.Error("released model should be public")
+			}
+		})
+	}
+	for _, tt := range []struct {
+		model string
+		want  float64
+	}{
+		{"claude-opus-5-5", 0.0596},
+		{"gpt-6-sol", 0.0301},
+		{"gpt-6-luna", 0.001505},
+		{"grok-4.7", 0.0155},
+	} {
+		got, known := Cost(tt.model, anytime, 1000, 2000, 3000, 3000, 0)
+		if !known || math.Abs(got-tt.want) > 1e-9 {
+			t.Errorf("%s cost = %v (known=%v), want %v", tt.model, got, known, tt.want)
+		}
+	}
+	// Direct OpenAI providers can report reasoning separately; Codex includes it
+	// in output and must not add a second reasoning charge.
+	if got, known := Cost("openai/gpt-6-sol", anytime, 1000, 2000, 3000, 3000, 500); !known || math.Abs(got-0.0351) > 1e-9 {
+		t.Errorf("qualified GPT-6 Sol cost = %v (known=%v), want 0.0351", got, known)
 	}
 }
 
