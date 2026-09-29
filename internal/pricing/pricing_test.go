@@ -31,6 +31,7 @@ func TestRateAtDatedSnapshotsAndAliases(t *testing.T) {
 		{"claude-opus-5-5", 4, 20},
 		// Sonnet at $3/$15 from 3.5 through 4.6, and Sonnet 5 at $2/$10.
 		{"claude-sonnet-5", 2, 10},
+		{"claude-sonnet-5-5", 2, 10},
 		{"claude-sonnet-4-20250514", 3, 15},
 		{"claude-sonnet-4-0", 3, 15},
 		{"claude-sonnet-4-5-20250929", 3, 15},
@@ -217,6 +218,11 @@ func TestNewModelRates(t *testing.T) {
 		{"openai/gpt-6-luna", 0.10, 0.50, 0.125, 0.01},
 		{"grok-4.7", 2, 6, 0, 0.50},
 		{"xai/grok-4.7", 2, 6, 0, 0.50},
+		{"claude-sonnet-5-5", 2, 10, 2.50, 0.20},
+		{"anthropic/claude-sonnet-5-5", 2, 10, 2.50, 0.20},
+		{"gpt-6.1-sol", 2, 10, 2.50, 0.10},
+		{"openai-codex/gpt-6.1-sol", 2, 10, 2.50, 0.10},
+		{"openai/gpt-6.1-sol", 2, 10, 2.50, 0.10},
 	} {
 		t.Run(tt.model, func(t *testing.T) {
 			r, ok := RateAt(tt.model, anytime)
@@ -236,6 +242,8 @@ func TestNewModelRates(t *testing.T) {
 		{"gpt-6-sol", 0.0301},
 		{"gpt-6-luna", 0.001505},
 		{"grok-4.7", 0.0155},
+		{"claude-sonnet-5-5", 0.0301},
+		{"gpt-6.1-sol", 0.0298},
 	} {
 		got, known := Cost(tt.model, anytime, 1000, 2000, 3000, 3000, 0)
 		if !known || math.Abs(got-tt.want) > 1e-9 {
@@ -246,6 +254,9 @@ func TestNewModelRates(t *testing.T) {
 	// in output and must not add a second reasoning charge.
 	if got, known := Cost("openai/gpt-6-sol", anytime, 1000, 2000, 3000, 3000, 500); !known || math.Abs(got-0.0351) > 1e-9 {
 		t.Errorf("qualified GPT-6 Sol cost = %v (known=%v), want 0.0351", got, known)
+	}
+	if got, known := Cost("openai/gpt-6.1-sol", anytime, 1000, 2000, 3000, 3000, 500); !known || math.Abs(got-0.0348) > 1e-9 {
+		t.Errorf("qualified GPT-6.1 Sol cost = %v (known=%v), want 0.0348", got, known)
 	}
 }
 
@@ -365,6 +376,7 @@ func TestUnlistedModelsAreUnknown(t *testing.T) {
 		"claude-fable-6", "claude-mythos-6",
 		"gpt-5.7", "gpt-6", "gpt-7",
 		"gpt-6-astra-pro", "gpt-6-astra-secret-eap",
+		"gpt-6.1", "gpt-6.1-luna", "gpt-6.1-astra", // only Sol has a 6.1 release
 		"opencode/gpt-6-astra", "openrouter/openai/gpt-6-astra",
 		"gpt-5.4-turbo", "gpt-5.5-ultra", // same-version variants we never priced
 		"gpt-5.6-mini", "gpt-5.6-nano", // GPT-5.6's real tiers are sol/terra/luna, not mini/nano

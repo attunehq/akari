@@ -394,4 +394,9 @@ package parse
 // their published standard rates and allow their released identifiers on public
 // overviews. Rebuild existing sessions to replace unknown costs and recompute
 // cache savings. Existing golden fixtures use none of these models and are unchanged.
-const Epoch = 33
+//
+// Epoch 33 -> 34: price Claude Sonnet 5.5 and GPT-6.1 Sol at their published
+// standard rates and allow their released identifiers on public overviews.
+// Rebuild existing sessions to replace unknown costs and recompute cache savings.
+// Existing golden fixtures use neither model and are unchanged.
+const Epoch = 34
