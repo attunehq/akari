@@ -115,7 +115,9 @@ var table = map[string][]DatedRate{
 	"claude-opus-5":   flat(Rate{Input: 5, Output: 25, CacheWrite: 6.25, CacheRead: 0.50}),
 	"claude-opus-5-5": flat(Rate{Input: 4, Output: 20, CacheWrite: 5, CacheRead: 0.20}),
 
-	// Sonnet: $3/$15 from 3.5 through 4.6, and $2/$10 for Sonnet 5. Sonnet 5's
+	// Sonnet: $3/$15 from 3.5 through 4.6, and $2/$10 for Sonnet 5 and 5.5.
+	// https://platform.claude.com/docs/en/about-claude/pricing
+	// Sonnet 5's
 	// $2/$10 was announced as an introductory rate through 2026-08-31, and Akari
 	// carried the scheduled 2026-09-01 revert to $3/$15 as a second window until
 	// Anthropic cancelled it: $2/$10 is now the standard price, so the model is a
@@ -123,6 +125,7 @@ var table = map[string][]DatedRate{
 	// usual Anthropic ratios (write 1.25x, read 0.1x). "claude-sonnet-4" is Sonnet
 	// 4.0's dateless ID (claude-sonnet-4-20250514 normalizes to it).
 	"claude-sonnet-5":   flat(Rate{Input: 2, Output: 10, CacheWrite: 2.50, CacheRead: 0.20}),
+	"claude-sonnet-5-5": flat(Rate{Input: 2, Output: 10, CacheWrite: 2.50, CacheRead: 0.20}),
 	"claude-sonnet-4":   flat(Rate{Input: 3, Output: 15, CacheWrite: 3.75, CacheRead: 0.30}),
 	"claude-sonnet-4-0": flat(Rate{Input: 3, Output: 15, CacheWrite: 3.75, CacheRead: 0.30}),
 	"claude-sonnet-4-5": flat(Rate{Input: 3, Output: 15, CacheWrite: 3.75, CacheRead: 0.30}),
@@ -147,6 +150,10 @@ var table = map[string][]DatedRate{
 	"gpt-6-luna":        flat(Rate{Input: 0.10, Output: 0.50, CacheWrite: 0.125, CacheRead: 0.01}),
 	"openai/gpt-6-sol":  flat(Rate{Input: 2, Output: 10, Reasoning: 10, CacheWrite: 2.50, CacheRead: 0.20}),
 	"openai/gpt-6-luna": flat(Rate{Input: 0.10, Output: 0.50, Reasoning: 0.50, CacheWrite: 0.125, CacheRead: 0.01}),
+	// GPT-6.1 Sol matches GPT-6 Sol except cached input, which is half as much.
+	// Standard short-context rates, verified 2026-09-29, same source as above.
+	"gpt-6.1-sol":        flat(Rate{Input: 2, Output: 10, CacheWrite: 2.50, CacheRead: 0.10}),
+	"openai/gpt-6.1-sol": flat(Rate{Input: 2, Output: 10, Reasoning: 10, CacheWrite: 2.50, CacheRead: 0.10}),
 
 	// OpenAI GPT-5 family as served through Codex.
 	//
