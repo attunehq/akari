@@ -118,8 +118,8 @@ MATERIALIZED VIEW` with a refresh loop:
   N times) or requires the leader election the design deliberately avoids.
   Non-concurrent refresh also takes an ACCESS EXCLUSIVE lock that blocks reads;
   `CONCURRENTLY` trades that for a unique index requirement and a full diff.
-- **Pricing lives in Go.** Cache savings are priced per model and day by
-  `pricing.CacheSavings`, compiled into the binary
+- **Pricing lives in Go.** Cache savings are priced per model, day, and context
+  tier by `pricing.CacheSavings`, compiled into the binary
   (`analytics_cache.go`). A pure SQL view cannot produce the figure; the read
   path must end in Go regardless, so the database-side artifact should be the
   grouped token sums, which is exactly a rollup table.
