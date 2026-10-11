@@ -156,7 +156,7 @@ type Economics struct {
 	CostCompleted []float64 // dollars spent in bucket i by sessions that completed
 	CostAbandoned []float64 // dollars spent in bucket i by sessions that abandoned (outcome='abandoned')
 	CostOther     []float64 // dollars spent in bucket i by every other outcome (errored, unknown, ungraded)
-	CacheSavings  []float64 // dollars caching saved in bucket i, priced per day and model
+	CacheSavings  []float64 // dollars caching saved in bucket i, priced per day, model, and context tier
 	CacheHitRate  []float64 // cache-read share of all prompt-side tokens (input+read+write), percent
 	CacheMeasured []bool    // whether bucket i had prompt-side tokens, so a 0 rate reads as measured 0% not "no data"
 
@@ -780,8 +780,9 @@ func (s *Store) contextHistogramFrom(ctx context.Context, q querier, f Analytics
 // (when the money was spent, day-grained) and is gated to the session's outcome so
 // completed-vs-abandoned dollars reconcile with the outcome distribution; the outcome
 // joins in from session_signals at read time per the rollup grain rule. Cache savings is
-// priced at day-and-model granularity (so a bucket that straddles a rate change still
-// prices each day correctly) then re-bucketed to the grid.
+// priced at (day, model, context-tier) granularity off the event-grain ledger (so a
+// bucket that straddles a rate change or mixes short and long requests still prices
+// each side correctly) then re-bucketed to the grid.
 func (s *Store) economicsFrom(ctx context.Context, q querier, f AnalyticsFilter, g trendGrid) (Economics, error) {
 	out := Economics{
 		CostCompleted: make([]float64, g.n()),
@@ -866,21 +867,29 @@ func (s *Store) economicsFrom(ctx context.Context, q querier, f AnalyticsFilter,
 	return out, nil
 }
 
-// cacheSavingsTrend prices what caching saved and folds it into the grid. The
-// usage_daily union view already sits at day-and-model granularity (exactly what
-// pricing's date-effective windows need), so each (day, model) row group prices with
-// pricing.CacheSavings at that day's rate, then the day's savings sum into its trend
-// bucket, so a weekly bucket that spans a rate change still totals correctly.
+// cacheSavingsTrend prices what caching saved and folds it into the grid. It reads
+// the usage_ledger union at event grain rather than the usage_daily rollup: the
+// long-context tier is a per-event classification (prompt volume above
+// pricing.LongContextPromptThreshold, mirrored by the 272000 literal since SQL
+// cannot import the constant), and the rollup's (session, day, model) grain has
+// already summed the events it would need to classify. Grouping the ledger by
+// (day, model, tier) prices each bucket with pricing.CacheSavings at that day's
+// rate and that tier's rate, then the day's savings sum into its trend bucket, so
+// a weekly bucket that spans a rate change or mixes tiers still totals correctly.
+// usage_ledger and usage_daily are the same union at two grains (migration 0060),
+// so the panel's membership matches the cost panels beside it, and
+// clauseForRollupDay keeps the whole-day window semantics the rollup read had.
 func (s *Store) cacheSavingsTrend(ctx context.Context, q querier, f AnalyticsFilter, g trendGrid, out *Economics) error {
-	filter, args := f.clauseForRollupDay("sud.day")
+	filter, args := f.clauseForRollupDay("(sud.occurred_at AT TIME ZONE 'UTC')::date")
 	rows, err := q.Query(ctx,
-		`SELECT sud.day::timestamp AS d,
+		`SELECT (sud.occurred_at AT TIME ZONE 'UTC')::date AS d,
 		        sud.model,
+		        (sud.input_tokens + sud.cache_read_tokens + sud.cache_write_tokens) > 272000 AS long_context,
 		        coalesce(sum(sud.cache_read_tokens), 0),
 		        coalesce(sum(sud.cache_write_tokens), 0)
-		   FROM usage_daily sud
-		  WHERE sud.day IS NOT NULL`+filter+`
-		  GROUP BY 1, 2`, args...)
+		   FROM usage_ledger sud
+		  WHERE sud.occurred_at IS NOT NULL`+filter+`
+		  GROUP BY 1, 2, 3`, args...)
 	if err != nil {
 		return fmt.Errorf("cache savings trend: %w", err)
 	}
@@ -888,15 +897,16 @@ func (s *Store) cacheSavingsTrend(ctx context.Context, q querier, f AnalyticsFil
 	for rows.Next() {
 		var day time.Time
 		var model string
+		var longContext bool
 		var cacheRead, cacheWrite int64
-		if err := rows.Scan(&day, &model, &cacheRead, &cacheWrite); err != nil {
+		if err := rows.Scan(&day, &model, &longContext, &cacheRead, &cacheWrite); err != nil {
 			return fmt.Errorf("scan cache savings trend: %w", err)
 		}
 		i := g.index(day)
 		if i < 0 {
 			continue
 		}
-		out.CacheSavings[i] += pricing.CacheSavings(model, day, cacheRead, cacheWrite)
+		out.CacheSavings[i] += pricing.CacheSavings(model, day, longContext, cacheRead, cacheWrite)
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("iterate cache savings trend: %w", err)
