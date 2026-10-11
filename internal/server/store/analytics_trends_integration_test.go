@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -526,6 +527,40 @@ func TestInsightsChurnCapMultiProject(t *testing.T) {
 	// the project level rather than diving into A's folders and hiding B.
 	if c.Projects != 2 {
 		t.Errorf("uncapped churn projects = %d, want 2 (A in the tree, B clipped); the treemap's single-project shortcut keys off this, not the capped tree", c.Projects)
+	}
+}
+
+// TestCacheSavingsTrendMixedTier pins the economics cache-savings panel across a
+// mixed-tier day: one model and day holding a short GPT-5.6 Sol request and a long
+// one must total the two tiers' savings (0.72 + 0.18 = 0.90), not one rate applied
+// to the day's whole cached volume. The panel reads the event-grain ledger so the
+// tier classification survives aggregation; reading the (session, day, model)
+// rollup instead would sum the events before classifying and misprice the day.
+func TestCacheSavingsTrendMixedTier(t *testing.T) {
+	t.Parallel()
+	st := storetest.NewStore(t)
+	ctx := context.Background()
+	ada := seedUser(t, st, "ada")
+	pid, err := st.UpsertProject(ctx, "github.com/ada/tiertrend", "github.com", "ada", "tiertrend", "tiertrend", "remote")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sid := seedSession(t, st, ada, pid, "tiers")
+	day := time.Now().AddDate(0, 0, -1).UTC() // yesterday, inside the window
+	// Long request (300k prompt): reads save 0.1M * (8 - 0.80) = 0.72.
+	seedUsageCacheAt(t, st, sid, "gpt-5.6-sol", 200_000, 10_000, 100_000, 0, day, "long")
+	// Short request (150k prompt): reads save 0.05M * (4 - 0.40) = 0.18.
+	seedUsageCacheAt(t, st, sid, "gpt-5.6-sol", 100_000, 5_000, 50_000, 0, day, "short")
+
+	since := time.Now().AddDate(0, 0, -7)
+	ins, err := st.Insights(ctx, store.AnalyticsFilter{Since: since, Bucket: "day"}, store.AllInsightsPanels)
+	if err != nil {
+		t.Fatalf("insights with trends: %v", err)
+	}
+	const want = 0.72 + 0.18
+	if got := ins.Trends.Economics.TotalCacheSavings; math.Abs(got-want) > 1e-9 {
+		t.Errorf("trend cache savings = %v, want %v (0.72 long + 0.18 short); 1.08 means all-long, 0.54 means all-short", got, want)
 	}
 }
 
