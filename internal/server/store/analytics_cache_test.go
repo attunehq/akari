@@ -79,20 +79,21 @@ func TestCacheStatsDatedWindowSplitsSaving(t *testing.T) {
 	s := seedSessionWithStats(t, st, admin.ID, proj, "codex", "s", 0, 0, 0)
 	launch := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)   // before the 2026-08-21 reprice
 	reduced := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC) // after it
-	seedUsageCacheAt(t, st, s, "gpt-5.6-sol", 0, 0, 1_000_000, 0, launch, "launch")
-	seedUsageCacheAt(t, st, s, "gpt-5.6-sol", 0, 0, 1_000_000, 0, reduced, "reduced")
+	seedUsageCacheAt(t, st, s, "gpt-5.6-sol", 0, 0, 100_000, 0, launch, "launch")
+	seedUsageCacheAt(t, st, s, "gpt-5.6-sol", 0, 0, 100_000, 0, reduced, "reduced")
 
-	// Launch read saves 1M*(5-0.50)=4.50; reduced read saves 1M*(4-0.40)=3.60; total 8.10.
-	// A flat single-window price would give 9.00 (both launch) or 7.20 (both reduced), so
-	// 8.10 proves each side was priced at its own window.
-	const want = 4.50 + 3.60
+	// 100k launch reads save 100k*(5-0.50)/1M=0.45; reduced saves 100k*(4-0.40)/1M=0.36; total 0.81.
+	// A flat single-window price would give 0.90 (both launch) or 0.72 (both reduced), so
+	// 0.81 proves each side was priced at its own window. The volume stays under the 272k
+	// long-context threshold so the dated-window split is the only thing under test.
+	const want = 0.45 + 0.36
 
 	scoped, err := st.CacheStats(ctx, store.AnalyticsFilter{ProjectID: proj})
 	if err != nil {
 		t.Fatalf("cache stats: %v", err)
 	}
 	if math.Abs(scoped.SavingsUSD-want) > 1e-9 {
-		t.Errorf("scoped savings = %v, want %v (4.50 launch + 3.60 reduced)", scoped.SavingsUSD, want)
+		t.Errorf("scoped savings = %v, want %v (0.45 launch + 0.36 reduced)", scoped.SavingsUSD, want)
 	}
 
 	// The per-session recompute is the oracle the parse-time rollup reconciles against, so it
@@ -212,6 +213,60 @@ func TestCacheStatsUnknownPriceAndUndated(t *testing.T) {
 	// Per-session counts every row: 100k + 200k + 1M = 1.3M cached reads.
 	if sess.CacheRead != 1_300_000 {
 		t.Errorf("session cache read = %d, want 1300000 (counts the undated event too)", sess.CacheRead)
+	}
+}
+
+// TestCacheStatsMixedTier pins the long-context split across the aggregate cache
+// paths. One model and one UTC day hold a short GPT-5.6 Sol request and a long one;
+// each tier's cached volume must price at its own rate gap, so the total is the sum
+// of the two tiers rather than either rate applied to the whole day. A fold that
+// classified on the bucket's summed prompt volume (450k > 272k) would price every
+// read long (1.08); one that ignored the tier would price every read short (0.54).
+func TestCacheStatsMixedTier(t *testing.T) {
+	t.Parallel()
+	st := storetest.NewStore(t)
+	ctx := context.Background()
+
+	admin, err := st.Register(ctx, "grace", "h", "")
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	proj, err := st.UpsertProject(ctx, "github.com/ada/tiers", "github.com", "ada", "tiers", "tiers", "remote")
+	if err != nil {
+		t.Fatalf("project: %v", err)
+	}
+
+	s := seedSessionWithStats(t, st, admin.ID, proj, "codex", "s", 0, 0, 0)
+	day := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC) // after the 2026-08-21 reprice
+	// Long request: 200k uncached + 100k cached reads = 300k prompt, over the 272k
+	// line. Its reads save 0.1M * (8 - 0.80) = 0.72 at the long gap.
+	seedUsageCacheAt(t, st, s, "gpt-5.6-sol", 200_000, 10_000, 100_000, 0, day, "long")
+	// Short request: 100k uncached + 50k cached reads = 150k prompt, under the line.
+	// Its reads save 0.05M * (4 - 0.40) = 0.18 at the short gap.
+	seedUsageCacheAt(t, st, s, "gpt-5.6-sol", 100_000, 5_000, 50_000, 0, day, "short")
+
+	// 0.72 + 0.18 = 0.90, only reachable when the two tiers price separately.
+	const want = 0.72 + 0.18
+
+	scoped, err := st.CacheStats(ctx, store.AnalyticsFilter{ProjectID: proj})
+	if err != nil {
+		t.Fatalf("cache stats: %v", err)
+	}
+	if math.Abs(scoped.SavingsUSD-want) > 1e-9 {
+		t.Errorf("scoped savings = %v, want %v (0.72 long + 0.18 short); 1.08 means all-long, 0.54 means all-short", scoped.SavingsUSD, want)
+	}
+	// The tier split changes only how the saving is priced: the token totals still
+	// fold over both buckets.
+	if scoped.Input != 300_000 || scoped.CacheRead != 150_000 {
+		t.Errorf("scoped totals = in %d / read %d, want 300000 / 150000 (tier grouping must not split the totals)", scoped.Input, scoped.CacheRead)
+	}
+
+	sess, err := st.SessionCacheStats(ctx, s)
+	if err != nil {
+		t.Fatalf("session cache stats: %v", err)
+	}
+	if math.Abs(sess.SavingsUSD-want) > 1e-9 {
+		t.Errorf("session savings = %v, want %v (same tier split as the scoped path, reconciling with the parse-time fold)", sess.SavingsUSD, want)
 	}
 }
 
