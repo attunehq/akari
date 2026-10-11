@@ -335,16 +335,18 @@ func TestCacheSavingsRollupMatchesRecompute(t *testing.T) {
 }
 
 // datedCacheSavingsUsage is a GPT-5.6 Sol session split across the 2026-08-21 rate boundary: a
-// cache read in the launch $5/$30 window (input 5, cache read 0.50, so 1M reads save 4.50) and
-// an equal read in the reduced $4/$20 window (input 4, cache read 0.40, so 1M reads save 3.60).
+// cache read in the launch $5/$30 window (input 5, cache read 0.50, so 100k reads save 0.45) and
+// an equal read in the reduced $4/$20 window (input 4, cache read 0.40, so 100k reads save 0.36).
+// The 100k volume stays under the 272k long-context threshold so both reads price at the base
+// tier and only the dated-window split is exercised.
 // The two windows share one model ID, so a fold that ignored the event time would price both
 // rows at one rate and diverge from the recompute.
 func datedCacheSavingsUsage() []usageRow {
 	launch := time.Date(2026, 7, 15, 10, 0, 0, 0, time.UTC)   // before the reprice
 	reduced := time.Date(2026, 10, 15, 10, 0, 0, 0, time.UTC) // after it
 	return []usageRow{
-		{Model: "gpt-5.6-sol", In: 0, Out: 0, CR: 1_000_000, CW: 0, At: launch, DedupKey: "dw_launch", SourceOffset: 10},
-		{Model: "gpt-5.6-sol", In: 0, Out: 0, CR: 1_000_000, CW: 0, At: reduced, DedupKey: "dw_reduced", SourceOffset: 20},
+		{Model: "gpt-5.6-sol", In: 0, Out: 0, CR: 100_000, CW: 0, At: launch, DedupKey: "dw_launch", SourceOffset: 10},
+		{Model: "gpt-5.6-sol", In: 0, Out: 0, CR: 100_000, CW: 0, At: reduced, DedupKey: "dw_reduced", SourceOffset: 20},
 	}
 }
 
@@ -355,7 +357,7 @@ func datedCacheSavingsUsage() []usageRow {
 // against SessionCacheStats (the per-(model, UTC day) recompute), after a first rebuild and
 // again after a repeat rebuild. The two price on different bases (exact instant versus
 // UTC-day bucket) and must still agree, which they do only because the rate boundary is
-// UTC-midnight aligned; the windowed total (8.10 = 4.50 launch + 3.60 reduced) is pinned
+// UTC-midnight aligned; the windowed total (0.81 = 0.45 launch + 0.36 reduced) is pinned
 // directly so a fold that collapsed the two windows to one rate would fail here rather than
 // reconcile with a matching but wrong recompute.
 func TestCacheSavingsRollupMatchesRecomputeAcrossDatedWindow(t *testing.T) {
@@ -373,9 +375,9 @@ func TestCacheSavingsRollupMatchesRecomputeAcrossDatedWindow(t *testing.T) {
 	}
 	msgs := []store.MessageDelta{{Ordinal: 0, Role: "user", Content: "go"}}
 
-	// The launch read saves 1M*(5-0.50)=4.50; the reduced read saves 1M*(4-0.40)=3.60; total 8.10.
-	// A flat single-window price would give 9.00 (both launch) or 7.20 (both reduced).
-	const wantSaving = 4.50 + 3.60
+	// The launch read saves 100k*(5-0.50)/1M=0.45; the reduced read saves 100k*(4-0.40)/1M=0.36; total 0.81.
+	// A flat single-window price would give 0.90 (both launch) or 0.72 (both reduced).
+	const wantSaving = 0.45 + 0.36
 
 	reconcile := func(t *testing.T, id int64, when string) {
 		t.Helper()
@@ -391,7 +393,7 @@ func TestCacheSavingsRollupMatchesRecomputeAcrossDatedWindow(t *testing.T) {
 			t.Errorf("%s: session %d rollup savings %v != recompute %v", when, id, d.TotalCacheSavingsUSD, recompute.SavingsUSD)
 		}
 		if math.Abs(d.TotalCacheSavingsUSD-wantSaving) > 1e-9 {
-			t.Errorf("%s: session %d rollup savings %v != windowed want %v (4.50 launch + 3.60 reduced)", when, id, d.TotalCacheSavingsUSD, wantSaving)
+			t.Errorf("%s: session %d rollup savings %v != windowed want %v (0.45 launch + 0.36 reduced)", when, id, d.TotalCacheSavingsUSD, wantSaving)
 		}
 	}
 
