@@ -42,6 +42,11 @@ type Rate struct {
 type DatedRate struct {
 	From time.Time // inclusive lower bound; zero value = in effect from the beginning
 	Rate Rate
+	// Long is the window's long-context tier: the rate a request pays when its
+	// total prompt volume crosses LongContextPromptThreshold. The zero value means
+	// the window has no tier, and a long-context request in it prices at Rate.
+	// Only the post-reprice GPT-5.6 windows carry one today.
+	Long Rate
 }
 
 // flat wraps a single rate as a one-window list in effect for all time, the shape of
@@ -64,6 +69,25 @@ var (
 // to UTC day buckets, so Akari keeps the discounted rate through the remaining
 // eight hours of September 9 UTC rather than splitting that aggregate day.
 var glm53FlashSticker = time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
+
+// LongContextPromptThreshold is the total prompt-token volume (uncached input plus
+// cache reads plus cache writes) above which OpenAI's GPT-5.6 long-context tier
+// applies. The higher rate then prices the FULL request, not just the tokens past
+// the line. OpenAI introduced the tier with the 2026 GPT-5.6 rate reductions, so
+// only the post-reprice windows below carry a Long rate; a long launch-era request
+// keeps pricing at the launch short rate.
+const LongContextPromptThreshold = 272_000
+
+// IsLongContext reports whether one usage event's prompt volume puts it in the
+// long-context tier: strictly more than LongContextPromptThreshold total prompt
+// tokens. Prompt volume is uncached input plus cache reads plus cache writes;
+// output is never prompt-side. A caller folding many events into one figure must
+// classify per event (or group by the classification): two short-context prompts
+// can sum past the threshold without either event belonging to the tier, so an
+// aggregate cannot re-derive the flag from its own sums.
+func IsLongContext(input, cacheRead, cacheWrite int64) bool {
+	return input+cacheRead+cacheWrite > LongContextPromptThreshold
+}
 
 // table maps a publicly disclosed canonical model ID to its date-effective rates.
 // Matching is EXACT, not by prefix: a key prices only the model whose ID it is,
@@ -172,19 +196,19 @@ var table = map[string][]DatedRate{
 	// correctly the moment Codex reports a nonzero count (issue #126).
 	"gpt-5.6": {
 		{Rate: Rate{Input: 5, Output: 30, CacheWrite: 6.25, CacheRead: 0.50}},
-		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, CacheWrite: 5, CacheRead: 0.40}},
+		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, CacheWrite: 5, CacheRead: 0.40}, Long: Rate{Input: 8, Output: 30, CacheWrite: 10, CacheRead: 0.80}},
 	},
 	"gpt-5.6-sol": {
 		{Rate: Rate{Input: 5, Output: 30, CacheWrite: 6.25, CacheRead: 0.50}},
-		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, CacheWrite: 5, CacheRead: 0.40}},
+		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, CacheWrite: 5, CacheRead: 0.40}, Long: Rate{Input: 8, Output: 30, CacheWrite: 10, CacheRead: 0.80}},
 	},
 	"gpt-5.6-terra": {
 		{Rate: Rate{Input: 2.50, Output: 15, CacheWrite: 3.125, CacheRead: 0.25}},
-		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 2, Output: 12, CacheWrite: 2.50, CacheRead: 0.20}},
+		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 2, Output: 12, CacheWrite: 2.50, CacheRead: 0.20}, Long: Rate{Input: 4, Output: 18, CacheWrite: 5, CacheRead: 0.40}},
 	},
 	"gpt-5.6-luna": {
 		{Rate: Rate{Input: 1, Output: 6, CacheWrite: 1.25, CacheRead: 0.10}},
-		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 0.20, Output: 1.20, CacheWrite: 0.25, CacheRead: 0.02}},
+		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 0.20, Output: 1.20, CacheWrite: 0.25, CacheRead: 0.02}, Long: Rate{Input: 0.40, Output: 1.80, CacheWrite: 0.50, CacheRead: 0.04}},
 	},
 	//
 	// CacheWrite is deliberately left unset (zero) for every OpenAI model before
@@ -223,19 +247,19 @@ var table = map[string][]DatedRate{
 	// windows as the unqualified slugs above rather than a flat current rate.
 	"openai/gpt-5.6": {
 		{Rate: Rate{Input: 5, Output: 30, Reasoning: 30, CacheWrite: 6.25, CacheRead: 0.50}},
-		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, Reasoning: 20, CacheWrite: 5, CacheRead: 0.40}},
+		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, Reasoning: 20, CacheWrite: 5, CacheRead: 0.40}, Long: Rate{Input: 8, Output: 30, Reasoning: 30, CacheWrite: 10, CacheRead: 0.80}},
 	},
 	"openai/gpt-5.6-sol": {
 		{Rate: Rate{Input: 5, Output: 30, Reasoning: 30, CacheWrite: 6.25, CacheRead: 0.50}},
-		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, Reasoning: 20, CacheWrite: 5, CacheRead: 0.40}},
+		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, Reasoning: 20, CacheWrite: 5, CacheRead: 0.40}, Long: Rate{Input: 8, Output: 30, Reasoning: 30, CacheWrite: 10, CacheRead: 0.80}},
 	},
 	"openai/gpt-5.6-terra": {
 		{Rate: Rate{Input: 2.50, Output: 15, Reasoning: 15, CacheWrite: 3.125, CacheRead: 0.25}},
-		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 2, Output: 12, Reasoning: 12, CacheWrite: 2.50, CacheRead: 0.20}},
+		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 2, Output: 12, Reasoning: 12, CacheWrite: 2.50, CacheRead: 0.20}, Long: Rate{Input: 4, Output: 18, Reasoning: 18, CacheWrite: 5, CacheRead: 0.40}},
 	},
 	"openai/gpt-5.6-luna": {
 		{Rate: Rate{Input: 1, Output: 6, Reasoning: 6, CacheWrite: 1.25, CacheRead: 0.10}},
-		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 0.20, Output: 1.20, Reasoning: 1.20, CacheWrite: 0.25, CacheRead: 0.02}},
+		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 0.20, Output: 1.20, Reasoning: 1.20, CacheWrite: 0.25, CacheRead: 0.02}, Long: Rate{Input: 0.40, Output: 1.80, Reasoning: 1.80, CacheWrite: 0.50, CacheRead: 0.04}},
 	},
 	"opencode/gpt-5.6-sol":            flat(Rate{Input: 2, Output: 10, Reasoning: 10, CacheWrite: 2.50, CacheRead: 0.20}),
 	"opencode/gpt-5.6-terra":          flat(Rate{Input: 2.50, Output: 15, Reasoning: 15, CacheWrite: 3.125, CacheRead: 0.25}),
@@ -362,21 +386,25 @@ func normalize(model string) string {
 	return datedSnapshot.ReplaceAllString(model, "")
 }
 
-// rateAt returns the rate in effect at time `at`, walking the From-ascending windows
-// and keeping the last one whose From is at or before `at`. A zero `at` (an undated
-// usage event) selects the first window, which is the flat rate for a single-window
-// model and the earliest window for a multi-window one; parse-time pricing makes the
-// same choice for an undated row, so a rollup and a from-scratch recompute agree.
-func rateAt(rates []DatedRate, at time.Time) Rate {
-	r := rates[0].Rate
+// windowAt returns the rate window in effect at time `at`, walking the
+// From-ascending windows and keeping the last one whose From is at or before `at`.
+// A zero `at` (an undated usage event) selects the first window, which is the flat
+// rate for a single-window model and the earliest window for a multi-window one;
+// parse-time pricing makes the same choice for an undated row, so a rollup and a
+// from-scratch recompute agree.
+func windowAt(rates []DatedRate, at time.Time) DatedRate {
+	w := rates[0]
 	for _, dr := range rates[1:] {
 		if dr.From.After(at) {
 			break
 		}
-		r = dr.Rate
+		w = dr
 	}
-	return r
+	return w
 }
+
+// rateAt returns the short-context rate in effect at time `at` (see windowAt).
+func rateAt(rates []DatedRate, at time.Time) Rate { return windowAt(rates, at).Rate }
 
 func ratesFor(model string) ([]DatedRate, bool) {
 	rates, ok := table[model]
@@ -412,28 +440,51 @@ func ModelNamePublic(model string) bool {
 	return false
 }
 
-// RateAt returns the rate for a model at a point in time, and whether it was found.
-// The model string is normalized (lowercased, trimmed, and stripped of a trailing
-// release-date snapshot) and then matched exactly against the table. There is no prefix
-// matching: a key prices only its exact model, so a model we have not listed reports
-// known=false rather than inheriting a neighbor's price. The time selects the
-// date-effective window (see rateAt).
-func RateAt(model string, at time.Time) (Rate, bool) {
+// lookupWindows resolves a model string to its rate windows: normalized
+// (lowercased, trimmed, and stripped of a trailing release-date snapshot), matched
+// exactly against the table, with the direct-provider fallback for unqualified keys.
+func lookupWindows(model string) ([]DatedRate, bool) {
 	model = normalize(model)
 	if model == "" {
-		return Rate{}, false
+		return nil, false
 	}
-	qualified := strings.Contains(model, "/")
 	rates, ok := ratesFor(model)
 	if !ok {
 		if provider, unqualified, found := strings.Cut(model, "/"); found && directProviderFallbacks[provider] {
 			rates, ok = ratesFor(unqualified)
 		}
 	}
+	return rates, ok
+}
+
+// RateAt returns the rate for a model at a point in time, and whether it was found.
+// The model string is normalized (lowercased, trimmed, and stripped of a trailing
+// release-date snapshot) and then matched exactly against the table. There is no prefix
+// matching: a key prices only its exact model, so a model we have not listed reports
+// known=false rather than inheriting a neighbor's price. The time selects the
+// date-effective window (see rateAt). RateAt always returns the window's
+// short-context rate; RateAtTier applies the long-context tier.
+func RateAt(model string, at time.Time) (Rate, bool) {
+	return RateAtTier(model, at, false)
+}
+
+// RateAtTier is RateAt with the long-context tier applied: when longContext is set
+// and the selected window carries a Long rate, the tier rate replaces the window's
+// short-context rate for the whole request. A window with no Long rate (every model
+// but post-reprice GPT-5.6, and GPT-5.6's own launch windows) prices a long-context
+// request at its short rate, so a caller can classify every event by prompt volume
+// and let the table decide which models actually tier.
+func RateAtTier(model string, at time.Time, longContext bool) (Rate, bool) {
+	qualified := strings.Contains(normalize(model), "/")
+	rates, ok := lookupWindows(model)
 	if !ok {
 		return Rate{}, false
 	}
-	r := rateAt(rates, at)
+	w := windowAt(rates, at)
+	r := w.Rate
+	if longContext && w.Long != (Rate{}) {
+		r = w.Long
+	}
 	if qualified && r.Reasoning == 0 {
 		r.Reasoning = r.Output
 	}
@@ -443,9 +494,13 @@ func RateAt(model string, at time.Time) (Rate, bool) {
 // Cost returns the estimated USD cost for a token count under a model at the time
 // the usage occurred, and whether the model had a rate. Token counts are in
 // tokens (not millions). An unknown model returns zero and false. The time
-// selects the date-effective rate window.
+// selects the date-effective rate window. The prompt volume (uncached input plus
+// cache reads plus cache writes) selects the long-context tier for the models that
+// publish one, and the tier prices the full request, so Cost classifies the event
+// itself; callers always pass one event's counts, never an aggregate (see the
+// int64 note on CacheSavings).
 func Cost(model string, at time.Time, input, output, cacheWrite, cacheRead, reasoning int) (float64, bool) {
-	r, ok := RateAt(model, at)
+	r, ok := RateAtTier(model, at, IsLongContext(int64(input), int64(cacheRead), int64(cacheWrite)))
 	if !ok {
 		return 0, false
 	}
@@ -481,14 +536,22 @@ func Cost(model string, at time.Time, input, output, cacheWrite, cacheRead, reas
 // alone. The result can be negative in principle (cache written but never re-read) and
 // is returned unfloored, so a caller can surface that caching cost more than it saved.
 //
+// The longContext flag carries the events' own tier classification (IsLongContext
+// over each event's prompt volume), because a summed bucket cannot re-derive it: two
+// short-context events can total past LongContextPromptThreshold without either
+// belonging to the tier. A caller that rolls many events into one figure must
+// therefore group by the tier alongside model and day (see
+// store/analytics_cache.go) and pass each bucket's flag, so a mixed-tier bucket
+// never prices one side at the other's rate.
+//
 // Counts are int64, not the int that Cost takes: this is the one pricing entry point
 // fed rolled, fleet-wide aggregates, whose cache-read sum over a long window can run
 // past a 32-bit range, where Cost only ever sees a single session's tokens. A caller
 // that rolls many events into one figure must bucket them so every event in a bucket
 // falls in one rate window (see store/analytics_cache.go), since a single time picks a
 // single window for the whole sum.
-func CacheSavings(model string, at time.Time, cacheRead, cacheWrite int64) float64 {
-	r, ok := RateAt(model, at)
+func CacheSavings(model string, at time.Time, longContext bool, cacheRead, cacheWrite int64) float64 {
+	r, ok := RateAtTier(model, at, longContext)
 	if !ok {
 		return 0
 	}
