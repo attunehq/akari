@@ -399,4 +399,13 @@ package parse
 // standard rates and allow their released identifiers on public overviews.
 // Rebuild existing sessions to replace unknown costs and recompute cache savings.
 // Existing golden fixtures use neither model and are unchanged.
-const Epoch = 34
+//
+// Epoch 34 -> 35: price GPT-5.6 long-context requests (total prompt volume above
+// 272,000 tokens) at the published long-context rates for Sol, the gpt-5.6 alias,
+// Terra, and Luna (issue #215). The tier applies to the whole request and exists
+// only in the post-reprice windows, so per-row costs for long GPT-5.6 events rise
+// and the cache-savings fold prices their cached volume at the tier rate; the
+// aggregate cache paths group by the tier so mixed-tier days still reconcile with
+// the per-row fold. Existing golden fixtures carry no long-context GPT-5.6 usage
+// and are unchanged; the bump is the reprice signal and stands on its own.
+const Epoch = 35
