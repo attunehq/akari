@@ -9,7 +9,7 @@ order: 4
 The web UI is where a human reads what the agents did. It is a React application
 with a persistent sidebar for Overview, Insights, Projects, Sessions, and
 Account. Reading it needs a full-scope credential, which in practice is a browser
-session. The public homepage and this guide live at `akari.attune.inc`; an akari
+session. The public homepage and this guide live at `akari.tunas.dev`; an akari
 server redirects its root and old guide routes there. Signing in opens the
 Overview at `/overview`. The browser formats timestamps in your local timezone.
 
