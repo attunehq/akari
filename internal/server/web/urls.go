@@ -10,7 +10,7 @@ import (
 )
 
 // ProductSiteURL is the GitHub Pages origin for the public homepage and guide.
-const ProductSiteURL = "https://akari.attune.inc"
+const ProductSiteURL = "https://akari.tunas.dev"
 
 // SelectedUserIDs parses the overview's repeated ?user= ids against the known
 // accounts, keeping only ids that name a real user and returning them in the

@@ -10,11 +10,11 @@ re-parsing on the server, with nothing re-uploaded.
 
 ## Documentation
 
-The full user guide lives at [akari.attune.inc/guide](https://akari.attune.inc/guide).
+The full user guide lives at [akari.tunas.dev/guide](https://akari.tunas.dev/guide).
 It is written for agents as much as humans: append `.md` to any page URL for its
-raw Markdown, fetch [`/llms-full.txt`](https://akari.attune.inc/llms-full.txt)
+raw Markdown, fetch [`/llms-full.txt`](https://akari.tunas.dev/llms-full.txt)
 for the whole guide in one request, and use
-[`/llms.txt`](https://akari.attune.inc/llms.txt) as the machine-readable index.
+[`/llms.txt`](https://akari.tunas.dev/llms.txt) as the machine-readable index.
 The source lives in [`docs/user-guide`](docs/user-guide).
 
 The browser-facing JSON API is documented by the server at `/api/docs`; its
@@ -70,12 +70,12 @@ akari daemon start    # sync every 10 minutes in the background
 akari daemon install  # macOS: also start it at login
 ```
 
-The [getting-started chapter](https://akari.attune.inc/guide/getting-started)
+The [getting-started chapter](https://akari.tunas.dev/guide/getting-started)
 of the guide covers the rest.
 
 No server yet? `docker compose up -d --build` with the bundled compose file
 stands one up; the
-[self-hosting chapter](https://akari.attune.inc/guide/self-hosting) covers
+[self-hosting chapter](https://akari.tunas.dev/guide/self-hosting) covers
 real deployments.
 
 ## Development
