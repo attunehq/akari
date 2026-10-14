@@ -377,7 +377,7 @@ func (r *runState) worker(ctx context.Context) {
 
 // storeRefresh coalesces OpenCode/omp store events into a single discovery pass.
 //
-// One SQLite transaction touches the database, its -wal and its -shm, and an
+// One SQLite transaction touches the database and its -wal, and an
 // active agent commits many times a second, so every such write used to run a
 // full discovery inline on the run loop: open the database, probe its schema,
 // list every session and lstat every materialized transcript. Measured at ~300ms
@@ -423,12 +423,9 @@ func flushTick(
 	if sr.due(now) {
 		sr.pending = false
 		deadline := now.Add(debounce)
-		for _, f := range discoverFiles() {
+		markDiscoveredChanges(known, discoverFiles(), func(f discover.File) {
 			pending[f] = deadline
-			if m, ok := statMeta(f.Path); ok {
-				known[f] = m
-			}
-		}
+		})
 	}
 	for f, deadline := range pending {
 		if !now.Before(deadline) {
@@ -444,15 +441,17 @@ func flushTick(
 // the OS watcher may later miss on that file rather than leaving it uncovered until
 // the slower discover ticker folds it in.
 func (w *Watcher) handleEvent(fsw *fsnotify.Watcher, ev fsnotify.Event, known map[discover.File]fileMeta, pending map[discover.File]time.Time, sr *storeRefresh) {
-	if ev.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Rename) == 0 {
+	if ev.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Rename|fsnotify.Remove) == 0 {
 		return
 	}
 	if w.isOpenCodeStoreEvent(ev.Name) {
-		_ = fsw.Add(ev.Name)
+		if err := fsw.Add(ev.Name); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			w.opt.Logf("watch store %s: %v", ev.Name, err)
+		}
 		sr.schedule(time.Now(), w.opt.Debounce, w.opt.StoreRefresh)
 		return
 	}
-	if w.withinOpenCodeRoot(ev.Name) {
+	if w.withinOpenCodeRoot(ev.Name) || ev.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Rename) == 0 {
 		return
 	}
 	if info, err := os.Lstat(ev.Name); err == nil && info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
@@ -628,7 +627,11 @@ func (w *Watcher) addOpenCodeStore(fsw *fsnotify.Watcher, dir string, root disco
 		name = "opencode.db"
 	}
 	var problems []error
-	for _, base := range []string{name, name + "-wal", name + "-shm"} {
+	// The shared-memory WAL index is SQLite bookkeeping, not source content.
+	// Opening a mode=ro reader can write it when no other connection remains;
+	// watching those writes would make discovery trigger itself indefinitely.
+	// The directory watch covers creation/replacement of the database and WAL.
+	for _, base := range []string{name, name + "-wal"} {
 		p := filepath.Join(dir, base)
 		if _, err := os.Lstat(p); err != nil {
 			continue
@@ -657,7 +660,7 @@ func (w *Watcher) isOpenCodeStoreEvent(path string) bool {
 		if name == "" {
 			name = "opencode.db"
 		}
-		if base == name || base == name+"-wal" || base == name+"-shm" {
+		if base == name || base == name+"-wal" {
 			return true
 		}
 	}

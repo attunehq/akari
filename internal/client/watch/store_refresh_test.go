@@ -199,3 +199,48 @@ func TestNonStoreEventStillQueuesFileDirectly(t *testing.T) {
 		t.Fatal("non-store event scheduled a store refresh")
 	}
 }
+
+func TestStoreRefreshQueuesOnlyNewOrChangedTranscripts(t *testing.T) {
+	dir := t.TempDir()
+	unchanged := discover.File{Agent: "opencode", Root: dir, Path: filepath.Join(dir, "unchanged.jsonl")}
+	changed := discover.File{Agent: "opencode", Root: dir, Path: filepath.Join(dir, "changed.jsonl")}
+	added := discover.File{Agent: "opencode", Root: dir, Path: filepath.Join(dir, "new.jsonl")}
+	known := map[discover.File]fileMeta{}
+	for _, file := range []discover.File{unchanged, changed} {
+		writeSession(t, file.Path)
+		meta, ok := statMeta(file.Path)
+		if !ok {
+			t.Fatal("stat fixture")
+		}
+		known[file] = meta
+	}
+	if err := os.WriteFile(changed.Path, []byte("changed transcript with additional bytes\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeSession(t, added.Path)
+	const debounce = 500 * time.Millisecond
+	now := time.Unix(1_800_000_000, 0)
+	sr := &storeRefresh{}
+	sr.schedule(now, debounce, 5*time.Second)
+	pending := map[discover.File]time.Time{}
+	// An unrelated pending debounce must survive discovery unchanged.
+	deadline := sr.settleAt.Add(2 * debounce)
+	pending[unchanged] = deadline
+	marked := map[discover.File]int{}
+	discoverFiles := func() []discover.File { return []discover.File{unchanged, changed, added} }
+	mark := func(f discover.File) { marked[f]++ }
+	flushTick(sr.settleAt, debounce, sr, known, pending, discoverFiles, mark)
+	if !pending[unchanged].Equal(deadline) {
+		t.Fatal("unchanged history reset an existing debounce")
+	}
+	flushTick(sr.settleAt.Add(debounce), debounce, sr, known, pending, discoverFiles, mark)
+	if marked[unchanged] != 0 || marked[changed] != 1 || marked[added] != 1 {
+		t.Fatalf("queued counts: unchanged=%d changed=%d new=%d", marked[unchanged], marked[changed], marked[added])
+	}
+	delete(pending, unchanged)
+	sr.schedule(now.Add(time.Second), debounce, 5*time.Second)
+	flushTick(sr.settleAt, debounce, sr, known, pending, discoverFiles, mark)
+	if len(pending) != 0 {
+		t.Fatal("unchanged refresh queued history again")
+	}
+}
