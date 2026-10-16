@@ -983,11 +983,14 @@ func writeUsage(ctx context.Context, tx pgx.Tx, sessionID int64, usage []ProjUsa
 		roll.cacheWrite += int64(u.CacheWrite)
 		roll.cacheRead += int64(u.CacheRead)
 		roll.costUSD += u.CostUSD
-		// Fold the prompt-cache saving over the same surviving rows. Pricing is
-		// linear in tokens, so summing each row's saving equals summing the model's
-		// grouped totals (what SessionCacheStats does over the whole session), which
-		// is what lets the rollup and that per-model recompute reconcile exactly.
-		roll.cacheSavingsUSD += pricing.CacheSavings(u.Model, u.OccurredAt, int64(u.CacheRead), int64(u.CacheWrite))
+		// Fold the prompt-cache saving over the same surviving rows, classified per
+		// row. Within one (model, context tier, rate window) bucket pricing is linear
+		// in tokens, so summing each row's saving equals the grouped totals that
+		// SessionCacheStats computes per (model, day, tier) over the whole session,
+		// which is what lets the rollup and that per-model recompute reconcile
+		// exactly.
+		longContext := pricing.IsLongContext(int64(u.Input), int64(u.CacheRead), int64(u.CacheWrite))
+		roll.cacheSavingsUSD += pricing.CacheSavings(u.Model, u.OccurredAt, longContext, int64(u.CacheRead), int64(u.CacheWrite))
 	}
 
 	if _, err := tx.CopyFrom(ctx, pgx.Identifier{"usage_events"},
