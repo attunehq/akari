@@ -30,8 +30,8 @@ the maintainer, Jess (GitHub `jssblck`).
 - **Disclose on GitHub.** The agent posts through the maintainer's account, so
   end every issue or PR comment with the line
   `_Posted by Akari's maintenance agent._`
-- **Never tag a release.** A release publishes binaries and images. If
-  user-visible fixes have landed since the last tag, say so in the run summary.
+- **Release on the policy below.** Patch releases are yours to cut. Minor and
+  major releases are Jess's call.
 
 ## Each run
 
@@ -51,7 +51,8 @@ interrupted run is finished by the next.
 3. **Dependencies and toolchains** (see below).
 4. **Model releases and pricing** (see below).
 5. **Issues and external PRs** (see below).
-6. **Report** (see below).
+6. **Release** (see below), once this run's merges have landed.
+7. **Report** (see below).
 
 ## Dependencies and toolchains
 
@@ -103,6 +104,48 @@ thread. For each one:
 - **External PR**: review it as a staff engineer would. Push small fixups if
   the contributor allows edits, and merge it if it passes this policy. Hold
   anything that touches the escalation list for Jess.
+
+## Releases
+
+Prices are compiled into the binary, and fixes reach users only through a
+release. Unreleased work does not help anyone.
+
+A change is **shipped** if it touches what goes into the binaries or the server
+image: `cmd/`, `internal/`, `migrations/`, `go.mod`/`go.sum`, `Dockerfile`, or
+the embedded frontend. Changes to `docs/`, `site/`, `.github/`, `scripts/`, or
+top-level Markdown alone never warrant a release.
+
+Cut the next **patch** release (`v0.7.12` to `v0.7.13`) at the end of a run
+when `main` is green and shipped changes have landed since the last tag:
+
+- **The same day** if any of them is a pricing change, a bug fix, or a security
+  fix.
+- **On the Monday run** if they are only dependency and toolchain upgrades or
+  other routine changes, so self-hosters get one upgrade a week rather than one
+  a day.
+- **At most one release a day.**
+
+To release, follow docs/releases.md: tag `origin/main`'s head and push the
+tag. Then verify:
+
+- the `Release` workflow for the tag succeeded and the GitHub Release is
+  published, not left as a draft
+- the server image is pullable anonymously
+  (`docker logout ghcr.io && docker manifest inspect
+  ghcr.io/attunehq/akari-server:<tag>`)
+- a downloaded binary reports the tag from `akari version`
+
+The generated release notes are fine as they are. If a release is broken, fix
+it forward with the next patch release and report it; never delete a published
+release or move a tag.
+
+Small features ship in patch releases; `v0.7.11` shipped new timeline windows
+that way. **Minor and major releases** (`v0.8.0`) belong to Jess. Propose one,
+with the release notes written, when `main` holds a database migration, a new
+supported client or other major capability, or anything self-hosters must act
+on when they upgrade. Until Jess tags it, cut no patch release over that work,
+because the minor release is what ships it. If a pricing or security fix is
+stuck behind it, say so when you ask.
 
 ## What needs Jess
 
