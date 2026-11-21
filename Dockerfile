@@ -3,7 +3,7 @@
 # Build on the runner's native architecture while cross-compiling the static Go
 # binary for the requested image platform. This keeps multi-platform release
 # builds fast and avoids executing an emulated compiler.
-FROM --platform=$BUILDPLATFORM golang:1.26 AS build
+FROM --platform=$BUILDPLATFORM golang:1.27 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
