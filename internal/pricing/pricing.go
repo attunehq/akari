@@ -99,6 +99,10 @@ var table = map[string][]DatedRate{
 	"claude-mythos-5":   flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1.00}),
 	"claude-fable-5-1":  flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 0.25}),
 	"claude-mythos-5-1": flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 0.25}),
+	// The 5.2 pair drops to $8/$40 and keeps 5.1's 0.025x cache read:
+	// https://platform.claude.com/docs/en/about-claude/pricing
+	"claude-fable-5-2":  flat(Rate{Input: 8, Output: 40, CacheWrite: 10, CacheRead: 0.20}),
+	"claude-mythos-5-2": flat(Rate{Input: 8, Output: 40, CacheWrite: 10, CacheRead: 0.20}),
 
 	// Opus: 4.0/4.1 at $15/$75, 4.5 through 5 at $5/$25. Opus 5.5 is
 	// $4/$20 with cache reads at 0.05x input instead of the usual 0.1x.
@@ -117,7 +121,8 @@ var table = map[string][]DatedRate{
 
 	// Sonnet: $3/$15 from 3.5 through 4.6, and $2/$10 for Sonnet 5 and 5.5.
 	// https://platform.claude.com/docs/en/about-claude/pricing
-	// Sonnet 5's
+	// Sonnet 5.5, like Opus 5.5, reads cache at 0.05x input ($0.10), not 0.1x;
+	// Akari first shipped it at 0.1x, corrected 2026-11-20. Sonnet 5's
 	// $2/$10 was announced as an introductory rate through 2026-08-31, and Akari
 	// carried the scheduled 2026-09-01 revert to $3/$15 as a second window until
 	// Anthropic cancelled it: $2/$10 is now the standard price, so the model is a
@@ -125,7 +130,7 @@ var table = map[string][]DatedRate{
 	// usual Anthropic ratios (write 1.25x, read 0.1x). "claude-sonnet-4" is Sonnet
 	// 4.0's dateless ID (claude-sonnet-4-20250514 normalizes to it).
 	"claude-sonnet-5":   flat(Rate{Input: 2, Output: 10, CacheWrite: 2.50, CacheRead: 0.20}),
-	"claude-sonnet-5-5": flat(Rate{Input: 2, Output: 10, CacheWrite: 2.50, CacheRead: 0.20}),
+	"claude-sonnet-5-5": flat(Rate{Input: 2, Output: 10, CacheWrite: 2.50, CacheRead: 0.10}),
 	"claude-sonnet-4":   flat(Rate{Input: 3, Output: 15, CacheWrite: 3.75, CacheRead: 0.30}),
 	"claude-sonnet-4-0": flat(Rate{Input: 3, Output: 15, CacheWrite: 3.75, CacheRead: 0.30}),
 	"claude-sonnet-4-5": flat(Rate{Input: 3, Output: 15, CacheWrite: 3.75, CacheRead: 0.30}),
@@ -133,7 +138,12 @@ var table = map[string][]DatedRate{
 	"claude-3-7-sonnet": flat(Rate{Input: 3, Output: 15, CacheWrite: 3.75, CacheRead: 0.30}),
 	"claude-3-5-sonnet": flat(Rate{Input: 3, Output: 15, CacheWrite: 3.75, CacheRead: 0.30}),
 
-	// Haiku: 4.5 is the only 4.x; 3.5 is the prior generation.
+	// Haiku: 5.5 is the current generation, 4.5 the only 4.x, 3.5 the one before.
+	// Haiku 5.5 bills by prompt length. Up to 100K prompt tokens it costs
+	// $0.10/$0.50, and above that $0.50/$2.50 for the whole request. Like the
+	// GPT-6 entries below, the table carries only the short tier, so a request
+	// over 100K is under-estimated. https://platform.claude.com/docs/en/about-claude/pricing
+	"claude-haiku-5-5": flat(Rate{Input: 0.10, Output: 0.50, CacheWrite: 0.125, CacheRead: 0.01}),
 	"claude-haiku-4-5": flat(Rate{Input: 1, Output: 5, CacheWrite: 1.25, CacheRead: 0.10}),
 	"claude-3-5-haiku": flat(Rate{Input: 0.80, Output: 4, CacheWrite: 1, CacheRead: 0.08}),
 
@@ -154,6 +164,16 @@ var table = map[string][]DatedRate{
 	// Standard short-context rates, verified 2026-09-29, same source as above.
 	"gpt-6.1-sol":        flat(Rate{Input: 2, Output: 10, CacheWrite: 2.50, CacheRead: 0.10}),
 	"openai/gpt-6.1-sol": flat(Rate{Input: 2, Output: 10, Reasoning: 10, CacheWrite: 2.50, CacheRead: 0.10}),
+	// GPT-6.1 Terra (released 2026-10-26) and GPT-6.2 Astra and Sol (released
+	// 2026-11-17). Standard short-context rates, verified 2026-11-20 at the same
+	// source. CacheWrite is the 30-minute write; the usage projection does not
+	// distinguish the 12-hour write OpenAI added on 2026-10-20.
+	"gpt-6.1-terra":        flat(Rate{Input: 1, Output: 5, CacheWrite: 1.25, CacheRead: 0.05}),
+	"gpt-6.2-astra":        flat(Rate{Input: 8, Output: 40, CacheWrite: 10, CacheRead: 0.40}),
+	"gpt-6.2-sol":          flat(Rate{Input: 2, Output: 10, CacheWrite: 2.50, CacheRead: 0.10}),
+	"openai/gpt-6.1-terra": flat(Rate{Input: 1, Output: 5, Reasoning: 5, CacheWrite: 1.25, CacheRead: 0.05}),
+	"openai/gpt-6.2-astra": flat(Rate{Input: 8, Output: 40, Reasoning: 40, CacheWrite: 10, CacheRead: 0.40}),
+	"openai/gpt-6.2-sol":   flat(Rate{Input: 2, Output: 10, Reasoning: 10, CacheWrite: 2.50, CacheRead: 0.10}),
 
 	// OpenAI GPT-5 family as served through Codex.
 	//

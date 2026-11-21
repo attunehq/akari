@@ -399,4 +399,11 @@ package parse
 // standard rates and allow their released identifiers on public overviews.
 // Rebuild existing sessions to replace unknown costs and recompute cache savings.
 // Existing golden fixtures use neither model and are unchanged.
-const Epoch = 34
+//
+// Epoch 34 -> 35: price Claude Fable 5.2, Mythos 5.2, and Haiku 5.5, and GPT-6.1
+// Terra, GPT-6.2 Astra, and GPT-6.2 Sol at their published standard rates, and
+// allow their released identifiers on public overviews. Correct Claude Sonnet
+// 5.5's cache read from $0.20 to the published $0.10. Rebuild existing sessions
+// to replace unknown costs, reprice Sonnet 5.5 cache reads, and recompute cache
+// savings. Existing golden fixtures use none of these models and are unchanged.
+const Epoch = 35
