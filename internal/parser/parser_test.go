@@ -268,6 +268,57 @@ func TestParseCodexContext(t *testing.T) {
 	}
 }
 
+// TestParseCodexTurnAborted pins that the <turn_aborted> marker Codex records as a
+// user-role message on an interrupt is context, never a human prompt. The fixture
+// interrupts twice: once before the first response, where the marker would
+// otherwise read as the second opening user turn and demote the real first prompt
+// to context, and once mid-session after a reasoning item.
+func TestParseCodexTurnAborted(t *testing.T) {
+	s, err := Parse(AgentCodex, loadFixture(t, "codex_turn_aborted.jsonl"))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	type turn struct {
+		role   Role
+		prefix string
+	}
+	want := []turn{
+		{RoleContext, "# AGENTS.md instructions for "},
+		{RoleUser, "Fix the flaky login test"},
+		{RoleContext, "<turn_aborted>"},
+		{RoleUser, "Fix the flaky login test in auth_test.go"},
+		{RoleAssistant, "The test races the token clock"},
+		{RoleUser, "Now run the whole suite"},
+		{RoleAssistant, ""},
+		{RoleContext, "<turn_aborted>"},
+		{RoleUser, "Only the auth package"},
+	}
+	if len(s.Messages) != len(want) {
+		for i, m := range s.Messages {
+			t.Logf("message %d: %s %q", i, m.Role, m.Content)
+		}
+		t.Fatalf("messages = %d, want %d", len(s.Messages), len(want))
+	}
+	for i, w := range want {
+		m := s.Messages[i]
+		if m.Role != w.role || !strings.HasPrefix(m.Content, w.prefix) {
+			t.Errorf("message %d = %s %q, want %s with prefix %q", i, m.Role, m.Content, w.role, w.prefix)
+		}
+	}
+
+	// The interruptions themselves still land as events.
+	aborts := 0
+	for _, e := range s.Events {
+		if e.Kind == EventTurnAborted {
+			aborts++
+		}
+	}
+	if aborts != 2 {
+		t.Errorf("turn_aborted events = %d, want 2", aborts)
+	}
+}
+
 // TestParseCodexToolError pins that a failing exec result lands as status
 // "error". Codex rollouts carry no structural error field on *_output items,
 // so the exec banner's exit marker is the signal (codexResultIsErr).

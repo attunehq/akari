@@ -170,6 +170,14 @@ func (r *reducer) reduceCodex(region []byte, base int64) error {
 			case p.Get("role").String() == "user":
 				// addUser/addContext close the open assistant turn themselves.
 				text := blockText(p.Get("content"))
+				if isCodexTurnAborted(text) {
+					// The interrupt marker is harness input, not a human prompt. It is
+					// handled before the opening-pair promotion: an interrupt before the
+					// first response would otherwise read as the second opening user turn
+					// and demote the real first prompt to context.
+					r.addContext(text, ts)
+					return nil
+				}
 				r.promoteCodexOpeningContext()
 				if isCodexContext(text) {
 					// Injected framing is not a human prompt. Recording it as context
@@ -338,6 +346,14 @@ func isCodexContext(text string) bool {
 		}
 	}
 	return false
+}
+
+// isCodexTurnAborted reports whether a Codex user turn is the marker Codex records
+// when a turn is interrupted. With the default multi-agent setting the marker is a
+// user-role message ("<turn_aborted>" followed by guidance for the model); the
+// turn_aborted event_msg beside it is what records the interruption itself.
+func isCodexTurnAborted(text string) bool {
+	return strings.HasPrefix(strings.TrimSpace(text), "<turn_aborted>")
 }
 
 // recordCall appends a tool call to the delta and remembers its id, so an end

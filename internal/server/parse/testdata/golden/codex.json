@@ -90,6 +90,17 @@
     },
     {
       "Ordinal": 8,
+      "Role": "context",
+      "Content": "\u003cturn_aborted\u003e\nThe user interrupted the previous turn on purpose. Any running unified exec processes may still be running in the background. If any tools/commands were aborted, they may have partially executed.\n\u003c/turn_aborted\u003e",
+      "ThinkingText": "",
+      "ThinkingBytes": 0,
+      "Model": "",
+      "HasThinking": false,
+      "HasToolUse": false,
+      "Timestamp": "2024-01-01T10:00:21Z"
+    },
+    {
+      "Ordinal": 9,
       "Role": "user",
       "Content": "thanks",
       "ThinkingText": "",
@@ -228,7 +239,7 @@
       "OccurredAt": "2024-01-01T10:00:20Z"
     },
     {
-      "MessageOrdinal": 6,
+      "MessageOrdinal": 8,
       "Kind": "turn_aborted",
       "AttrsJSON": "{\"duration_ms\":2100,\"reason\":\"interrupted\"}",
       "OccurredAt": "2024-01-01T10:00:21Z"

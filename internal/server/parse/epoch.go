@@ -406,4 +406,16 @@ package parse
 // 5.5's cache read from $0.20 to the published $0.10. Rebuild existing sessions
 // to replace unknown costs, reprice Sonnet 5.5 cache reads, and recompute cache
 // savings. Existing golden fixtures use none of these models and are unchanged.
-const Epoch = 35
+//
+// Epoch 35 -> 36: a Codex interrupt marker is context, not a human prompt. On an
+// interrupt Codex records a user-role message beginning "<turn_aborted>" (its
+// default multi-agent mode; the multi-agent v2 mode writes it as a developer
+// message, which the reducer already drops). The reducer took it for a prompt, so
+// each interrupt added a user turn and a repeat of the same text to the user count
+// and prompt hygiene, and an interrupt before the first response tripped the
+// opening-pair rule, demoting the real first prompt to context and taking the
+// session title. The marker now lands as a context turn ahead of that rule. The
+// codex golden fixture gains the marker beside its turn_aborted event, so its
+// snapshot moves. Rebuild existing Codex sessions to restore their prompts,
+// titles, and prompt-hygiene signals.
+const Epoch = 36
