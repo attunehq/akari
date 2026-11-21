@@ -39,6 +39,7 @@ func TestRateAtDatedSnapshotsAndAliases(t *testing.T) {
 		{"claude-3-7-sonnet-20250219", 3, 15},
 		{"claude-3-5-sonnet-20241022", 3, 15},
 		// Haiku.
+		{"claude-haiku-5-5", 0.10, 0.50},
 		{"claude-haiku-4-5-20251001", 1, 5},
 		{"claude-3-5-haiku-20241022", 0.80, 4},
 	}
@@ -218,11 +219,25 @@ func TestNewModelRates(t *testing.T) {
 		{"openai/gpt-6-luna", 0.10, 0.50, 0.125, 0.01},
 		{"grok-4.7", 2, 6, 0, 0.50},
 		{"xai/grok-4.7", 2, 6, 0, 0.50},
-		{"claude-sonnet-5-5", 2, 10, 2.50, 0.20},
-		{"anthropic/claude-sonnet-5-5", 2, 10, 2.50, 0.20},
+		{"claude-sonnet-5-5", 2, 10, 2.50, 0.10},
+		{"anthropic/claude-sonnet-5-5", 2, 10, 2.50, 0.10},
 		{"gpt-6.1-sol", 2, 10, 2.50, 0.10},
 		{"openai-codex/gpt-6.1-sol", 2, 10, 2.50, 0.10},
 		{"openai/gpt-6.1-sol", 2, 10, 2.50, 0.10},
+		{"claude-fable-5-2", 8, 40, 10, 0.20},
+		{"claude-mythos-5-2", 8, 40, 10, 0.20},
+		{"anthropic/claude-fable-5-2", 8, 40, 10, 0.20},
+		{"claude-haiku-5-5", 0.10, 0.50, 0.125, 0.01},
+		{"anthropic/claude-haiku-5-5", 0.10, 0.50, 0.125, 0.01},
+		{"gpt-6.1-terra", 1, 5, 1.25, 0.05},
+		{"openai-codex/gpt-6.1-terra", 1, 5, 1.25, 0.05},
+		{"openai/gpt-6.1-terra", 1, 5, 1.25, 0.05},
+		{"gpt-6.2-astra", 8, 40, 10, 0.40},
+		{"openai-codex/gpt-6.2-astra", 8, 40, 10, 0.40},
+		{"openai/gpt-6.2-astra", 8, 40, 10, 0.40},
+		{"gpt-6.2-sol", 2, 10, 2.50, 0.10},
+		{"openai-codex/gpt-6.2-sol", 2, 10, 2.50, 0.10},
+		{"openai/gpt-6.2-sol", 2, 10, 2.50, 0.10},
 	} {
 		t.Run(tt.model, func(t *testing.T) {
 			r, ok := RateAt(tt.model, anytime)
@@ -242,8 +257,13 @@ func TestNewModelRates(t *testing.T) {
 		{"gpt-6-sol", 0.0301},
 		{"gpt-6-luna", 0.001505},
 		{"grok-4.7", 0.0155},
-		{"claude-sonnet-5-5", 0.0301},
+		{"claude-sonnet-5-5", 0.0298},
 		{"gpt-6.1-sol", 0.0298},
+		{"claude-fable-5-2", 0.1186},
+		{"claude-haiku-5-5", 0.001505},
+		{"gpt-6.1-terra", 0.0149},
+		{"gpt-6.2-astra", 0.1192},
+		{"gpt-6.2-sol", 0.0298},
 	} {
 		got, known := Cost(tt.model, anytime, 1000, 2000, 3000, 3000, 0)
 		if !known || math.Abs(got-tt.want) > 1e-9 {
@@ -257,6 +277,9 @@ func TestNewModelRates(t *testing.T) {
 	}
 	if got, known := Cost("openai/gpt-6.1-sol", anytime, 1000, 2000, 3000, 3000, 500); !known || math.Abs(got-0.0348) > 1e-9 {
 		t.Errorf("qualified GPT-6.1 Sol cost = %v (known=%v), want 0.0348", got, known)
+	}
+	if got, known := Cost("openai/gpt-6.2-astra", anytime, 1000, 2000, 3000, 3000, 500); !known || math.Abs(got-0.1392) > 1e-9 {
+		t.Errorf("qualified GPT-6.2 Astra cost = %v (known=%v), want 0.1392", got, known)
 	}
 }
 
@@ -376,7 +399,9 @@ func TestUnlistedModelsAreUnknown(t *testing.T) {
 		"claude-fable-6", "claude-mythos-6",
 		"gpt-5.7", "gpt-6", "gpt-7",
 		"gpt-6-astra-pro", "gpt-6-astra-secret-eap",
-		"gpt-6.1", "gpt-6.1-luna", "gpt-6.1-astra", // only Sol has a 6.1 release
+		"gpt-6.1", "gpt-6.1-luna", "gpt-6.1-astra", // 6.1 shipped only Sol and Terra
+		"gpt-6.2", "gpt-6.2-luna", "gpt-6.2-terra", // 6.2 shipped only Astra and Sol
+		"gpt-6.2-astra-law", "gpt-6-cyber", // specialized models stay unpriced
 		"opencode/gpt-6-astra", "openrouter/openai/gpt-6-astra",
 		"gpt-5.4-turbo", "gpt-5.5-ultra", // same-version variants we never priced
 		"gpt-5.6-mini", "gpt-5.6-nano", // GPT-5.6's real tiers are sol/terra/luna, not mini/nano
