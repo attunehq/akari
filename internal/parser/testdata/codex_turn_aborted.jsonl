@@ -1,0 +1,13 @@
+{"type":"session_meta","timestamp":"2024-03-01T09:00:00Z","payload":{"id":"abort-1","cwd":"/home/ada/code/my-api","originator":"user","git":{"branch":"main"}}}
+{"type":"response_item","timestamp":"2024-03-01T09:00:00Z","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"# AGENTS.md instructions for /home/ada/code/my-api\n\n<INSTRUCTIONS>\nRun the tests before committing.\n</INSTRUCTIONS>"},{"type":"input_text","text":"<environment_context>\n  <cwd>/home/ada/code/my-api</cwd>\n</environment_context>"}]}}
+{"type":"response_item","timestamp":"2024-03-01T09:00:01Z","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Fix the flaky login test"}]}}
+{"type":"response_item","timestamp":"2024-03-01T09:00:02Z","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<turn_aborted>\nThe user interrupted the previous turn on purpose. Any running unified exec processes may still be running in the background. If any tools/commands were aborted, they may have partially executed.\n</turn_aborted>"}]}}
+{"type":"event_msg","timestamp":"2024-03-01T09:00:02Z","payload":{"type":"turn_aborted","turn_id":"turn-1","reason":"interrupted","duration_ms":900}}
+{"type":"response_item","timestamp":"2024-03-01T09:00:05Z","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Fix the flaky login test in auth_test.go"}]}}
+{"type":"response_item","timestamp":"2024-03-01T09:00:08Z","payload":{"type":"message","role":"assistant","model":"gpt-5-codex","content":[{"type":"output_text","text":"The test races the token clock; I froze it."}]}}
+{"type":"event_msg","timestamp":"2024-03-01T09:00:09Z","payload":{"type":"task_complete","turn_id":"turn-2","duration_ms":4000}}
+{"type":"response_item","timestamp":"2024-03-01T09:01:00Z","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Now run the whole suite"}]}}
+{"type":"response_item","timestamp":"2024-03-01T09:01:01Z","payload":{"type":"reasoning","summary":[],"encrypted_content":"ENCRYPTED"}}
+{"type":"response_item","timestamp":"2024-03-01T09:01:04Z","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<turn_aborted>\nThe user interrupted the previous turn on purpose. Any running unified exec processes may still be running in the background. If any tools/commands were aborted, they may have partially executed.\n</turn_aborted>"}]}}
+{"type":"event_msg","timestamp":"2024-03-01T09:01:04Z","payload":{"type":"turn_aborted","turn_id":"turn-3","reason":"interrupted","duration_ms":3000}}
+{"type":"response_item","timestamp":"2024-03-01T09:01:10Z","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Only the auth package"}]}}
