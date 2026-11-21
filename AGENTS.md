@@ -107,3 +107,9 @@ go test ./...          # AKARI_TEST_DATABASE_URL is already set
 
 Frontend work needs Bun on `PATH` (also set by `.cursor/env.sh`); use the
 `make`/`bun` targets above unchanged.
+
+## Routine maintenance
+
+Dependency upgrades, model pricing, and issue triage run daily under
+[docs/maintenance.md](docs/maintenance.md), which also says what an agent may
+merge on its own and what must wait for the maintainer.
