@@ -442,3 +442,100 @@ func execOpenCodeFixture(t *testing.T, path, stmt string) {
 		t.Fatal(err)
 	}
 }
+
+// Session timestamps alone cannot certify that cached legacy content is safe:
+// projections and legacy rows can diverge without updating session.time_updated.
+func TestDiscoverOpenCodeValidatesSupportWithFreshCache(t *testing.T) {
+	for _, change := range []struct{ name, sql string }{
+		{"missing turn", `INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES ('new_turn', 'ses_1', 'user', 3, 3, 3, '{"text":"new"}')`},
+		{"missing part", `DELETE FROM part WHERE id = 'prt_a'`},
+	} {
+		t.Run(change.name, func(t *testing.T) {
+			dir, cache := t.TempDir(), t.TempDir()
+			prev := openCodeCacheDir
+			openCodeCacheDir = func(string) (string, error) { return cache, nil }
+			t.Cleanup(func() { openCodeCacheDir = prev })
+			dbPath := filepath.Join(dir, "opencode.db")
+			writeOpenCodeFixtureDB(t, dbPath, false)
+			addSessionMessageTable(t, dbPath)
+			execOpenCodeFixture(t, dbPath, `INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES
+    ('msg_u', 'ses_1', 'user', 1, 1, 1, '{"text":"Fix login"}'),
+    ('msg_a', 'ses_1', 'assistant', 2, 2, 2, '{"content":[{"type":"text","id":"txt_1","text":"ok"}]}')`)
+			roots := []Root{{Agent: "opencode", Dir: dir}}
+			files, _, err := Discover(roots, Excluder{})
+			if err != nil || len(files) != 1 {
+				t.Fatalf("initial discovery: files=%d err=%v", len(files), err)
+			}
+			before, err := os.ReadFile(files[0].Path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			execOpenCodeFixture(t, dbPath, change.sql)
+			files, _, err = Discover(roots, Excluder{})
+			if err == nil || len(files) != 0 {
+				t.Fatalf("unsafe cached session returned: files=%d err=%v", len(files), err)
+			}
+			after, err := os.ReadFile(filepath.Join(cache, "ses_1.jsonl"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(before) != string(after) {
+				t.Fatal("unsupported discovery rewrote the cached transcript")
+			}
+		})
+	}
+}
+
+func TestDiscoverOpenCodeCacheTracksNewAndChangedSessions(t *testing.T) {
+	dir, cache := t.TempDir(), t.TempDir()
+	prev := openCodeCacheDir
+	openCodeCacheDir = func(string) (string, error) { return cache, nil }
+	t.Cleanup(func() { openCodeCacheDir = prev })
+	dbPath := filepath.Join(dir, "opencode.db")
+	writeOpenCodeFixtureDB(t, dbPath, false)
+	roots := []Root{{Agent: "opencode", Dir: dir}}
+	files, _, err := Discover(roots, Excluder{})
+	if err != nil || len(files) != 1 {
+		t.Fatalf("initial discovery: files=%d err=%v", len(files), err)
+	}
+	original := files[0].Path
+	before, err := os.Stat(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, _, err = Discover(roots, Excluder{})
+	if err != nil || len(files) != 1 {
+		t.Fatalf("unchanged discovery: files=%d err=%v", len(files), err)
+	}
+	after, err := os.Stat(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Size() != after.Size() || !before.ModTime().Equal(after.ModTime()) {
+		t.Fatal("unchanged discovery rewrote cached history")
+	}
+	execOpenCodeFixture(t, dbPath, `UPDATE session SET title = 'A longer changed fixture title', time_updated = time_updated + 1 WHERE id = 'ses_1';
+ INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated)
+ VALUES ('ses_2', 'p1', 'new-fixture', '/fixture', 'New session', '1', 2, 2)`)
+	files, _, err = Discover(roots, Excluder{})
+	if err != nil || len(files) != 2 {
+		t.Fatalf("changed discovery: files=%d err=%v", len(files), err)
+	}
+	raw, err := os.ReadFile(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gjson.GetBytes(raw, "title").String() != "A longer changed fixture title" {
+		t.Fatal("changed session not rematerialized")
+	}
+	after, err = os.Stat(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Size() == after.Size() && before.ModTime().Equal(after.ModTime()) {
+		t.Fatal("changed transcript metadata did not change")
+	}
+	if _, err := os.Stat(filepath.Join(cache, "ses_2.jsonl")); err != nil {
+		t.Fatalf("new transcript not materialized: %v", err)
+	}
+}
