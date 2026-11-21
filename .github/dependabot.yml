@@ -1,3 +1,7 @@
+# Daily, ahead of the maintenance agent's run (docs/maintenance.md), which
+# reviews, fixes up, and merges these PRs. Minor and patch bumps are grouped per
+# ecosystem to keep the merge queue short; majors stay separate so each gets its
+# own migration and review.
 version: 2
 updates:
   - package-ecosystem: "gomod"
@@ -6,8 +10,41 @@ updates:
       interval: "daily"
       time: "04:00"
       timezone: "America/Los_Angeles"
+    groups:
+      go-minor-patch:
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "04:00"
+      timezone: "America/Los_Angeles"
+    groups:
+      actions-minor-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "bun"
+    directory: "/frontend"
+    schedule:
+      interval: "daily"
+      time: "04:00"
+      timezone: "America/Los_Angeles"
+    groups:
+      frontend-minor-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "npm"
+    directory: "/site"
+    schedule:
+      interval: "daily"
+      time: "04:00"
+      timezone: "America/Los_Angeles"
+    groups:
+      site-minor-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "daily"
