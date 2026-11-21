@@ -20,7 +20,7 @@ types no longer match the OpenAPI document. HTTP handlers return named DTOs from
 `internal/server/httpapi`; the contract tests compare those DTOs with the
 OpenAPI response schemas.
 
-Application builds require Bun. Site builds require Node.js 22. The Makefile
+Application builds require Bun. Site builds require Node.js 26. The Makefile
 keeps source and generated assets in step:
 
 ```sh
