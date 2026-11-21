@@ -3,7 +3,7 @@
 # Build on the runner's native architecture while cross-compiling the static Go
 # binary for the requested image platform. This keeps multi-platform release
 # builds fast and avoids executing an emulated compiler.
-FROM --platform=$BUILDPLATFORM golang:1.26 AS build
+FROM --platform=$BUILDPLATFORM golang:1.27 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
     -ldflags "-s -w -X github.com/jssblck/akari/internal/version.Version=${VERSION}" \
     -o /out/akari-server ./cmd/akari-server
 
-FROM gcr.io/distroless/static-debian12
+FROM gcr.io/distroless/static-debian13
 ARG VERSION=dev
 ARG VCS_REF=unknown
 LABEL org.opencontainers.image.title="akari-server" \

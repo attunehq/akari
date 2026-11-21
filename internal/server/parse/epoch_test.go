@@ -1,7 +1,9 @@
 package parse
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"flag"
 	"os"
 	"path/filepath"
@@ -58,6 +60,24 @@ func TestGoldenProjection(t *testing.T) {
 			delta := r.Finish()
 			if len(delta.Messages) == 0 {
 				t.Fatalf("%s fixture produced no messages; the fixture or parser is broken", f.name)
+			}
+
+			// An attachment body is raw decoded bytes (a PNG, say), not text, and
+			// a JSON string cannot carry arbitrary bytes: encoding/json replaces
+			// each invalid UTF-8 byte with U+FFFD. That loses the bytes, so a
+			// parser change that corrupted an image would still match, and the
+			// replacement is spelled differently across Go releases (the escape
+			// sequence backslash-ufffd through Go 1.26, the literal character
+			// once Go 1.27 rebuilt the package on json/v2). Snapshot bodies as
+			// base64, which is exact and stable.
+			for i := range delta.Attachments {
+				delta.Attachments[i].Body = base64.StdEncoding.EncodeToString([]byte(delta.Attachments[i].Body))
+			}
+			// json/v2 rejects invalid UTF-8 where v1 silently replaces it, so
+			// this fails if any other field starts carrying binary bytes that
+			// would make the snapshot lossy in the same way.
+			if _, err := jsonv2.Marshal(delta); err != nil {
+				t.Fatalf("projection is not exactly representable as JSON; encode binary fields like attachment bodies above: %v", err)
 			}
 
 			got, err := json.MarshalIndent(delta, "", "  ")
