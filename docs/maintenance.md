@@ -1,7 +1,9 @@
 # Maintenance runbook
 
 Akari's routine maintenance is delegated to a coding agent that runs once a day
-(a T3 scheduled task on the maintainer's machine). This page is its standing
+(a T3 scheduled task on the maintainer's machine). Every run posts into one
+long-lived T3 thread, the maintenance thread, which is also where the agent and
+the maintainer talk. This page is its standing
 instruction set and the policy for what it may land on its own. Any agent doing
 dependency, pricing, or triage work should follow it, scheduled or not.
 
@@ -86,7 +88,8 @@ parser work and follow the epoch rule.
 ## Issues and external PRs
 
 An issue or PR needs attention when it has no maintainer response since its
-last outside activity and no `needs-jess` label. For each one:
+last outside activity and is not already waiting on Jess in the maintenance
+thread. For each one:
 
 - **Bug with a clear cause**: fix it with a regression test, reference the
   issue in the PR (`Fixes #N`), and comment with what changed.
@@ -122,15 +125,21 @@ Land everything else on your own. Escalate these instead of merging:
 - A major upgrade whose behavior change the tests cannot prove.
 - Anything you are unsure about.
 
-To escalate, open the work as a draft PR, or file an issue when there is no
-code yet. Label it `needs-jess` and assign `jssblck`. In the description, say
-what you would do and why, the risk, and the exact decision you need. Then move
-on to the rest of the run. Items already labeled `needs-jess` wait for her
-answer; do not re-escalate them.
+Escalations go to Jess in the maintenance thread only. Do not file issues,
+add labels, assign her, or mention her on GitHub to ask. Do not merge the
+escalated work. If code already exists, such as a Dependabot major, leave it
+unmerged; if you wrote it, a draft PR is fine so the diff is reviewable, and
+you link it in the thread. Say what you would do and why, the risk, and the
+exact decision you need. Then move on to the rest of the run.
+
+GitHub keeps no record of escalations, so start each run by reading the
+maintenance thread's recent history. Act on any answers Jess has given there.
+Carry forward questions that are still open rather than raising them as new.
 
 ## Report
 
-End each run with a short summary in the run's thread, written for someone with
-no context on the codebase: what landed (PR numbers), what is waiting on CI,
-what is escalated and the decision each one needs, and anything that failed.
-If nothing needed doing, say so in one line.
+End each run with a short summary in the maintenance thread, written for
+someone with no context on the codebase. Put the decisions waiting on Jess
+first, both new and still open. Then list what landed (PR numbers), what is
+waiting on CI, and anything that failed. If nothing needed doing, say so in
+one line.
