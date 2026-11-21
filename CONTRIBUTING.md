@@ -7,7 +7,7 @@ pricing table, or the maintainability of the system.
 
 ## Local setup
 
-Install Go (the version in `go.mod`), Bun, Node.js 22, and Git. The application
+Install Go (the version in `go.mod`), Bun, Node.js 26, and Git. The application
 UI is React under `frontend/`; its committed production build is embedded in the
 Go binary. The public homepage and guide use Astro under `site/` and deploy to
 GitHub Pages. Use the Makefile to keep these surfaces in step:
