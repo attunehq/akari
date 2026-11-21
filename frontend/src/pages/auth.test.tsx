@@ -42,11 +42,10 @@ describe("safeNext", () => {
     );
   });
 
-  it.each([
-    "//evil.example",
-    "/\\evil.example",
-    "/%5cevil.example",
-  ])("rejects ambiguous external target %s", (target) => {
-    expect(safeNext(target)).toBe("/overview");
-  });
+  it.each(["//evil.example", "/\\evil.example", "/%5cevil.example"])(
+    "rejects ambiguous external target %s",
+    (target) => {
+      expect(safeNext(target)).toBe("/overview");
+    },
+  );
 });
