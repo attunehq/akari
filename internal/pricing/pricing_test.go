@@ -162,6 +162,17 @@ func TestRateAtGPT(t *testing.T) {
 		{"gpt-5.4-pro", 30, 180},
 		{"gpt-5.3-codex", 1.75, 14},
 		{"gpt-5.3-codex-spark", 1.75, 14},
+		// GPT-5.2 and GPT-5.1, including their dated base snapshots.
+		{"gpt-5.2", 1.75, 14},
+		{"gpt-5.2-2025-12-11", 1.75, 14},
+		{"gpt-5.2-codex", 1.75, 14},
+		{"gpt-5.2-pro", 21, 168},
+		{"gpt-5.2-pro-2025-12-11", 21, 168},
+		{"gpt-5.1", 1.25, 10},
+		{"gpt-5.1-2025-11-13", 1.25, 10},
+		{"gpt-5.1-codex", 1.25, 10},
+		{"gpt-5.1-codex-max", 1.25, 10},
+		{"gpt-5.1-codex-mini", 0.25, 2},
 		// Prior generation, including a dated base snapshot that normalizes to gpt-5.
 		{"gpt-5", 1.25, 10},
 		{"gpt-5-2025-08-07", 1.25, 10},
@@ -238,6 +249,18 @@ func TestNewModelRates(t *testing.T) {
 		{"gpt-6.2-sol", 2, 10, 2.50, 0.10},
 		{"openai-codex/gpt-6.2-sol", 2, 10, 2.50, 0.10},
 		{"openai/gpt-6.2-sol", 2, 10, 2.50, 0.10},
+		// Pre-5.6 OpenAI models bill no cache write, so write stays zero.
+		{"gpt-5.2", 1.75, 14, 0, 0.175},
+		{"gpt-5.2-codex", 1.75, 14, 0, 0.175},
+		{"openai-codex/gpt-5.2-codex", 1.75, 14, 0, 0.175},
+		{"gpt-5.2-pro", 21, 168, 0, 0},
+		{"gpt-5.1", 1.25, 10, 0, 0.125},
+		{"gpt-5.1-codex", 1.25, 10, 0, 0.125},
+		{"gpt-5.1-codex-max", 1.25, 10, 0, 0.125},
+		{"openai-codex/gpt-5.1-codex-max", 1.25, 10, 0, 0.125},
+		{"gpt-5.1-codex-mini", 0.25, 2, 0, 0.025},
+		{"grok-build-0.1", 1, 2, 0, 0.20},
+		{"xai/grok-build-0.1", 1, 2, 0, 0.20},
 	} {
 		t.Run(tt.model, func(t *testing.T) {
 			r, ok := RateAt(tt.model, anytime)
@@ -264,6 +287,10 @@ func TestNewModelRates(t *testing.T) {
 		{"gpt-6.1-terra", 0.0149},
 		{"gpt-6.2-astra", 0.1192},
 		{"gpt-6.2-sol", 0.0298},
+		{"gpt-5.2-codex", 0.030275},
+		{"gpt-5.1-codex", 0.021625},
+		{"gpt-5.1-codex-mini", 0.004325},
+		{"grok-build-0.1", 0.0056},
 	} {
 		got, known := Cost(tt.model, anytime, 1000, 2000, 3000, 3000, 0)
 		if !known || math.Abs(got-tt.want) > 1e-9 {
@@ -405,6 +432,10 @@ func TestUnlistedModelsAreUnknown(t *testing.T) {
 		"opencode/gpt-6-astra", "openrouter/openai/gpt-6-astra",
 		"gpt-5.4-turbo", "gpt-5.5-ultra", // same-version variants we never priced
 		"gpt-5.6-mini", "gpt-5.6-nano", // GPT-5.6's real tiers are sol/terra/luna, not mini/nano
+		"gpt-5.1-mini", "gpt-5.2-codex-mini", "gpt-5.2-codex-max", // tiers 5.1 and 5.2 never shipped
+		"gpt-5.1-chat-latest", "gpt-5.2-chat-latest", // ChatGPT aliases, not Codex models
+		"openai/gpt-5.2", "openai/gpt-5.1-codex", // no direct-route twins, like gpt-5.4 and gpt-5.5
+		"grok-build", "grok-build-0.2", "openrouter/x-ai/grok-build-0.1",
 	} {
 		if r, ok := RateAt(model, anytime); ok {
 			t.Errorf("unlisted model %q priced as %+v; expected unknown", model, r)

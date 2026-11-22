@@ -229,6 +229,23 @@ var table = map[string][]DatedRate{
 	"gpt-5.4-pro":         flat(Rate{Input: 30, Output: 180}),
 	"gpt-5.3-codex":       flat(Rate{Input: 1.75, Output: 14, CacheRead: 0.175}),
 	"gpt-5.3-codex-spark": flat(Rate{Input: 1.75, Output: 14, CacheRead: 0.175}),
+	// GPT-5.2 (Dec 2025) and GPT-5.1 (Nov 2025), the generations between GPT-5
+	// and GPT-5.3-Codex. They are superseded and the -codex variants are shut
+	// down, but sessions recorded on them still need a price. gpt-5.2, gpt-5.1,
+	// and gpt-5.2-pro are on the pricing page (their dated snapshots
+	// gpt-5.2-2025-12-11, gpt-5.1-2025-11-13, and gpt-5.2-pro-2025-12-11 normalize
+	// to these keys); the -codex variants are priced on their own model pages,
+	// https://developers.openai.com/api/docs/models/<id>. Verified 2026-11-22:
+	// https://developers.openai.com/api/docs/pricing
+	// The -chat-latest aliases are ChatGPT-tuned, not Codex models, so they stay
+	// unpriced.
+	"gpt-5.2":            flat(Rate{Input: 1.75, Output: 14, CacheRead: 0.175}),
+	"gpt-5.2-codex":      flat(Rate{Input: 1.75, Output: 14, CacheRead: 0.175}),
+	"gpt-5.2-pro":        flat(Rate{Input: 21, Output: 168}),
+	"gpt-5.1":            flat(Rate{Input: 1.25, Output: 10, CacheRead: 0.125}),
+	"gpt-5.1-codex":      flat(Rate{Input: 1.25, Output: 10, CacheRead: 0.125}),
+	"gpt-5.1-codex-max":  flat(Rate{Input: 1.25, Output: 10, CacheRead: 0.125}),
+	"gpt-5.1-codex-mini": flat(Rate{Input: 0.25, Output: 2, CacheRead: 0.025}),
 	// Prior generation (GPT-5, Aug 2025 launch). gpt-5-2025-08-07 normalizes to
 	// "gpt-5"; under exact matching that base key does not absorb gpt-5.4/gpt-5.5.
 	"gpt-5":       flat(Rate{Input: 1.25, Output: 10, CacheRead: 0.125}),
@@ -343,6 +360,10 @@ var table = map[string][]DatedRate{
 	"opencode/grok-4.6":        flat(Rate{Input: 2, Output: 6, Reasoning: 6, CacheRead: 0.50}),
 	"opencode-go/grok-4.6":     flat(Rate{Input: 2, Output: 6, Reasoning: 6, CacheRead: 0.50}),
 	"openrouter/x-ai/grok-4.6": flat(Rate{Input: 2, Output: 6, CacheRead: 0.50}),
+	// Grok Build 0.1, the early-access coding model (end of life 2026-11-19).
+	// Standard rate below 200k prompt tokens, verified 2026-11-22:
+	// https://docs.x.ai/developers/pricing
+	"grok-build-0.1": flat(Rate{Input: 1, Output: 2, CacheRead: 0.20}),
 }
 
 // undisclosedRates holds exact rates for models whose identifiers are not safe to
