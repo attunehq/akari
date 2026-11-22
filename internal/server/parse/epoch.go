@@ -418,4 +418,12 @@ package parse
 // codex golden fixture gains the marker beside its turn_aborted event, so its
 // snapshot moves. Rebuild existing Codex sessions to restore their prompts,
 // titles, and prompt-hygiene signals.
-const Epoch = 36
+//
+// Epoch 36 -> 37: price the GPT-5.1 and GPT-5.2 generations (gpt-5.1,
+// gpt-5.1-codex, gpt-5.1-codex-max, gpt-5.1-codex-mini, gpt-5.2, gpt-5.2-codex,
+// gpt-5.2-pro) and Grok Build 0.1 at their published standard rates, and allow
+// those released identifiers on public overviews. Codex sessions on these models
+// were priced at zero. Rebuild existing sessions to replace unknown costs and
+// recompute cache savings. Existing golden fixtures use none of these models and
+// are unchanged.
+const Epoch = 37
