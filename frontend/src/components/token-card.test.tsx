@@ -77,8 +77,6 @@ describe("HoverTip", () => {
     vi.restoreAllMocks();
     delete proto.showPopover;
     delete proto.hidePopover;
-    showPopover.mockClear();
-    hidePopover.mockClear();
   });
 
   function renderTip() {
