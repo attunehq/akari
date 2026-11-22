@@ -20,6 +20,15 @@ types no longer match the OpenAPI document. HTTP handlers return named DTOs from
 `internal/server/httpapi`; the contract tests compare those DTOs with the
 OpenAPI response schemas.
 
+The frontend type-checks with TypeScript 7, whose native compiler ships no
+JavaScript API yet. `openapi-typescript` still needs that API, so
+`frontend/package.json` follows the TypeScript team's side-by-side setup:
+`@typescript/native` is TypeScript 7 and provides `tsc`, while the `typescript`
+name is the official `@typescript/typescript6` compatibility package that
+re-exports the 6.0 API (its CLI is `tsc6`). Collapse both back to a plain
+`typescript` dependency once the code generator no longer imports the compiler
+API.
+
 Application builds require Bun. Site builds require Node.js 26. The Makefile
 keeps source and generated assets in step:
 
