@@ -43,8 +43,8 @@ that has none.
    generated `total_tokens`). They are written by each session's rebuild so a
    long list or index never has to scan the ledger.
 
-3. **The daily rollup: `session_usage_daily`.** Per (session, UTC day, model)
-   sums of the four token classes and cost. Written by the same rebuild
+3. **The daily rollup: `session_usage_daily`.** Per (session, UTC day, model,
+   price tier) sums of the four token classes and cost. Written by the same rebuild
    transaction (`internal/server/store/rollups.go`), it is the base the
    Insights money panels read (fleet mix, economics, cache savings, subagent
    cost share) so a page render never groups the ledger. An undated event folds
@@ -182,6 +182,32 @@ The class split is pinned by `TestUnattachedProviderUsageCountsFleetWideOnly` an
 `TestProviderUsageResolvesAgainstThePathDerivedSourceID`, and
 `TestOneConversationIngestedTwiceIsCountedOnce`.
 
+## Price tiers
+
+Some models charge a higher rate for a whole request once its prompt reaches a
+size: GPT-5.6 over 272K prompt tokens, Claude Haiku 5.5 over 100K. The cutoff
+and its boundary wording are per model, carried on the rate window in
+`internal/pricing` (`DatedRate.Long`). Which tier a request paid is a fact about
+that one request, and summed tokens cannot recover it: two short requests can
+total past a cutoff without either being long. So the tier is stored, not
+derived at read time:
+
+- The rebuild classifies each usage event with `pricing.IsLongContext` (in
+  `parse.go`, beside the cost it prices) and writes `usage_events.long_context`.
+  A rebuild is the only writer, like every projection column.
+- `session_usage_daily` groups by (session, day, model, `long_context`), so the
+  daily rollup holds one row per tier. Every consumer that only sums tokens or
+  cost sums across the tier and is unaffected; the cache-savings reads group by
+  it and price each tier at its own rate.
+- Provider rows always carry `false`. A Cursor billing event covers a whole agent
+  run, not one request, so its sums cannot be classified any more than a day's
+  can, and the vendor's reported cost already reflects the tier it billed.
+
+This keeps the Insights cache-savings trend on the cheap day-grain rollup while
+staying exact on a day that mixes short and long requests. A pricing-table change
+that moves a cutoff is a reprice like any other: bump `parse.Epoch` and the
+rebuild re-stamps every event.
+
 ## Whole-day windows on the daily rollup
 
 `session_usage_daily` is day-grained, so the Insights reads over it window in
@@ -206,7 +232,8 @@ the ledger.
 | Projects index (tokens, cost columns) | `Store.ListProjects` | rollups | Lifetime per-project totals. Must equal the project usage panel's all-time figure (same datum, two pages). Pinned by `TestProjectsIndexReconcilesWithAnalytics`. |
 | Global session list / project session list / subagents | `Store.ListAllSessions` / `Store.ListSessions` / `Store.Subagents` | rollups | Per-session rollups; the `tokens` sort walks the generated `total_tokens` column. |
 | Session detail header (Tokens tile, cost) | `Store.SessionDetailByID` | rollups | Per-session rollups. The session page shows no ledger-derived figure beside them, so the invariant alone keeps them honest. |
-| Insights fleet mix, model cost, economics, cache savings, subagent cost share | `fleetMixFrom`, `modelCostFrom`, `economicsFrom`, `cacheSavingsTrend`, `subagentTrendsFrom` | `usage_daily` (daily rollup ∪ unattached provider usage) | Per-day-and-model sums the trend grid re-buckets (fleet mix, economics) or the window totals (model cost); pinned to the ledger by `TestRollupsDerivedInRebuild` and windowed in whole days (see above). |
+| Insights fleet mix, model cost, economics, cache savings, subagent cost share | `fleetMixFrom`, `modelCostFrom`, `economicsFrom`, `cacheSavingsTrend`, `subagentTrendsFrom` | `usage_daily` (daily rollup ∪ unattached provider usage) | Per-day-and-model sums the trend grid re-buckets (fleet mix, economics) or the window totals (model cost); cache savings additionally groups by the stored price tier (see "Price tiers" below). Pinned to the ledger by `TestRollupsDerivedInRebuild` and windowed in whole days (see above). |
+| Cache savings (session header, Overview Cache tile, Insights trend) | rebuild fold, `SessionCacheStats`, `cacheStats`, `cacheSavingsTrend` | `sessions.total_cache_savings_usd`, ledger, `usage_ledger`, `usage_daily` | Four bases price the same saving. Each prices per (model, UTC day, price tier), so they agree on mixed-tier days; pinned together by `TestCacheSavingsReconcileAcrossBasesOnMixedTierDay`. |
 
 ### Why the index stays on rollups
 

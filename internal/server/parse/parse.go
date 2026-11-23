@@ -199,10 +199,14 @@ func toProjectionDelta(p parser.Delta) store.ProjectionDelta {
 			CostUSD:         cost,
 			CostSource:      costSource,
 			ModelNamePublic: pricing.ModelNamePublic(u.Model),
-			OccurredAt:      u.OccurredAt,
-			DedupKey:        u.DedupKey,
-			SourceOffset:    u.SourceOffset,
-			SourceIndex:     u.SourceIndex,
+			// The same classification Cost applied above. It stands even when the
+			// agent reported its own cost: the row is still one request, and the
+			// cache-savings figure prices its cached volume at the tier's rate.
+			LongContext:  pricing.IsLongContext(u.Model, u.OccurredAt, int64(u.Input), int64(u.CacheRead), int64(u.CacheWrite)),
+			OccurredAt:   u.OccurredAt,
+			DedupKey:     u.DedupKey,
+			SourceOffset: u.SourceOffset,
+			SourceIndex:  u.SourceIndex,
 		}
 		d.Usage = append(d.Usage, pu)
 	}

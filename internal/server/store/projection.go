@@ -124,10 +124,16 @@ type ProjUsage struct {
 	CostUSD         float64
 	CostSource      CostSource
 	ModelNamePublic bool
-	OccurredAt      time.Time
-	DedupKey        string
-	SourceOffset    int64
-	SourceIndex     int
+	// LongContext is the event's price tier: whether this one request paid its
+	// model's long-context rate (pricing.IsLongContext), decided where the cost is.
+	// The aggregate cache-savings paths group by it, since summed tokens cannot
+	// recover it. Provider rows leave it false: a billing event covering a whole
+	// agent run is not one request and cannot be classified.
+	LongContext  bool
+	OccurredAt   time.Time
+	DedupKey     string
+	SourceOffset int64
+	SourceIndex  int
 }
 
 // CostSource records how a usage event obtained its dollar cost. The amount
@@ -956,7 +962,7 @@ func writeUsage(ctx context.Context, tx pgx.Tx, sessionID int64, usage []ProjUsa
 		}
 		rows = append(rows, []any{
 			sessionID, ord, sanitizeText(u.Model), u.Input, u.Output, u.CacheWrite, u.CacheRead,
-			u.Reasoning, u.CostUSD, u.CostSource, u.ModelNamePublic,
+			u.Reasoning, u.CostUSD, u.CostSource, u.ModelNamePublic, u.LongContext,
 			nullTime(u.OccurredAt), key, u.SourceOffset, u.SourceIndex,
 		})
 
@@ -983,17 +989,19 @@ func writeUsage(ctx context.Context, tx pgx.Tx, sessionID int64, usage []ProjUsa
 		roll.cacheWrite += int64(u.CacheWrite)
 		roll.cacheRead += int64(u.CacheRead)
 		roll.costUSD += u.CostUSD
-		// Fold the prompt-cache saving over the same surviving rows. Pricing is
-		// linear in tokens, so summing each row's saving equals summing the model's
-		// grouped totals (what SessionCacheStats does over the whole session), which
-		// is what lets the rollup and that per-model recompute reconcile exactly.
-		roll.cacheSavingsUSD += pricing.CacheSavings(u.Model, u.OccurredAt, int64(u.CacheRead), int64(u.CacheWrite))
+		// Fold the prompt-cache saving over the same surviving rows, at each row's
+		// stored price tier. Within one (model, tier, rate window) bucket pricing is
+		// linear in tokens, so summing each row's saving equals the grouped totals
+		// that SessionCacheStats computes per (model, day, tier) over the whole
+		// session, which is what lets the rollup and that recompute reconcile
+		// exactly.
+		roll.cacheSavingsUSD += pricing.CacheSavings(u.Model, u.OccurredAt, u.LongContext, int64(u.CacheRead), int64(u.CacheWrite))
 	}
 
 	if _, err := tx.CopyFrom(ctx, pgx.Identifier{"usage_events"},
 		[]string{"session_id", "message_ordinal", "model", "input_tokens", "output_tokens",
 			"cache_write_tokens", "cache_read_tokens", "reasoning_tokens", "cost_usd",
-			"cost_source", "model_name_public", "occurred_at", "dedup_key", "source_offset", "source_index"},
+			"cost_source", "model_name_public", "long_context", "occurred_at", "dedup_key", "source_offset", "source_index"},
 		pgx.CopyFromRows(rows)); err != nil {
 		return usageRollup{}, fmt.Errorf("copy usage events for session %d: %w", sessionID, err)
 	}

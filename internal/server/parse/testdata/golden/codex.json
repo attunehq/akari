@@ -211,6 +211,7 @@
       "CostUSD": 0.007,
       "CostSource": "rate_table",
       "ModelNamePublic": true,
+      "LongContext": false,
       "OccurredAt": "2024-01-01T10:00:04Z",
       "DedupKey": "",
       "SourceOffset": 2179,

@@ -82,7 +82,7 @@ func TestGPT56SolDatedWindows(t *testing.T) {
 
 func TestTableWindowsSorted(t *testing.T) {
 	// Every model's windows must be From-ascending with a zero-From first window, the
-	// shape rateAt relies on: it seeds from the first window and keeps the last whose
+	// shape windowAt relies on: it seeds from the first window and keeps the last whose
 	// From is at or before the event time.
 	for _, catalog := range []map[string][]DatedRate{table, undisclosedRates} {
 		for model, rates := range catalog {
@@ -208,7 +208,7 @@ func TestGPT6AstraCost(t *testing.T) {
 			if !ModelNamePublic(tt.model) {
 				t.Error("released Astra model should be public")
 			}
-			if got := CacheSavings(tt.model, anytime, 3000, 4000); math.Abs(got-0.017) > 1e-9 {
+			if got := CacheSavings(tt.model, anytime, false, 3000, 4000); math.Abs(got-0.017) > 1e-9 {
 				t.Errorf("cache savings = %v, want 0.017", got)
 			}
 		})
@@ -505,15 +505,17 @@ func TestCost(t *testing.T) {
 }
 
 func TestCostSelectsDatedWindow(t *testing.T) {
-	// The same 1M input + 1M output on GPT-5.6 Sol prices at the launch rate before
-	// the 2026-08-21 reprice and at the reduced rate from the boundary on.
-	launch, _ := Cost("gpt-5.6-sol", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), 1_000_000, 1_000_000, 0, 0, 0)
-	if math.Abs(launch-35.0) > 1e-9 {
-		t.Errorf("launch cost = %v, want 35 (5 + 30)", launch)
+	// The same 100k input + 100k output on GPT-5.6 Sol prices at the launch rate before
+	// the 2026-08-21 reprice and at the reduced rate from the boundary on. The prompt
+	// volume stays under the long-context threshold so the test pins the dated window,
+	// not the tier (TestCostLongContextOnlyAfterReprice covers their interaction).
+	launch, _ := Cost("gpt-5.6-sol", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), 100_000, 100_000, 0, 0, 0)
+	if math.Abs(launch-3.50) > 1e-9 {
+		t.Errorf("launch cost = %v, want 3.50 (0.5 + 3)", launch)
 	}
-	reduced, _ := Cost("gpt-5.6-sol", gpt56SolReprice, 1_000_000, 1_000_000, 0, 0, 0)
-	if math.Abs(reduced-24.0) > 1e-9 {
-		t.Errorf("reduced cost = %v, want 24 (4 + 20)", reduced)
+	reduced, _ := Cost("gpt-5.6-sol", gpt56SolReprice, 100_000, 100_000, 0, 0, 0)
+	if math.Abs(reduced-2.40) > 1e-9 {
+		t.Errorf("reduced cost = %v, want 2.40 (0.4 + 2)", reduced)
 	}
 }
 
@@ -546,7 +548,7 @@ func TestCacheSavings(t *testing.T) {
 		{"unknown model", "secret-model", 1_000_000, 0, 0},
 	}
 	for _, c := range cases {
-		saving := CacheSavings(c.model, anytime, c.read, c.write)
+		saving := CacheSavings(c.model, anytime, false, c.read, c.write)
 		if math.Abs(saving-c.wantSaving) > 1e-9 {
 			t.Errorf("%s: saving = %v, want %v", c.name, saving, c.wantSaving)
 		}
@@ -556,12 +558,253 @@ func TestCacheSavings(t *testing.T) {
 func TestCacheSavingsSelectsDatedWindow(t *testing.T) {
 	// GPT-5.6 Sol at launch (Input 5, CacheRead 0.50): 1M read saves 1 * (5 - 0.50) = 4.50.
 	// After the reprice (Input 4, CacheRead 0.40): 1M read saves 1 * (4 - 0.40) = 3.60.
-	launch := CacheSavings("gpt-5.6-sol", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), 1_000_000, 0)
+	launch := CacheSavings("gpt-5.6-sol", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), false, 1_000_000, 0)
 	if math.Abs(launch-4.50) > 1e-9 {
 		t.Errorf("launch saving = %v, want 4.50", launch)
 	}
-	reduced := CacheSavings("gpt-5.6-sol", gpt56SolReprice, 1_000_000, 0)
+	reduced := CacheSavings("gpt-5.6-sol", gpt56SolReprice, false, 1_000_000, 0)
 	if math.Abs(reduced-3.60) > 1e-9 {
 		t.Errorf("reduced saving = %v, want 3.60", reduced)
+	}
+}
+
+func TestIsLongContext(t *testing.T) {
+	// Each model carries its own cutoff, and each cutoff is tested exactly at the
+	// line and one token past it. Both published boundaries are strict ("over"):
+	// GPT-5.6 at 272,000 and Haiku 5.5 at 100,000 stay short, one more token prices
+	// the whole request long. Every prompt-side class counts toward the volume;
+	// output never does (Cost passes it separately and IsLongContext never sees it).
+	gpt := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name               string
+		model              string
+		at                 time.Time
+		input, read, write int64
+		want               bool
+	}{
+		{"gpt nothing", "gpt-5.6-sol", gpt, 0, 0, 0, false},
+		{"gpt input at the line", "gpt-5.6-sol", gpt, 272_000, 0, 0, false},
+		{"gpt input one over", "gpt-5.6-sol", gpt, 272_001, 0, 0, true},
+		{"gpt split classes at the line", "gpt-5.6-terra", gpt, 100_000, 100_000, 72_000, false},
+		{"gpt split classes one over", "gpt-5.6-terra", gpt, 100_000, 100_000, 72_001, true},
+		{"gpt cache reads alone cross it", "gpt-5.6-luna", gpt, 0, 272_001, 0, true},
+		{"gpt cache writes alone cross it", "gpt-5.6", gpt, 0, 0, 272_001, true},
+		{"gpt qualified route shares the tier", "openai/gpt-5.6-sol", gpt, 272_001, 0, 0, true},
+		{"gpt launch window has no tier", "gpt-5.6-sol", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), 300_000, 0, 0, false},
+		{"gpt opencode route publishes no tier", "opencode/gpt-5.6-sol", gpt, 300_000, 0, 0, false},
+		{"haiku at the line", "claude-haiku-5-5", gpt, 100_000, 0, 0, false},
+		{"haiku one over", "claude-haiku-5-5", gpt, 100_001, 0, 0, true},
+		{"haiku cache counts toward the prompt", "claude-haiku-5-5", gpt, 1, 90_000, 10_000, true},
+		{"haiku dated snapshot normalizes", "claude-haiku-5-5-20261101", gpt, 100_001, 0, 0, true},
+		{"gpt cutoff does not leak to haiku's neighbor", "claude-haiku-4-5", gpt, 300_000, 0, 0, false},
+		{"untiered model", "claude-opus-4-8", gpt, 1_000_000, 0, 0, false},
+		{"unknown model", "not-a-model", gpt, 1_000_000, 0, 0, false},
+	}
+	for _, c := range cases {
+		if got := IsLongContext(c.model, c.at, c.input, c.read, c.write); got != c.want {
+			t.Errorf("%s: IsLongContext(%s, %d, %d, %d) = %v, want %v", c.name, c.model, c.input, c.read, c.write, got, c.want)
+		}
+	}
+}
+
+func TestLongContextInclusiveBoundary(t *testing.T) {
+	// A provider that tiers "at or above" n (xAI words Grok 4.7's tier as 200K or
+	// more) writes MinPrompt: n directly, so n itself is long and n-1 short. over(n)
+	// is the strict form and lands one token later.
+	inclusive := DatedRate{Long: &LongContext{MinPrompt: 200_000}}
+	if inclusive.longContext(199_999, 0, 0) {
+		t.Error("inclusive tier: 199,999 should price short")
+	}
+	if !inclusive.longContext(200_000, 0, 0) {
+		t.Error("inclusive tier: 200,000 should price long")
+	}
+	strict := DatedRate{Long: over(200_000, Rate{})}
+	if strict.longContext(200_000, 0, 0) {
+		t.Error("strict tier: 200,000 should price short")
+	}
+	if !strict.longContext(200_001, 0, 0) {
+		t.Error("strict tier: 200,001 should price long")
+	}
+	if (DatedRate{}).longContext(10_000_000, 0, 0) {
+		t.Error("a window without a tier is never long")
+	}
+}
+
+func TestTableLongContextTiers(t *testing.T) {
+	// Every tier the table declares must be a real tier: a positive cutoff and a
+	// nonzero rate. A zero cutoff would price every request long, and an empty rate
+	// would price a long request at zero.
+	for _, catalog := range []map[string][]DatedRate{table, undisclosedRates} {
+		for model, rates := range catalog {
+			for i, w := range rates {
+				if w.Long == nil {
+					continue
+				}
+				if w.Long.MinPrompt <= 0 {
+					t.Errorf("%s window %d: long-context cutoff %d, want positive", model, i, w.Long.MinPrompt)
+				}
+				if w.Long.Rate == (Rate{}) {
+					t.Errorf("%s window %d: long-context tier has no rate", model, i)
+				}
+			}
+		}
+	}
+}
+
+func TestCostHaikuLongContext(t *testing.T) {
+	// Claude Haiku 5.5: up to 100,000 prompt tokens $0.10/$0.50 (write $0.125, read
+	// $0.01); over it $0.50/$2.50 (write $0.625, read $0.05) for the whole request.
+	at := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	short, ok := Cost("claude-haiku-5-5", at, 50_000, 2_000, 10_000, 40_000, 0)
+	if !ok {
+		t.Fatal("claude-haiku-5-5 should be priced")
+	}
+	if want := 50_000/1e6*0.10 + 2_000/1e6*0.50 + 10_000/1e6*0.125 + 40_000/1e6*0.01; math.Abs(short-want) > 1e-9 {
+		t.Errorf("100,000-prompt cost = %v, want short-tier %v", short, want)
+	}
+	long, _ := Cost("claude-haiku-5-5", at, 50_001, 2_000, 10_000, 40_000, 0)
+	if want := 50_001/1e6*0.50 + 2_000/1e6*2.50 + 10_000/1e6*0.625 + 40_000/1e6*0.05; math.Abs(long-want) > 1e-9 {
+		t.Errorf("100,001-prompt cost = %v, want long-tier %v", long, want)
+	}
+	if got := CacheSavings("claude-haiku-5-5", at, true, 1_000_000, 0); math.Abs(got-0.45) > 1e-9 {
+		t.Errorf("long read saving = %v, want 0.45 (0.50 - 0.05)", got)
+	}
+}
+
+func TestCostLongContextBoundary(t *testing.T) {
+	// GPT-5.6 Sol after the 2026-08-21 reprice: short $4/$20 write $5 read $0.40,
+	// long $8/$30 write $10 read $0.80, applied to the FULL request. 272,000 total
+	// prompt tokens prices short; 272,001 prices long. The cost doubles on one token.
+	at := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	short, ok := Cost("gpt-5.6-sol", at, 272_000, 1_000, 0, 0, 0)
+	if !ok {
+		t.Fatal("gpt-5.6-sol should be priced")
+	}
+	if want := 272_000/1e6*4 + 1_000/1e6*20; math.Abs(short-want) > 1e-9 {
+		t.Errorf("272000-prompt cost = %v, want short-tier %v", short, want)
+	}
+	long, _ := Cost("gpt-5.6-sol", at, 272_001, 1_000, 0, 0, 0)
+	if want := 272_001/1e6*8 + 1_000/1e6*30; math.Abs(long-want) > 1e-9 {
+		t.Errorf("272001-prompt cost = %v, want long-tier %v", long, want)
+	}
+
+	// Every token class takes the tier rate, not just uncached input: cache reads
+	// and cache writes cross the line too and price at the long cached/write rates.
+	mixed, _ := Cost("gpt-5.6-sol", at, 100_000, 1_000, 72_001, 100_000, 0)
+	if want := 100_000/1e6*8 + 1_000/1e6*30 + 72_001/1e6*10 + 100_000/1e6*0.80; math.Abs(mixed-want) > 1e-9 {
+		t.Errorf("mixed long-tier cost = %v, want %v (long input/output/write/read)", mixed, want)
+	}
+	// The same split one token shorter stays entirely short.
+	mixedShort, _ := Cost("gpt-5.6-sol", at, 100_000, 1_000, 72_000, 100_000, 0)
+	if want := 100_000/1e6*4 + 1_000/1e6*20 + 72_000/1e6*5 + 100_000/1e6*0.40; math.Abs(mixedShort-want) > 1e-9 {
+		t.Errorf("mixed short-tier cost = %v, want %v (short input/output/write/read)", mixedShort, want)
+	}
+}
+
+func TestCostLongContextAllGPT56Models(t *testing.T) {
+	// Sol, the gpt-5.6 alias, Terra, and Luna each carry the published long rates
+	// (input, cached input, cache write, output per million) in the current window.
+	at := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	cases := []struct {
+		model                      string
+		input, read, write, output float64
+	}{
+		{"gpt-5.6-sol", 8, 0.80, 10, 30},
+		{"gpt-5.6", 8, 0.80, 10, 30},
+		{"gpt-5.6-terra", 4, 0.40, 5, 18},
+		{"gpt-5.6-luna", 0.40, 0.04, 0.50, 1.80},
+		{"openai/gpt-5.6-sol", 8, 0.80, 10, 30},
+		{"openai/gpt-5.6", 8, 0.80, 10, 30},
+		{"openai/gpt-5.6-terra", 4, 0.40, 5, 18},
+		{"openai/gpt-5.6-luna", 0.40, 0.04, 0.50, 1.80},
+	}
+	for _, c := range cases {
+		// 300k prompt tokens: 100k uncached, 120k cached reads, 80k writes, plus
+		// 10k output, all over the line.
+		got, ok := Cost(c.model, at, 100_000, 10_000, 80_000, 120_000, 0)
+		if !ok {
+			t.Errorf("%s should be priced", c.model)
+			continue
+		}
+		want := 100_000/1e6*c.input + 120_000/1e6*c.read + 80_000/1e6*c.write + 10_000/1e6*c.output
+		if math.Abs(got-want) > 1e-9 {
+			t.Errorf("%s long-tier cost = %v, want %v", c.model, got, want)
+		}
+	}
+}
+
+func TestCostLongContextQualifiedReasoning(t *testing.T) {
+	// The qualified openai/ routes bill reasoning at the output rate, so the long
+	// tier prices reasoning at the LONG output rate too.
+	at := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	got, ok := Cost("openai/gpt-5.6-sol", at, 300_000, 0, 0, 0, 10_000)
+	if !ok {
+		t.Fatal("openai/gpt-5.6-sol should be priced")
+	}
+	if want := 300_000/1e6*8 + 10_000/1e6*30; math.Abs(got-want) > 1e-9 {
+		t.Errorf("long-tier reasoning cost = %v, want %v (reasoning at long output 30)", got, want)
+	}
+}
+
+func TestCostLongContextOnlyAfterReprice(t *testing.T) {
+	// OpenAI introduced the tier with the 2026 rate reductions. A long request in
+	// the launch window prices at the launch short rate (5/30 write 6.25 read
+	// 0.50): the launch windows carry no Long rate.
+	launch := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	got, ok := Cost("gpt-5.6-sol", launch, 300_000, 1_000, 0, 0, 0)
+	if !ok {
+		t.Fatal("gpt-5.6-sol should be priced")
+	}
+	if want := 300_000/1e6*5 + 1_000/1e6*30; math.Abs(got-want) > 1e-9 {
+		t.Errorf("launch-window long-prompt cost = %v, want launch short rate %v", got, want)
+	}
+	// Terra and Luna likewise keep their pre-reprice rates before 2026-07-30.
+	got, _ = Cost("gpt-5.6-terra", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), 300_000, 0, 0, 0, 0)
+	if want := 300_000 / 1e6 * 2.50; math.Abs(got-want) > 1e-9 {
+		t.Errorf("terra launch-window long-prompt cost = %v, want %v", got, want)
+	}
+}
+
+func TestRateAtTierFallsBackWithoutLongRate(t *testing.T) {
+	// A model with no tier in any window prices a long-context request at its
+	// short rate, so a caller passing the flag cannot invent a tier.
+	at := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	short, _ := RateAtTier("claude-opus-4-8", at, false)
+	long, _ := RateAtTier("claude-opus-4-8", at, true)
+	if short != long {
+		t.Errorf("claude-opus-4-8 tier rate = %+v, want short rate %+v (no long tier)", long, short)
+	}
+	// GPT-5.6's launch window has no tier either.
+	launchShort, _ := RateAtTier("gpt-5.6-sol", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), false)
+	launchLong, _ := RateAtTier("gpt-5.6-sol", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), true)
+	if launchShort != launchLong {
+		t.Errorf("launch-window tier rate = %+v, want launch short rate %+v", launchLong, launchShort)
+	}
+}
+
+func TestCacheSavingsLongContext(t *testing.T) {
+	// Post-reprice Sol: a short event's cached read saves 4 - 0.40 = 3.60/M, a long
+	// event's saves 8 - 0.80 = 7.20/M. Writes flip sign in both tiers: the write
+	// premium is input-minus-write (4 - 5 = -1 short, 8 - 10 = -2 long).
+	at := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	if got := CacheSavings("gpt-5.6-sol", at, false, 1_000_000, 0); math.Abs(got-3.60) > 1e-9 {
+		t.Errorf("short read saving = %v, want 3.60", got)
+	}
+	if got := CacheSavings("gpt-5.6-sol", at, true, 1_000_000, 0); math.Abs(got-7.20) > 1e-9 {
+		t.Errorf("long read saving = %v, want 7.20", got)
+	}
+	if got := CacheSavings("gpt-5.6-sol", at, false, 0, 1_000_000); math.Abs(got-(-1.00)) > 1e-9 {
+		t.Errorf("short write saving = %v, want -1.00", got)
+	}
+	if got := CacheSavings("gpt-5.6-sol", at, true, 0, 1_000_000); math.Abs(got-(-2.00)) > 1e-9 {
+		t.Errorf("long write saving = %v, want -2.00", got)
+	}
+	// The flag does not invent a tier where the window has none: launch Sol prices
+	// the same either way.
+	launch := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	short := CacheSavings("gpt-5.6-sol", launch, false, 1_000_000, 0)
+	long := CacheSavings("gpt-5.6-sol", launch, true, 1_000_000, 0)
+	if short != long {
+		t.Errorf("launch savings differ by tier: short %v long %v, want equal (no launch tier)", short, long)
 	}
 }

@@ -64,6 +64,13 @@ func (c CacheStats) HasData() bool { return c.PromptTokens() > 0 }
 // the per-session path counts) folds as the zero time, selecting the earliest window, the
 // same choice parse-time pricing makes for a row with no OccurredAt.
 //
+// Both queries also group by each event's stored price tier (usage_events.long_context,
+// written by the rebuild from pricing.IsLongContext): a long-context request pays a
+// different rate for the whole request, so a (model, day) bucket that mixed tiers would
+// price one side's cached volume at the other's rate. The tier is stored per event
+// because a bucket's own sums cannot classify it (two short requests can total past a
+// cutoff), and because the cutoff is per model, which SQL cannot see.
+//
 // It is the shared core of the scoped (CacheStats) and per-session (SessionCacheStats)
 // paths, so both compute the figure identically; only the query feeding it differs. The
 // caller owns closing rows.
@@ -73,9 +80,10 @@ func foldCacheRows(rows pgx.Rows) (CacheStats, error) {
 		var (
 			model                                string
 			day                                  *time.Time
+			longContext                          bool
 			input, output, cacheRead, cacheWrite int64
 		)
-		if err := rows.Scan(&model, &day, &input, &output, &cacheRead, &cacheWrite); err != nil {
+		if err := rows.Scan(&model, &day, &longContext, &input, &output, &cacheRead, &cacheWrite); err != nil {
 			return CacheStats{}, fmt.Errorf("scan cache model row: %w", err)
 		}
 		c.Input += input
@@ -86,7 +94,7 @@ func foldCacheRows(rows pgx.Rows) (CacheStats, error) {
 		if day != nil {
 			at = *day
 		}
-		c.SavingsUSD += pricing.CacheSavings(model, at, cacheRead, cacheWrite)
+		c.SavingsUSD += pricing.CacheSavings(model, at, longContext, cacheRead, cacheWrite)
 	}
 	if err := rows.Err(); err != nil {
 		return CacheStats{}, fmt.Errorf("iterate cache model rows: %w", err)
@@ -117,18 +125,21 @@ func (s *Store) cacheStats(ctx context.Context, q querier, f AnalyticsFilter) (C
 	filter, args := f.clause()
 	// Group by model AND the UTC day so a model with a dated rate change prices each
 	// day's cached volume at that day's rate; the day is always non-NULL here (the
-	// occurred_at IS NOT NULL guard below). The token sums fold back together in
-	// foldCacheRows, so the extra grouping key affects only how the saving is priced.
+	// occurred_at IS NOT NULL guard below). Group by each event's stored price tier
+	// too, so a model and day holding both short and long requests price each tier's
+	// cached volume at its own rate. The token sums fold back together in
+	// foldCacheRows, so the extra grouping keys affect only how the saving is priced.
 	rows, err := q.Query(ctx,
 		`SELECT ue.model,
 		        date_trunc('day', ue.occurred_at AT TIME ZONE 'UTC'),
+		        ue.long_context,
 		        coalesce(sum(ue.input_tokens), 0),
 		        coalesce(sum(ue.output_tokens), 0),
 		        coalesce(sum(ue.cache_read_tokens), 0),
 		        coalesce(sum(ue.cache_write_tokens), 0)
 		   FROM usage_ledger ue
 		  WHERE ue.occurred_at IS NOT NULL`+filter+`
-		  GROUP BY ue.model, date_trunc('day', ue.occurred_at AT TIME ZONE 'UTC')`, args...)
+		  GROUP BY ue.model, date_trunc('day', ue.occurred_at AT TIME ZONE 'UTC'), ue.long_context`, args...)
 	if err != nil {
 		return CacheStats{}, fmt.Errorf("query cache stats: %w", err)
 	}
@@ -158,20 +169,22 @@ func (s *Store) SessionCacheStats(ctx context.Context, sessionID int64) (CacheSt
 // one query and one pricing fold. See SessionCacheStats for the all-usage-versus-dated contract.
 func (s *Store) sessionCacheStatsFrom(ctx context.Context, q querier, sessionID int64) (CacheStats, error) {
 	// Group by model AND the UTC day so a dated rate change prices each day at its own
-	// rate, matching the per-row parse-time fold this recompute reconciles against. An
-	// undated row (occurred_at NULL) buckets to a NULL day, scanned as the zero time,
+	// rate, and by each event's stored price tier so a mixed-tier model and day price
+	// each side at its own rate, matching the per-row parse-time fold this recompute
+	// reconciles against. An undated row (occurred_at NULL) buckets to a NULL day, scanned as the zero time,
 	// which selects the earliest window: the same choice the parse-time fold makes for a
 	// row with no OccurredAt, so the two stay reconciled.
 	rows, err := q.Query(ctx,
 		`SELECT model,
 		        date_trunc('day', occurred_at AT TIME ZONE 'UTC'),
+		        long_context,
 		        coalesce(sum(input_tokens), 0),
 		        coalesce(sum(output_tokens), 0),
 		        coalesce(sum(cache_read_tokens), 0),
 		        coalesce(sum(cache_write_tokens), 0)
 		   FROM usage_events
 		  WHERE session_id = $1
-		  GROUP BY model, date_trunc('day', occurred_at AT TIME ZONE 'UTC')`, sessionID)
+		  GROUP BY model, date_trunc('day', occurred_at AT TIME ZONE 'UTC'), long_context`, sessionID)
 	if err != nil {
 		return CacheStats{}, fmt.Errorf("query session cache stats for session %d: %w", sessionID, err)
 	}
