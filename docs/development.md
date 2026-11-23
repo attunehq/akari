@@ -14,11 +14,22 @@ remains only for server-rendered error pages, and its generated `*_templ.go`
 files are gitignored.
 
 The browser API contract lives in
-`internal/server/httpapi/openapi.json`. `bun run generate:api` regenerates
-`frontend/src/api.generated.ts`, while `bun run check` fails when the committed
-types no longer match the OpenAPI document. HTTP handlers return named DTOs from
-`internal/server/httpapi`; the contract tests compare those DTOs with the
-OpenAPI response schemas.
+`internal/server/httpapi/openapi.json`. `go generate ./internal/server/httpapi`
+(also run by `make frontend` and `go generate ./...`) regenerates
+`frontend/src/api.generated.ts` through `internal/server/httpapi/tsgen`, a small
+Go generator that emits the `components` schemas and responses as plain text.
+It supports only the OpenAPI constructs the document uses and fails on anything
+else, so a new construct cannot silently produce a wrong type; extend the
+generator when the spec needs one. `TestFrontendAPITypesAreCurrent` fails when
+the committed types no longer match the OpenAPI document, and CI also rejects
+any diff left by `go generate ./...`. `bun run check` lints the document with
+Redocly. HTTP handlers return named DTOs from `internal/server/httpapi`; the
+contract tests compare those DTOs with the OpenAPI response schemas.
+
+The generator replaced `openapi-typescript`, which depends on the TypeScript
+compiler's JavaScript API. TypeScript 7 ships no such API and the tool is no
+longer maintained, so a Go generator keeps the frontend free to track new
+TypeScript releases.
 
 Application builds require Bun. Site builds require Node.js 26. The Makefile
 keeps source and generated assets in step:
@@ -27,7 +38,7 @@ keeps source and generated assets in step:
 make build          # build React, generate templ, and build Go
 make test           # check, test, and build React, then run Go tests under -race
 make frontend       # rebuild the committed embedded React artifact
-make frontend-check # run Biome and TypeScript
+make frontend-check # lint OpenAPI, then run Biome and TypeScript
 make frontend-test  # run the frontend unit tests
 make site            # check and build the public homepage and guide
 make vet

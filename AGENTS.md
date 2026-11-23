@@ -14,9 +14,9 @@ The guide Markdown is single-sourced under `docs/user-guide/`.
 ```sh
 make build          # build React, generate templ, then compile Go
 make test           # check React, rebuild it, then run Go tests under -race
-make frontend-check # OpenAPI contract, Biome, and TypeScript
+make frontend-check # OpenAPI lint, Biome, and TypeScript
 make site            # build the public homepage and guide
-go generate ./...   # regenerate the templated server error pages
+go generate ./...   # regenerate the templ error pages and frontend API types
 ```
 
 The production frontend artifact is committed so release cross-compilation and
@@ -29,9 +29,14 @@ Run `make site` after changing `site/` or `docs/user-guide/`.
 OpenAPI is authoritative for the browser API. When a browser endpoint's route,
 status, request, or response changes, update its named Go boundary DTO and
 `internal/server/httpapi/openapi.json` in the same change, then regenerate
-`frontend/src/api.generated.ts`. Do not edit the generated TypeScript by hand.
-`make frontend-check` rejects invalid OpenAPI and stale generated types, while
-the Go HTTP API contract tests reject route and response-schema drift.
+`frontend/src/api.generated.ts` with `go generate ./internal/server/httpapi`
+(`make frontend` does this too). Do not edit the generated TypeScript by hand.
+The generator is a small Go package, `internal/server/httpapi/tsgen`, that
+handles only the OpenAPI constructs the document uses and fails on anything
+else; teach it a new construct rather than loosening that check.
+`make frontend-check` rejects invalid OpenAPI, the Go tests reject stale
+generated types, and the Go HTTP API contract tests reject route and
+response-schema drift.
 
 ## Integration tests gate on a database
 

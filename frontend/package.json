@@ -3,11 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun run generate:api && vite build",
-    "check": "bun run lint:api && bun run check:api && biome check . && tsc --noEmit",
-    "check:api": "openapi-typescript ../internal/server/httpapi/openapi.json -o src/api.generated.ts --check",
+    "build": "vite build",
+    "check": "bun run lint:api && biome check . && tsc --noEmit",
     "dev": "vite --host 127.0.0.1",
-    "generate:api": "openapi-typescript ../internal/server/httpapi/openapi.json -o src/api.generated.ts",
     "lint:api": "redocly lint ../internal/server/httpapi/openapi.json --extends=spec",
     "test": "vitest run"
   },
@@ -32,8 +30,7 @@
     "@types/swagger-ui-react": "^5.18.0",
     "@vitejs/plugin-react": "^6.3.0",
     "happy-dom": "^21.0.4",
-    "openapi-typescript": "7.13.0",
-    "typescript": "^5.9.2",
+    "typescript": "^7.0.2",
     "vite": "^8.3.8",
     "vitest": "^5.1.1"
   }
