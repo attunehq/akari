@@ -65,7 +65,11 @@ On top of that, the agent checks what Dependabot cannot:
   new minor such as 1.27, as soon as it ships.
 - **Bun**: the `bun-version` pin in `.github/workflows/ci.yml`.
 - **Node**: the `node-version` in workflows. Track the newest Active LTS line.
-- **Postgres in CI**: the `postgres:` service image in `ci.yml`.
+- **Postgres**: adopt each new major promptly; do not defer it. Move the
+  `postgres:` images in `docker-compose.yml`, `.eph`, and `ci.yml` together,
+  and add upgrade steps for that major to the self-hosting guide, tested with a
+  real dump and restore. Self-hosters must act on it, so it ships in the next
+  minor release, which you propose to Jess (see Releases).
 - **Majors**: take every new major. Read the changelog and migration guide, do
   the migration, and prove it with the full test suite. Do not skip a major
   just because it needs code changes.
@@ -153,8 +157,8 @@ Land everything else on your own. Escalate these instead of merging:
 
 - Data: a migration that drops or rewrites stored data, cannot run safely
   during a rolling deploy, or needs a large backfill.
-- Operators: anything that forces a self-hoster to act on upgrade, including a
-  Postgres major in `docker-compose.yml`, which needs a dump and restore.
+- Operators: anything that forces a self-hoster to act on upgrade, other than a
+  Postgres major, which follows Dependencies and toolchains above.
 - Compatibility: breaking changes to the client-server upload protocol, the
   browser API's existing fields, CLI flags, or config files.
 - Security surface: authentication, sessions, CSRF, OAuth, permissions,

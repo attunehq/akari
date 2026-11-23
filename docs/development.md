@@ -90,6 +90,10 @@ The server runs as `go run ./cmd/akari-server`, so a restart picks up source
 changes, and it applies its embedded migrations on boot. Point the client at the
 URL `eph status` reports (also exported as `AKARI_URL`, which the client reads).
 
+When `.eph` moves to a new Postgres major, a worktree's existing volume still
+holds the old major's cluster, and the new Postgres refuses to start on it. Dev
+data is disposable: run `eph clean` and then `eph up` for a fresh, seeded stack.
+
 ### One-shot launch (preview/debug)
 
 The bundled [`.claude/launch.json`](../.claude/launch.json) starts the whole

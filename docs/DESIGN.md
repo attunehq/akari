@@ -1557,12 +1557,12 @@ Local development and the reference deployment both use Docker Compose:
 # docker-compose.yml (sketch)
 services:
   postgres:
-    image: postgres:18              # latest major
+    image: postgres:19              # latest major
     environment:
       POSTGRES_DB: akari
       POSTGRES_USER: akari
       POSTGRES_PASSWORD: akari
-    volumes: [pgdata:/var/lib/postgresql/data]
+    volumes: [pgdata:/var/lib/postgresql]   # 18+: data in a per-major subdirectory
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U akari"]
   server:

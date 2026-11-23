@@ -37,9 +37,9 @@ AKARI_URL=http://localhost:${server.port}
 # =============================================================================
 
 [postgres]
-image=postgres:18
+image=postgres:19
 port=5432
-# Raise the connection ceiling above the postgres:18 default of ~100. The full
+# Raise the connection ceiling above the Postgres default of 100. The full
 # integration suite opens many per-test pools at once, and under `eph run` the dev
 # `server` below shares this instance, so the default tips into "sorry, too many
 # clients". The test harness bounds its own budget (see the note in
