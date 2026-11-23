@@ -1,6 +1,6 @@
 ---
 title: Self-hosting
-summary: "Run the server: Docker Compose, configuration, the database, the first admin, and reparse."
+summary: "Run the server: Docker Compose, configuration, the database, the first admin, reparse, and upgrades."
 order: 7
 ---
 
@@ -22,7 +22,7 @@ the quickest way to a running instance:
 docker compose up -d --build
 ```
 
-It starts Postgres 18 and the server, which applies its migrations on startup and
+It starts Postgres 19 and the server, which applies its migrations on startup and
 listens on `:8080`. The compose file runs in plain-HTTP development mode
 (`AKARI_COOKIE_INSECURE=1`) and ships throwaway database credentials; change both
 before exposing it. For anything real, terminate TLS at a reverse proxy in front
@@ -123,7 +123,9 @@ on its public listener. Do not append to client-supplied forwarding headers.
 
 akari stores everything in Postgres: raw session bytes, the parsed projection, user
 accounts, tokens and invites, and content-addressed blobs (as large objects).
-Postgres 18 is what the compose file and CI use.
+Postgres 19 is what the compose file and CI use. akari adopts each new Postgres
+major in its next minor release; moving an existing compose install across a major
+takes a dump and restore (see [Upgrading Postgres](#upgrading-postgres)).
 
 Migrations are embedded in the binary and applied on every startup: the server
 records each applied migration and runs only the new ones, each in its own
@@ -400,6 +402,153 @@ unchanged, and the replacement server applies embedded database migrations when
 it starts. The same sequence works with another service supervisor: install a
 specific checksum-verified release archive, restart the managed process, and
 verify its reported version.
+
+## Upgrading Postgres
+
+akari keeps up with Postgres: when a new major ships, the bundled
+`docker-compose.yml` and CI move to it in the next minor akari release, and that
+release's notes say so. v0.8.0 moved from Postgres 18 to Postgres 19.
+
+A major Postgres upgrade is not a drop-in image swap. Each major stores data in an
+on-disk format the next one cannot open, so the data has to be carried across,
+either by dumping and restoring it or with `pg_upgrade`.
+
+akari itself does not require the newest major. If you run your own Postgres (a
+managed service or a host package), upgrade it with that platform's usual
+major-version procedure on your own schedule; akari needs no change. The rest of
+this section is for the bundled compose file.
+
+### If you only change the image tag
+
+The compose file keeps Postgres data on the `pgdata` volume, mounted at
+`/var/lib/postgresql`, and the official image keeps each major's cluster in its own
+subdirectory of it (`18/docker`, `19/docker`). Start `postgres:19` on a volume that
+still holds an 18 cluster and the container refuses to start:
+
+```
+Error: in 18+, these Docker images are configured to store database data in a
+...
+       Counter to that, there appears to be PostgreSQL data in:
+         /var/lib/postgresql/18/docker
+```
+
+`docker compose up` then reports `dependency failed to start` and the server never
+starts. Nothing is lost: the 18 cluster is untouched. Put the tag back to
+`postgres:18`, run `docker compose up -d`, and follow the steps below.
+
+If your setup differs from the bundled file (another image, a custom `PGDATA`, the
+volume mounted somewhere else) and akari ever comes back after a Postgres change
+asking you to create the first account, it is pointed at a new, empty cluster.
+**Stop it before anyone registers**: on an empty database, the first account to
+register becomes the admin. Your data is still on disk in the old cluster's
+directory. Point Postgres back at it, then upgrade with the steps below.
+
+### Dump and restore with Docker Compose
+
+Run these from the directory that holds your `docker-compose.yml`. The dump needs
+free disk space about the size of your database, and akari is down from step 1
+until step 7. Clients running `akari watch` or the daemon retry while it is down
+and catch up afterward.
+
+1. Stop the server so nothing writes during the dump, and note how many sessions
+   you have:
+
+   ```sh
+   docker compose stop server
+   docker compose exec postgres psql -U akari -d akari -c 'select count(*) from sessions'
+   ```
+
+2. Dump every database and role from Postgres 18, and check the dump finished. Its
+   last lines should include `PostgreSQL database cluster dump complete`:
+
+   ```sh
+   docker compose exec -T postgres pg_dumpall -U akari > akari-pg18.sql
+   tail -n 3 akari-pg18.sql
+   ```
+
+3. Stop Postgres and move the 18 cluster aside on the same volume. This renames a
+   directory, so it is instant and needs no extra space, and the old cluster stays
+   on disk as your way back:
+
+   ```sh
+   docker compose stop postgres
+   docker compose run --rm --no-deps --entrypoint sh postgres \
+     -c 'mv /var/lib/postgresql/18/docker /var/lib/postgresql/pg18-old'
+   ```
+
+4. Switch to Postgres 19: update to the `docker-compose.yml` from akari v0.8.0 or
+   later, or change `image: postgres:18` to `image: postgres:19` in your own.
+
+5. Start Postgres 19. It finds no cluster for 19 and initializes a new, empty one:
+
+   ```sh
+   docker compose up -d --wait postgres
+   ```
+
+6. Restore the dump, then rebuild the query planner's statistics, which a dump
+   does not carry:
+
+   ```sh
+   docker compose exec -T postgres psql -U akari -d postgres -q < akari-pg18.sql > /dev/null
+   docker compose exec postgres vacuumdb -U akari --all --analyze-in-stages
+   ```
+
+   The restore prints exactly two errors, `role "akari" already exists` and
+   `database "akari" already exists`. Both are expected: the new cluster created
+   that role and database from the compose file before the restore ran, and the
+   restore fills them in. Any other error means something went wrong; roll back
+   (below) rather than continuing.
+
+7. Start akari and check your data:
+
+   ```sh
+   docker compose up -d --wait
+   docker compose exec postgres psql -U akari -d akari -c 'select version()' -c 'select count(*) from sessions'
+   ```
+
+   `version()` should report PostgreSQL 19, and the session count should match
+   step 1. Sign in and open a few sessions, including one with tool output.
+
+8. Only once you are satisfied, delete the old cluster. Keep the dump as a backup
+   or delete it too:
+
+   ```sh
+   docker compose run --rm --no-deps --entrypoint sh postgres \
+     -c 'rm -rf /var/lib/postgresql/pg18-old /var/lib/postgresql/18'
+   rm akari-pg18.sql
+   ```
+
+### Rolling back
+
+Until step 8, the Postgres 18 cluster is intact. To go back to it, stop
+everything, set the image back to `postgres:18`, and move the old cluster back
+into place:
+
+```sh
+docker compose stop
+docker compose run --rm --no-deps --entrypoint sh postgres \
+  -c 'rm -rf /var/lib/postgresql/19 && mkdir -p /var/lib/postgresql/18 && mv /var/lib/postgresql/pg18-old /var/lib/postgresql/18/docker'
+docker compose up -d
+```
+
+The command also deletes the half-finished 19 cluster. Left in place, a later
+attempt would start on it instead of a fresh one, and the restore would collide
+with the rows already there. Anything uploaded to akari while it ran on 19 is not
+in the 18 cluster.
+
+### pg_upgrade for large databases
+
+A dump and restore rewrites every row, so its time and disk use grow with the
+database. For a large database, `pg_upgrade` converts the cluster instead, and
+with `--link` it reuses the existing data files rather than copying them, so it
+finishes in minutes at any size. It needs both majors' binaries side by side,
+which the official image does not ship; the `tianon/postgres-upgrade` images
+(for example `tianon/postgres-upgrade:18-to-19`) package them, and the compose
+file's single mount at `/var/lib/postgresql` is the layout `--link` needs. Follow
+that image's instructions and the upstream
+[pg_upgrade documentation](https://www.postgresql.org/docs/current/pgupgrade.html),
+and snapshot or copy the volume first: after a `--link` upgrade starts the new
+cluster, the old one can no longer be started safely.
 
 ## Production
 

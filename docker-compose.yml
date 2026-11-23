@@ -1,6 +1,8 @@
 services:
   postgres:
-    image: postgres:18 # latest major
+    # Latest major. Moving an existing volume to a new major takes a dump and
+    # restore: see "Upgrading Postgres" in docs/user-guide/self-hosting.md.
+    image: postgres:19
     environment:
       POSTGRES_DB: akari
       POSTGRES_USER: akari
