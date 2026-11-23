@@ -265,7 +265,8 @@ The parsed projection of a session:
   The UI shows them as metadata first (for example "36 KB json") and fetches the
   body from the CAS only when the user expands it.
 - **usage_events**: token accounting rows (input, output, cache-creation a.k.a.
-  cache-write, cache-read, reasoning) with computed cost, keyed for dedup.
+  cache-write, cache-read, reasoning) with computed cost and the price tier the
+  request paid, keyed for dedup.
 
 These power reading and stats. They are derived data: the server can drop and
 rebuild them from the stored raw bytes whenever the parser improves.
@@ -987,6 +988,7 @@ CREATE TABLE usage_events (
   cost_usd              DOUBLE PRECISION,
   cost_source           TEXT NOT NULL,     -- unknown | rate_table | provider
   model_name_public     BOOLEAN NOT NULL,  -- exact compiled disclosure catalog
+  long_context          BOOLEAN NOT NULL DEFAULT FALSE, -- paid the model's long-context tier
   occurred_at           TIMESTAMPTZ,
   dedup_key             TEXT NOT NULL DEFAULT '',
   source_offset         BIGINT,           -- raw byte offset of the originating line
@@ -1014,9 +1016,9 @@ CREATE UNIQUE INDEX idx_usage_source ON usage_events(session_id, source_offset, 
 -- exactly as fresh as the projection with no refresh cadence; keyed on
 -- session_id only, with project/user/agent/machine/outcome joining in at read
 -- time. docs/insights-rollups.md has the full design.
-CREATE TABLE session_usage_daily (      -- usage per (UTC day, model); day NULL = undated
+CREATE TABLE session_usage_daily (      -- usage per (UTC day, model, price tier); day NULL = undated
   session_id BIGINT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-  day DATE, model TEXT NOT NULL,
+  day DATE, model TEXT NOT NULL, long_context BOOLEAN NOT NULL DEFAULT FALSE,
   input_tokens BIGINT NOT NULL, output_tokens BIGINT NOT NULL,
   cache_read_tokens BIGINT NOT NULL, cache_write_tokens BIGINT NOT NULL,
   cost_usd DOUBLE PRECISION NOT NULL

@@ -780,9 +780,9 @@ func (s *Store) contextHistogramFrom(ctx context.Context, q querier, f Analytics
 // (when the money was spent, day-grained) and is gated to the session's outcome so
 // completed-vs-abandoned dollars reconcile with the outcome distribution; the outcome
 // joins in from session_signals at read time per the rollup grain rule. Cache savings is
-// priced at (day, model, context-tier) granularity off the event-grain ledger (so a
-// bucket that straddles a rate change or mixes short and long requests still prices
-// each side correctly) then re-bucketed to the grid.
+// priced at (day, model, price tier) granularity (so a bucket that straddles a rate
+// change or mixes short and long requests still prices each side correctly) then
+// re-bucketed to the grid.
 func (s *Store) economicsFrom(ctx context.Context, q querier, f AnalyticsFilter, g trendGrid) (Economics, error) {
 	out := Economics{
 		CostCompleted: make([]float64, g.n()),
@@ -867,28 +867,23 @@ func (s *Store) economicsFrom(ctx context.Context, q querier, f AnalyticsFilter,
 	return out, nil
 }
 
-// cacheSavingsTrend prices what caching saved and folds it into the grid. It reads
-// the usage_ledger union at event grain rather than the usage_daily rollup: the
-// long-context tier is a per-event classification (prompt volume above
-// pricing.LongContextPromptThreshold, mirrored by the 272000 literal since SQL
-// cannot import the constant), and the rollup's (session, day, model) grain has
-// already summed the events it would need to classify. Grouping the ledger by
-// (day, model, tier) prices each bucket with pricing.CacheSavings at that day's
-// rate and that tier's rate, then the day's savings sum into its trend bucket, so
-// a weekly bucket that spans a rate change or mixes tiers still totals correctly.
-// usage_ledger and usage_daily are the same union at two grains (migration 0060),
-// so the panel's membership matches the cost panels beside it, and
-// clauseForRollupDay keeps the whole-day window semantics the rollup read had.
+// cacheSavingsTrend prices what caching saved and folds it into the grid. The
+// usage_daily union view sits at (day, model, price tier) granularity, exactly what
+// pricing needs: the day selects the date-effective window and the tier (each event's
+// long-context classification, stored by the rebuild and kept as a rollup key because
+// summed tokens cannot recover it) selects the tier's rate. Each row group prices with
+// pricing.CacheSavings, then the day's savings sum into its trend bucket, so a weekly
+// bucket that spans a rate change or mixes tiers still totals correctly.
 func (s *Store) cacheSavingsTrend(ctx context.Context, q querier, f AnalyticsFilter, g trendGrid, out *Economics) error {
-	filter, args := f.clauseForRollupDay("(sud.occurred_at AT TIME ZONE 'UTC')::date")
+	filter, args := f.clauseForRollupDay("sud.day")
 	rows, err := q.Query(ctx,
-		`SELECT (sud.occurred_at AT TIME ZONE 'UTC')::date AS d,
+		`SELECT sud.day::timestamp AS d,
 		        sud.model,
-		        (sud.input_tokens + sud.cache_read_tokens + sud.cache_write_tokens) > 272000 AS long_context,
+		        sud.long_context,
 		        coalesce(sum(sud.cache_read_tokens), 0),
 		        coalesce(sum(sud.cache_write_tokens), 0)
-		   FROM usage_ledger sud
-		  WHERE sud.occurred_at IS NOT NULL`+filter+`
+		   FROM usage_daily sud
+		  WHERE sud.day IS NOT NULL`+filter+`
 		  GROUP BY 1, 2, 3`, args...)
 	if err != nil {
 		return fmt.Errorf("cache savings trend: %w", err)

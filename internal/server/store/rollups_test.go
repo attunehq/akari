@@ -61,7 +61,7 @@ func rollupsDelta() store.ProjectionDelta {
 func dumpTable(t *testing.T, st *store.Store, table string, sid int64) []string {
 	t.Helper()
 	order := map[string]string{
-		"session_usage_daily":     "day NULLS FIRST, model",
+		"session_usage_daily":     "day NULLS FIRST, model, long_context",
 		"session_tool_rollup":     "tool_name, category",
 		"session_file_churn":      "churn_path",
 		"session_turns":           "turn",
@@ -127,9 +127,9 @@ func TestRollupsDerivedInRebuild(t *testing.T) {
 	// Usage: (2026-06-03, m1) folds two events; (2026-06-04, m2) has an unknown rate; the
 	// undated event lands on a NULL day. Unknown rates contribute zero cost.
 	assertRows(t, st, "session_usage_daily", sid, []string{
-		`(` + fmt.Sprint(sid) + `,,m1,7,0,0,0,0.1)`,
-		`(` + fmt.Sprint(sid) + `,2026-06-03,m1,300,30,50,5,1.5)`,
-		`(` + fmt.Sprint(sid) + `,2026-06-04,m2,10,0,0,0,0)`,
+		`(` + fmt.Sprint(sid) + `,,m1,7,0,0,0,0.1,f)`,
+		`(` + fmt.Sprint(sid) + `,2026-06-03,m1,300,30,50,5,1.5,f)`,
+		`(` + fmt.Sprint(sid) + `,2026-06-04,m2,10,0,0,0,0,f)`,
 	})
 
 	// Tools: the replayed Read collapses to one call; Bash's empty category normalizes to

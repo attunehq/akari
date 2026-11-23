@@ -26,17 +26,21 @@ import (
 // derivation here is a rebuild-derived-output change and takes a parse.Epoch bump, exactly
 // like a reducer or scoring change (the reparse it forces is what re-derives the corpus).
 
-// sessionUsageDailyDerive folds one session's usage_events into per-(UTC day, model) sums:
-// the four token classes and the summed estimated cost.
+// sessionUsageDailyDerive folds one session's usage_events into per-(UTC day, model, price
+// tier) sums: the four token classes and the summed estimated cost. The tier
+// (usage_events.long_context, migration 0061) is a grouping key because the cache-savings
+// trend prices each tier at its own rate and a summed row cannot be re-classified; every
+// other consumer sums across it.
 // An undated event folds into a NULL day, preserving the documented rollup-versus-analytics
 // gap (docs/data-aggregation.md): the dated consumers filter day IS NOT NULL, and the
 // ledger reconciliation counts the NULL-day rows as exactly the undated usage.
 const sessionUsageDailyDerive = `
 INSERT INTO session_usage_daily
-  (session_id, day, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd)
+  (session_id, day, model, long_context, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd)
 SELECT ue.session_id,
        (ue.occurred_at AT TIME ZONE 'UTC')::date,
        ue.model,
+       ue.long_context,
        coalesce(sum(ue.input_tokens), 0),
        coalesce(sum(ue.output_tokens), 0),
        coalesce(sum(ue.cache_read_tokens), 0),
@@ -44,7 +48,7 @@ SELECT ue.session_id,
        coalesce(sum(ue.cost_usd), 0)
   FROM usage_events ue
  WHERE ue.session_id = $1
- GROUP BY 1, 2, 3`
+ GROUP BY 1, 2, 3, 4`
 
 // sessionToolRollupDerive collapses one session's replayed tool-call rows once, at write
 // time, with the same partition every cohort query used to run per read

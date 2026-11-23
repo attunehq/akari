@@ -427,12 +427,15 @@ package parse
 // recompute cache savings. Existing golden fixtures use none of these models and
 // are unchanged.
 //
-// Epoch 37 -> 38: price GPT-5.6 long-context requests (total prompt volume above
-// 272,000 tokens) at the published long-context rates for Sol, the gpt-5.6 alias,
-// Terra, and Luna (issue #215). The tier applies to the whole request and exists
-// only in the post-reprice windows, so per-row costs for long GPT-5.6 events rise
-// and the cache-savings fold prices their cached volume at the tier rate; the
-// aggregate cache paths group by the tier so mixed-tier days still reconcile with
-// the per-row fold. Existing golden fixtures carry no long-context GPT-5.6 usage
-// and are unchanged; the bump is the reprice signal and stands on its own.
+// Epoch 37 -> 38: price long-context requests at their published tier (issue
+// #215). A tier prices the whole request once its prompt (uncached input plus cache
+// reads plus cache writes) passes a per-model cutoff: GPT-5.6 Sol, the gpt-5.6
+// alias, Terra, and Luna over 272,000 tokens in their post-reprice windows, and
+// Claude Haiku 5.5 over 100,000. Each usage event now records the tier it paid
+// (usage_events.long_context, migration 0061), and session_usage_daily groups by
+// it, so the cache-savings trend stays on the daily rollup and prices each tier at
+// its own rate. Rebuild existing sessions to reprice long requests, stamp every
+// event's tier, and re-derive the daily rollup and cache savings. The golden
+// fixtures carry no long request, so only the new LongContext field (false on
+// every usage row) moves their snapshots.
 const Epoch = 38

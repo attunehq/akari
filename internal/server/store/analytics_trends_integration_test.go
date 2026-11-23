@@ -533,9 +533,9 @@ func TestInsightsChurnCapMultiProject(t *testing.T) {
 // TestCacheSavingsTrendMixedTier pins the economics cache-savings panel across a
 // mixed-tier day: one model and day holding a short GPT-5.6 Sol request and a long
 // one must total the two tiers' savings (0.72 + 0.18 = 0.90), not one rate applied
-// to the day's whole cached volume. The panel reads the event-grain ledger so the
-// tier classification survives aggregation; reading the (session, day, model)
-// rollup instead would sum the events before classifying and misprice the day.
+// to the day's whole cached volume. The panel reads the daily rollup, which keeps
+// each event's stored price tier as a grouping key; a rollup that summed the two
+// requests into one row could not tell the tiers apart and would misprice the day.
 func TestCacheSavingsTrendMixedTier(t *testing.T) {
 	t.Parallel()
 	st := storetest.NewStore(t)

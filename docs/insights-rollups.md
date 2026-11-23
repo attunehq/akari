@@ -22,6 +22,15 @@ design rationale. The implementation deviates from it in three places:
   changes a session's cwd rewrites `tool_calls.file_rel_path` in place (the one
   projection write outside the rebuild), so the churn rollup re-derives in that
   same transaction (`ingest.go`), which the plan had not called out.
+- **`session_usage_daily` gained a price-tier key** (a post-plan change,
+  migration 0061, epoch 38). Some models price a whole request at a higher
+  long-context rate once its prompt passes a per-model cutoff, and a summed
+  (session, day, model) row cannot say which of its requests were long. The
+  rebuild now stores each event's tier on `usage_events.long_context` and the
+  derivation groups by it, so the cache-savings trend stays on the rollup and
+  prices each tier at its own rate. Every other consumer sums across the tier.
+  The migration adds the columns with a default and no backfill; the epoch bump
+  re-derives the corpus (docs/data-aggregation.md, "Price tiers").
 - **The 60-second fleet cache became a synchronized snapshot** (a post-plan
   change, not part of the rollup work). The per-range lazy TTL cache let the
   range views drift: each window was computed at its own instant against its
@@ -118,7 +127,7 @@ MATERIALIZED VIEW` with a refresh loop:
   N times) or requires the leader election the design deliberately avoids.
   Non-concurrent refresh also takes an ACCESS EXCLUSIVE lock that blocks reads;
   `CONCURRENTLY` trades that for a unique index requirement and a full diff.
-- **Pricing lives in Go.** Cache savings are priced per model, day, and context
+- **Pricing lives in Go.** Cache savings are priced per model, day, and price
   tier by `pricing.CacheSavings`, compiled into the binary
   (`analytics_cache.go`). A pure SQL view cannot produce the figure; the read
   path must end in Go regardless, so the database-side artifact should be the

@@ -42,12 +42,31 @@ type Rate struct {
 type DatedRate struct {
 	From time.Time // inclusive lower bound; zero value = in effect from the beginning
 	Rate Rate
-	// Long is the window's long-context tier: the rate a request pays when its
-	// total prompt volume crosses LongContextPromptThreshold. The zero value means
-	// the window has no tier, and a long-context request in it prices at Rate.
-	// Only the post-reprice GPT-5.6 windows carry one today.
-	Long Rate
+	// Long is the window's long-context tier, or nil when the window has none and
+	// every request in it prices at Rate whatever its size.
+	Long *LongContext
 }
+
+// LongContext is a prompt-size price tier. Some providers charge a higher rate for
+// a request whose prompt reaches a size, and the higher rate then prices the WHOLE
+// request (input, cache, and output alike), not just the tokens past the line. The
+// cutoff is per model, not global: GPT-5.6 tiers at 272K, Claude Haiku 5.5 at 100K.
+//
+// Prompt volume is uncached input plus cache reads plus cache writes, the way both
+// OpenAI and Anthropic count a request's prompt; output is never prompt-side.
+//
+// Providers word the boundary differently ("over 272K", "200K or more"), so the
+// table stores the one unambiguous form, the smallest prompt that pays the tier,
+// and an entry spells the provider's wording through a constructor (see over).
+type LongContext struct {
+	MinPrompt int64 // inclusive: a prompt of at least this many tokens pays Rate
+	Rate      Rate
+}
+
+// over is the tier for a provider that charges it on prompts strictly over n
+// tokens: a prompt of exactly n prices short, n+1 prices long. A provider that
+// charges it from n inclusive ("n or more") writes LongContext{MinPrompt: n}.
+func over(n int64, r Rate) *LongContext { return &LongContext{MinPrompt: n + 1, Rate: r} }
 
 // flat wraps a single rate as a one-window list in effect for all time, the shape of
 // a model whose price has never changed. It keeps the common table entry a bare Rate
@@ -70,24 +89,11 @@ var (
 // eight hours of September 9 UTC rather than splitting that aggregate day.
 var glm53FlashSticker = time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
 
-// LongContextPromptThreshold is the total prompt-token volume (uncached input plus
-// cache reads plus cache writes) above which OpenAI's GPT-5.6 long-context tier
-// applies. The higher rate then prices the FULL request, not just the tokens past
-// the line. OpenAI introduced the tier with the 2026 GPT-5.6 rate reductions, so
-// only the post-reprice windows below carry a Long rate; a long launch-era request
-// keeps pricing at the launch short rate.
-const LongContextPromptThreshold = 272_000
-
-// IsLongContext reports whether one usage event's prompt volume puts it in the
-// long-context tier: strictly more than LongContextPromptThreshold total prompt
-// tokens. Prompt volume is uncached input plus cache reads plus cache writes;
-// output is never prompt-side. A caller folding many events into one figure must
-// classify per event (or group by the classification): two short-context prompts
-// can sum past the threshold without either event belonging to the tier, so an
-// aggregate cannot re-derive the flag from its own sums.
-func IsLongContext(input, cacheRead, cacheWrite int64) bool {
-	return input+cacheRead+cacheWrite > LongContextPromptThreshold
-}
+// gpt56Long is OpenAI's GPT-5.6 long-context cutoff: "Short context: <=272K input
+// tokens. Long context: >272K input tokens." https://developers.openai.com/api/docs/pricing
+// OpenAI introduced the tier with the 2026 rate reductions, so only the
+// post-reprice windows carry it; a long launch-era request keeps the launch rate.
+const gpt56Long = 272_000
 
 // table maps a publicly disclosed canonical model ID to its date-effective rates.
 // Matching is EXACT, not by prefix: a key prices only the model whose ID it is,
@@ -163,11 +169,15 @@ var table = map[string][]DatedRate{
 	"claude-3-5-sonnet": flat(Rate{Input: 3, Output: 15, CacheWrite: 3.75, CacheRead: 0.30}),
 
 	// Haiku: 5.5 is the current generation, 4.5 the only 4.x, 3.5 the one before.
-	// Haiku 5.5 bills by prompt length. Up to 100K prompt tokens it costs
-	// $0.10/$0.50, and above that $0.50/$2.50 for the whole request. Like the
-	// GPT-6 entries below, the table carries only the short tier, so a request
-	// over 100K is under-estimated. https://platform.claude.com/docs/en/about-claude/pricing
-	"claude-haiku-5-5": flat(Rate{Input: 0.10, Output: 0.50, CacheWrite: 0.125, CacheRead: 0.01}),
+	// Haiku 5.5 bills by prompt length: "for prompts up to 100,000 tokens"
+	// $0.10/$0.50 (5m write $0.125, hit $0.01), and "for prompts over 100,000
+	// tokens" $0.50/$2.50 (5m write $0.625, hit $0.05) for the whole request. The
+	// prompt counts cache reads and writes. Verified 2026-11-23:
+	// https://platform.claude.com/docs/en/about-claude/pricing
+	"claude-haiku-5-5": {{
+		Rate: Rate{Input: 0.10, Output: 0.50, CacheWrite: 0.125, CacheRead: 0.01},
+		Long: over(100_000, Rate{Input: 0.50, Output: 2.50, CacheWrite: 0.625, CacheRead: 0.05}),
+	}},
 	"claude-haiku-4-5": flat(Rate{Input: 1, Output: 5, CacheWrite: 1.25, CacheRead: 0.10}),
 	"claude-3-5-haiku": flat(Rate{Input: 0.80, Output: 4, CacheWrite: 1, CacheRead: 0.08}),
 
@@ -216,19 +226,19 @@ var table = map[string][]DatedRate{
 	// correctly the moment Codex reports a nonzero count (issue #126).
 	"gpt-5.6": {
 		{Rate: Rate{Input: 5, Output: 30, CacheWrite: 6.25, CacheRead: 0.50}},
-		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, CacheWrite: 5, CacheRead: 0.40}, Long: Rate{Input: 8, Output: 30, CacheWrite: 10, CacheRead: 0.80}},
+		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, CacheWrite: 5, CacheRead: 0.40}, Long: over(gpt56Long, Rate{Input: 8, Output: 30, CacheWrite: 10, CacheRead: 0.80})},
 	},
 	"gpt-5.6-sol": {
 		{Rate: Rate{Input: 5, Output: 30, CacheWrite: 6.25, CacheRead: 0.50}},
-		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, CacheWrite: 5, CacheRead: 0.40}, Long: Rate{Input: 8, Output: 30, CacheWrite: 10, CacheRead: 0.80}},
+		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, CacheWrite: 5, CacheRead: 0.40}, Long: over(gpt56Long, Rate{Input: 8, Output: 30, CacheWrite: 10, CacheRead: 0.80})},
 	},
 	"gpt-5.6-terra": {
 		{Rate: Rate{Input: 2.50, Output: 15, CacheWrite: 3.125, CacheRead: 0.25}},
-		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 2, Output: 12, CacheWrite: 2.50, CacheRead: 0.20}, Long: Rate{Input: 4, Output: 18, CacheWrite: 5, CacheRead: 0.40}},
+		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 2, Output: 12, CacheWrite: 2.50, CacheRead: 0.20}, Long: over(gpt56Long, Rate{Input: 4, Output: 18, CacheWrite: 5, CacheRead: 0.40})},
 	},
 	"gpt-5.6-luna": {
 		{Rate: Rate{Input: 1, Output: 6, CacheWrite: 1.25, CacheRead: 0.10}},
-		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 0.20, Output: 1.20, CacheWrite: 0.25, CacheRead: 0.02}, Long: Rate{Input: 0.40, Output: 1.80, CacheWrite: 0.50, CacheRead: 0.04}},
+		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 0.20, Output: 1.20, CacheWrite: 0.25, CacheRead: 0.02}, Long: over(gpt56Long, Rate{Input: 0.40, Output: 1.80, CacheWrite: 0.50, CacheRead: 0.04})},
 	},
 	//
 	// CacheWrite is deliberately left unset (zero) for every OpenAI model before
@@ -278,25 +288,25 @@ var table = map[string][]DatedRate{
 	"gpt-5-nano":  flat(Rate{Input: 0.05, Output: 0.40, CacheRead: 0.005}),
 
 	// The direct OpenAI, OpenCode Zen, and OpenRouter GPT-5.6 routes do not share
-	// Codex's rates. These are the base-context prices; Akari's per-turn usage
-	// projection does not retain the provider's long-context tier decision.
-	// The openai/ routes are OpenAI's own list price, so they carry the same dated
-	// windows as the unqualified slugs above rather than a flat current rate.
+	// Codex's rates. The openai/ routes are OpenAI's own list price, so they carry
+	// the same dated windows and long-context tier as the unqualified slugs above
+	// rather than a flat current rate. The opencode/ and openrouter/ entries carry
+	// no tier, so they price every request at their base rate.
 	"openai/gpt-5.6": {
 		{Rate: Rate{Input: 5, Output: 30, Reasoning: 30, CacheWrite: 6.25, CacheRead: 0.50}},
-		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, Reasoning: 20, CacheWrite: 5, CacheRead: 0.40}, Long: Rate{Input: 8, Output: 30, Reasoning: 30, CacheWrite: 10, CacheRead: 0.80}},
+		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, Reasoning: 20, CacheWrite: 5, CacheRead: 0.40}, Long: over(gpt56Long, Rate{Input: 8, Output: 30, Reasoning: 30, CacheWrite: 10, CacheRead: 0.80})},
 	},
 	"openai/gpt-5.6-sol": {
 		{Rate: Rate{Input: 5, Output: 30, Reasoning: 30, CacheWrite: 6.25, CacheRead: 0.50}},
-		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, Reasoning: 20, CacheWrite: 5, CacheRead: 0.40}, Long: Rate{Input: 8, Output: 30, Reasoning: 30, CacheWrite: 10, CacheRead: 0.80}},
+		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, Reasoning: 20, CacheWrite: 5, CacheRead: 0.40}, Long: over(gpt56Long, Rate{Input: 8, Output: 30, Reasoning: 30, CacheWrite: 10, CacheRead: 0.80})},
 	},
 	"openai/gpt-5.6-terra": {
 		{Rate: Rate{Input: 2.50, Output: 15, Reasoning: 15, CacheWrite: 3.125, CacheRead: 0.25}},
-		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 2, Output: 12, Reasoning: 12, CacheWrite: 2.50, CacheRead: 0.20}, Long: Rate{Input: 4, Output: 18, Reasoning: 18, CacheWrite: 5, CacheRead: 0.40}},
+		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 2, Output: 12, Reasoning: 12, CacheWrite: 2.50, CacheRead: 0.20}, Long: over(gpt56Long, Rate{Input: 4, Output: 18, Reasoning: 18, CacheWrite: 5, CacheRead: 0.40})},
 	},
 	"openai/gpt-5.6-luna": {
 		{Rate: Rate{Input: 1, Output: 6, Reasoning: 6, CacheWrite: 1.25, CacheRead: 0.10}},
-		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 0.20, Output: 1.20, Reasoning: 1.20, CacheWrite: 0.25, CacheRead: 0.02}, Long: Rate{Input: 0.40, Output: 1.80, Reasoning: 1.80, CacheWrite: 0.50, CacheRead: 0.04}},
+		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 0.20, Output: 1.20, Reasoning: 1.20, CacheWrite: 0.25, CacheRead: 0.02}, Long: over(gpt56Long, Rate{Input: 0.40, Output: 1.80, Reasoning: 1.80, CacheWrite: 0.50, CacheRead: 0.04})},
 	},
 	"opencode/gpt-5.6-sol":            flat(Rate{Input: 2, Output: 10, Reasoning: 10, CacheWrite: 2.50, CacheRead: 0.20}),
 	"opencode/gpt-5.6-terra":          flat(Rate{Input: 2.50, Output: 15, Reasoning: 15, CacheWrite: 3.125, CacheRead: 0.25}),
@@ -444,9 +454,6 @@ func windowAt(rates []DatedRate, at time.Time) DatedRate {
 	return w
 }
 
-// rateAt returns the short-context rate in effect at time `at` (see windowAt).
-func rateAt(rates []DatedRate, at time.Time) Rate { return windowAt(rates, at).Rate }
-
 func ratesFor(model string) ([]DatedRate, bool) {
 	rates, ok := table[model]
 	if !ok {
@@ -498,53 +505,87 @@ func lookupWindows(model string) ([]DatedRate, bool) {
 	return rates, ok
 }
 
+// windowFor resolves a model to the rate window in effect at `at` (see
+// lookupWindows and windowAt), and reports whether the model string was
+// provider-qualified, which decides how an unset Reasoning rate fills in.
+func windowFor(model string, at time.Time) (w DatedRate, qualified, ok bool) {
+	rates, ok := lookupWindows(model)
+	if !ok {
+		return DatedRate{}, false, false
+	}
+	return windowAt(rates, at), strings.Contains(normalize(model), "/"), true
+}
+
+// longContext reports whether a request with this prompt volume pays the window's
+// long-context tier. A window with no tier never does.
+func (w DatedRate) longContext(input, cacheRead, cacheWrite int64) bool {
+	return w.Long != nil && input+cacheRead+cacheWrite >= w.Long.MinPrompt
+}
+
+// rate is the window's rate for one tier, with a qualified route's unset
+// Reasoning rate filled from Output.
+func (w DatedRate) rate(longContext, qualified bool) Rate {
+	r := w.Rate
+	if longContext && w.Long != nil {
+		r = w.Long.Rate
+	}
+	if qualified && r.Reasoning == 0 {
+		r.Reasoning = r.Output
+	}
+	return r
+}
+
 // RateAt returns the rate for a model at a point in time, and whether it was found.
 // The model string is normalized (lowercased, trimmed, and stripped of a trailing
 // release-date snapshot) and then matched exactly against the table. There is no prefix
 // matching: a key prices only its exact model, so a model we have not listed reports
 // known=false rather than inheriting a neighbor's price. The time selects the
-// date-effective window (see rateAt). RateAt always returns the window's
+// date-effective window (see windowAt). RateAt always returns the window's
 // short-context rate; RateAtTier applies the long-context tier.
 func RateAt(model string, at time.Time) (Rate, bool) {
 	return RateAtTier(model, at, false)
 }
 
 // RateAtTier is RateAt with the long-context tier applied: when longContext is set
-// and the selected window carries a Long rate, the tier rate replaces the window's
-// short-context rate for the whole request. A window with no Long rate (every model
-// but post-reprice GPT-5.6, and GPT-5.6's own launch windows) prices a long-context
-// request at its short rate, so a caller can classify every event by prompt volume
-// and let the table decide which models actually tier.
+// and the selected window has a tier, the tier rate replaces the window's
+// short-context rate for the whole request. A window with no tier prices a
+// long-context request at its short rate.
 func RateAtTier(model string, at time.Time, longContext bool) (Rate, bool) {
-	qualified := strings.Contains(normalize(model), "/")
-	rates, ok := lookupWindows(model)
+	w, qualified, ok := windowFor(model, at)
 	if !ok {
 		return Rate{}, false
 	}
-	w := windowAt(rates, at)
-	r := w.Rate
-	if longContext && w.Long != (Rate{}) {
-		r = w.Long
-	}
-	if qualified && r.Reasoning == 0 {
-		r.Reasoning = r.Output
-	}
-	return r, true
+	return w.rate(longContext, qualified), true
+}
+
+// IsLongContext reports whether one request pays its model's long-context tier:
+// the window in effect at `at` has a tier and the request's prompt volume
+// (uncached input plus cache reads plus cache writes) reaches the tier's
+// MinPrompt. An unknown model, or a window without a tier, is never long. This is
+// the per-request price tier the rebuild stores on each usage event
+// (usage_events.long_context), so the aggregate cache-savings paths can group by it.
+//
+// Classify one request, never an aggregate: two short prompts can sum past a
+// cutoff without either belonging to the tier, so a summed bucket cannot
+// re-derive the flag from its own sums.
+func IsLongContext(model string, at time.Time, input, cacheRead, cacheWrite int64) bool {
+	w, _, ok := windowFor(model, at)
+	return ok && w.longContext(input, cacheRead, cacheWrite)
 }
 
 // Cost returns the estimated USD cost for a token count under a model at the time
 // the usage occurred, and whether the model had a rate. Token counts are in
 // tokens (not millions). An unknown model returns zero and false. The time
-// selects the date-effective rate window. The prompt volume (uncached input plus
-// cache reads plus cache writes) selects the long-context tier for the models that
-// publish one, and the tier prices the full request, so Cost classifies the event
-// itself; callers always pass one event's counts, never an aggregate (see the
-// int64 note on CacheSavings).
+// selects the date-effective rate window. The prompt volume selects the
+// long-context tier for the models that publish one (see IsLongContext), and the
+// tier prices the full request, so Cost classifies the request itself; callers
+// always pass one request's counts, never an aggregate.
 func Cost(model string, at time.Time, input, output, cacheWrite, cacheRead, reasoning int) (float64, bool) {
-	r, ok := RateAtTier(model, at, IsLongContext(int64(input), int64(cacheRead), int64(cacheWrite)))
+	w, qualified, ok := windowFor(model, at)
 	if !ok {
 		return 0, false
 	}
+	r := w.rate(w.longContext(int64(input), int64(cacheRead), int64(cacheWrite)), qualified)
 	const million = 1_000_000.0
 	cost := float64(input)/million*r.Input +
 		float64(output)/million*r.Output +
@@ -577,13 +618,13 @@ func Cost(model string, at time.Time, input, output, cacheWrite, cacheRead, reas
 // alone. The result can be negative in principle (cache written but never re-read) and
 // is returned unfloored, so a caller can surface that caching cost more than it saved.
 //
-// The longContext flag carries the events' own tier classification (IsLongContext
-// over each event's prompt volume), because a summed bucket cannot re-derive it: two
-// short-context events can total past LongContextPromptThreshold without either
-// belonging to the tier. A caller that rolls many events into one figure must
-// therefore group by the tier alongside model and day (see
-// store/analytics_cache.go) and pass each bucket's flag, so a mixed-tier bucket
-// never prices one side at the other's rate.
+// The longContext flag carries the events' own tier (IsLongContext, stored per
+// event by the rebuild as usage_events.long_context), because a summed bucket cannot
+// re-derive it: two short prompts can total past a cutoff without either belonging
+// to the tier. A caller that rolls many events into one figure must therefore group
+// by the stored tier alongside model and day (see store/analytics_cache.go) and pass
+// each bucket's flag, so a mixed-tier bucket never prices one side at the other's
+// rate.
 //
 // Counts are int64, not the int that Cost takes: this is the one pricing entry point
 // fed rolled, fleet-wide aggregates, whose cache-read sum over a long window can run

@@ -53,8 +53,8 @@ the raw bytes:
   re-derives the corpus),
 - the signal set, the scoring, or the outcome rules,
 - prompt classification (`quality.ClassifyPrompt`),
-- the pricing table (a reprice changes stored per-row cost and the
-  cache-savings rollup),
+- the pricing table (a reprice changes stored per-row cost, the per-event
+  price tier, and the cache-savings rollup),
 - the observed-thinking calibration where it changes stored scalars (the
   bytes-per-token factors; a band-edge change is applied at read time and needs
   no bump).

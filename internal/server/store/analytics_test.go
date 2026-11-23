@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jssblck/akari/internal/pricing"
 	"github.com/jssblck/akari/internal/server/store"
 	"github.com/jssblck/akari/internal/server/storetest"
 )
@@ -105,10 +106,13 @@ func seedUsageAt(t *testing.T, st *store.Store, sessionID int64, model string, c
 // the stored cost.
 func seedUsageCacheAt(t *testing.T, st *store.Store, sessionID int64, model string, in, out, cacheRead, cacheWrite int64, at time.Time, dedup string) {
 	t.Helper()
+	// Stamp the price tier the way the rebuild does (parse.go classifies every event
+	// with pricing.IsLongContext), so a seeded long-context request reads as one.
+	longContext := pricing.IsLongContext(model, at, in, cacheRead, cacheWrite)
 	_, err := st.Pool.Exec(context.Background(),
-		`INSERT INTO usage_events (session_id, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_source, model_name_public, occurred_at, dedup_key)
-		 VALUES ($1,$2,$3,$4,$5,$6, 'rate_table', true, $7,$8)`,
-		sessionID, model, in, out, cacheRead, cacheWrite, at, dedup)
+		`INSERT INTO usage_events (session_id, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_source, model_name_public, long_context, occurred_at, dedup_key)
+		 VALUES ($1,$2,$3,$4,$5,$6, 'rate_table', true, $7, $8, $9)`,
+		sessionID, model, in, out, cacheRead, cacheWrite, longContext, at, dedup)
 	if err != nil {
 		t.Fatalf("seed usage cache at: %v", err)
 	}
