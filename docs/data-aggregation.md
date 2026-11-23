@@ -43,8 +43,8 @@ that has none.
    generated `total_tokens`). They are written by each session's rebuild so a
    long list or index never has to scan the ledger.
 
-3. **The daily rollup: `session_usage_daily`.** Per (session, UTC day, model)
-   sums of the four token classes and cost. Written by the same rebuild
+3. **The daily rollup: `session_usage_daily`.** Per (session, UTC day, model,
+   price tier) sums of the four token classes and cost. Written by the same rebuild
    transaction (`internal/server/store/rollups.go`), it is the base the
    Insights money panels read (fleet mix, economics, cache savings, subagent
    cost share) so a page render never groups the ledger. An undated event folds
@@ -195,7 +195,7 @@ derived at read time:
 - The rebuild classifies each usage event with `pricing.IsLongContext` (in
   `parse.go`, beside the cost it prices) and writes `usage_events.long_context`.
   A rebuild is the only writer, like every projection column.
-- `session_usage_daily` keys on (session, day, model, `long_context`), so the
+- `session_usage_daily` groups by (session, day, model, `long_context`), so the
   daily rollup holds one row per tier. Every consumer that only sums tokens or
   cost sums across the tier and is unaffected; the cache-savings reads group by
   it and price each tier at its own rate.

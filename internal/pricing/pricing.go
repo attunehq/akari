@@ -183,7 +183,7 @@ var table = map[string][]DatedRate{
 
 	// GPT-6 Astra standard short-context rates, verified 2026-09-04:
 	// https://developers.openai.com/api/docs/pricing
-	// The usage projection does not retain long-context or service-tier pricing.
+	// Its long-context tier is not wired yet, and service tiers are not modeled.
 	// Codex includes reasoning in output; qualified routes price it separately.
 	"gpt-6-astra":        flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1}),
 	"openai/gpt-6-astra": flat(Rate{Input: 10, Output: 50, Reasoning: 50, CacheWrite: 12.50, CacheRead: 1}),
@@ -386,6 +386,9 @@ var table = map[string][]DatedRate{
 	// only on cached reads. cacheCreationTokens is live in the schema but zero on every
 	// observed turn, and no write rate is published or derivable until one is
 	// nonzero, so CacheWrite stays unset like the pre-5.6 OpenAI keys.
+	// Before wiring a Grok long-context tier, note that one Grok usage row can
+	// total several requests in a prompt, so the per-row tier check would
+	// misclassify it. Tiering needs per-request token counts first.
 	// Grok 4.7 has the same standard rate as 4.6 below 200k prompt tokens:
 	// https://docs.x.ai/developers/release-notes
 	"grok-4.6":                 flat(Rate{Input: 2, Output: 6, CacheRead: 0.50}),
