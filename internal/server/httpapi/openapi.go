@@ -7,6 +7,10 @@ import (
 	"sync"
 )
 
+// The frontend's TypeScript API types are generated from this document;
+// TestFrontendAPITypesAreCurrent fails when the committed copy is stale.
+//go:generate go run ./tsgen/cmd/tsgen -in openapi.json -out ../../../frontend/src/api.generated.ts
+
 //go:embed openapi.json
 var openAPIDocument []byte
 

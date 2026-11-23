@@ -5,15 +5,19 @@
 # it from frontend/ before generating the remaining templ error pages. The
 # public Astro site deploys separately through GitHub Pages.
 
-.PHONY: frontend-deps frontend frontend-check frontend-test site-deps site-check site generate build test vet fmt clean
+.PHONY: frontend-deps frontend-api frontend frontend-check frontend-test site-deps site-check site generate build test vet fmt clean
 
 frontend-deps:
 	cd frontend && bun install --frozen-lockfile
 
-frontend: frontend-deps
+# Regenerate the TypeScript API types from openapi.json (see tsgen).
+frontend-api:
+	go generate ./internal/server/httpapi
+
+frontend: frontend-deps frontend-api
 	cd frontend && bun run build
 
-frontend-check: frontend-deps
+frontend-check: frontend-deps frontend-api
 	cd frontend && bun run check
 
 frontend-test: frontend-deps

@@ -81,9 +81,16 @@ jobs:
         if: steps.skip.outputs.skip != 'true'
         run: git diff --exit-code -- internal/server/frontend/dist
 
-      - name: Generate server templates
+      - name: Generate code
         if: steps.skip.outputs.skip != 'true'
         run: go generate ./...
+
+      # go generate rewrites frontend/src/api.generated.ts from openapi.json, so
+      # the Go staleness test would pass after it no matter what was committed.
+      # Templ output is gitignored, so any diff here is stale committed code.
+      - name: Verify committed generated code
+        if: steps.skip.outputs.skip != 'true'
+        run: git diff --exit-code
 
       - name: Check formatting
         if: steps.skip.outputs.skip != 'true'
