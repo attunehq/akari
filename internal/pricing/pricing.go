@@ -324,21 +324,28 @@ var table = map[string][]DatedRate{
 	// Z.AI and OpenRouter's GLM-5.3-Flash routes use the 50% launch price through
 	// September 9, then return to the $0.15/$0.50 list price. OpenCode Go's catalog
 	// publishes the same token rates for its route.
+	//
+	// GLM-5.3-FlashX (Sept 2026) sits between Flash and the full model at
+	// $0.37/$1.25 with $0.075 cached input, on Z.AI's own route and at the same
+	// rate on OpenRouter. Verified 2026-11-24:
+	// https://docs.z.ai/guides/overview/pricing
 	"zai/glm-5.2": flat(Rate{Input: 1.40, Output: 4.40, CacheRead: 0.26}),
 	"zai/glm-5.3": flat(Rate{Input: 1.40, Output: 4.40, CacheRead: 0.26}),
 	"zai/glm-5.3-flash": {
 		{Rate: Rate{Input: 0.075, Output: 0.25, CacheRead: 0.015}},
 		{From: glm53FlashSticker, Rate: Rate{Input: 0.15, Output: 0.50, CacheRead: 0.03}},
 	},
+	"zai/glm-5.3-flashx":      flat(Rate{Input: 0.37, Output: 1.25, CacheRead: 0.075}),
 	"openrouter/z-ai/glm-5.2": flat(Rate{Input: 1.19, Output: 3.74, CacheRead: 0.221}),
 	"openrouter/z-ai/glm-5.3": flat(Rate{Input: 1.40, Output: 4.40, CacheRead: 0.26}),
 	"openrouter/z-ai/glm-5.3-flash": {
 		{Rate: Rate{Input: 0.075, Output: 0.25, CacheRead: 0.015}},
 		{From: glm53FlashSticker, Rate: Rate{Input: 0.15, Output: 0.50, CacheRead: 0.03}},
 	},
-	"opencode/glm-5.2":    flat(Rate{Input: 1.40, Output: 4.40, Reasoning: 4.40, CacheRead: 0.26}),
-	"opencode-go/glm-5.2": flat(Rate{Input: 1.40, Output: 4.40, Reasoning: 4.40, CacheRead: 0.26}),
-	"opencode-go/glm-5.3": flat(Rate{Input: 1.40, Output: 4.40, Reasoning: 4.40, CacheRead: 0.26}),
+	"openrouter/z-ai/glm-5.3-flashx": flat(Rate{Input: 0.37, Output: 1.25, CacheRead: 0.075}),
+	"opencode/glm-5.2":               flat(Rate{Input: 1.40, Output: 4.40, Reasoning: 4.40, CacheRead: 0.26}),
+	"opencode-go/glm-5.2":            flat(Rate{Input: 1.40, Output: 4.40, Reasoning: 4.40, CacheRead: 0.26}),
+	"opencode-go/glm-5.3":            flat(Rate{Input: 1.40, Output: 4.40, Reasoning: 4.40, CacheRead: 0.26}),
 	"opencode-go/glm-5.3-flash": {
 		{Rate: Rate{Input: 0.075, Output: 0.25, Reasoning: 0.25, CacheRead: 0.015}},
 		{From: glm53FlashSticker, Rate: Rate{Input: 0.15, Output: 0.50, Reasoning: 0.50, CacheRead: 0.03}},
