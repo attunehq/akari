@@ -347,6 +347,23 @@ func TestGLM53FlashPromotion(t *testing.T) {
 	}
 }
 
+func TestGLM53FlashX(t *testing.T) {
+	for _, model := range []string{"zai/glm-5.3-flashx", "openrouter/z-ai/glm-5.3-flashx"} {
+		r, ok := RateAt(model, anytime)
+		if !ok || r.Input != 0.37 || r.Output != 1.25 || r.CacheRead != 0.075 || r.CacheWrite != 0 {
+			t.Errorf("%s rate = %+v (ok=%v), want $0.37/$1.25 cached $0.075", model, r, ok)
+		}
+		if r.Reasoning != r.Output {
+			t.Errorf("%s reasoning rate = %v, want output rate %v", model, r.Reasoning, r.Output)
+		}
+	}
+	// Exact matching: FlashX must not inherit Flash's cheaper rate or vice versa.
+	flash, _ := RateAt("zai/glm-5.3-flash", glm53FlashSticker)
+	if flash.Input != 0.15 {
+		t.Errorf("zai/glm-5.3-flash input = %v after adding FlashX, want 0.15", flash.Input)
+	}
+}
+
 func TestDirectProviderFallback(t *testing.T) {
 	r, ok := RateAt("anthropic/claude-opus-4-8", anytime)
 	if !ok || r.Input != 5 || r.Output != 25 {

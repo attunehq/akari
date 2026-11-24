@@ -438,4 +438,11 @@ package parse
 // event's tier, and re-derive the daily rollup and cache savings. The golden
 // fixtures carry no long request, so only the new LongContext field (false on
 // every usage row) moves their snapshots.
-const Epoch = 38
+//
+// Epoch 38 -> 39: price Z.AI's GLM-5.3-FlashX (zai/glm-5.3-flashx and
+// openrouter/z-ai/glm-5.3-flashx) at its published $0.37/$1.25 rate with $0.075
+// cached input, and allow the released identifier on public overviews. OpenCode
+// and pi sessions on it were priced at zero. Rebuild existing sessions to replace
+// unknown costs and recompute cache savings. Existing golden fixtures use neither
+// model and are unchanged.
+const Epoch = 39
