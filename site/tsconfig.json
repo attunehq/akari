@@ -1,5 +1,11 @@
 {
   "extends": "astro/tsconfigs/strict",
   "include": [".astro/types.d.ts", "**/*"],
-  "exclude": ["dist"]
+  "exclude": ["dist"],
+  // Lets TypeScript 7.1+ type-check .astro components directly, replacing
+  // `astro check`, whose language server cannot load TypeScript 7. `tsc` needs
+  // --runExternalCode to load it (see the `check` script).
+  "contentMappers": [
+    { "package": "@astrojs/ts-content-mapper", "extensions": [".astro"] }
+  ]
 }

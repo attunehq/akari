@@ -9,16 +9,16 @@
     "start": "astro dev",
     "build": "astro build && pagefind --site dist",
     "preview": "astro preview",
-    "check": "astro check"
+    "check": "astro sync && tsc --noEmit --runExternalCode"
   },
   "dependencies": {
     "@astrojs/markdown-remark": "^7.3.10",
     "astro": "^7.4.13"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.12",
+    "@astrojs/ts-content-mapper": "^0.2.0",
     "pagefind": "^1.6.0",
-    "typescript": "^6.0.3"
+    "typescript": "^7.1.0-beta"
   },
   "overrides": {
     "esbuild": "^0.28.1"
