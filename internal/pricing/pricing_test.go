@@ -609,6 +609,11 @@ func TestIsLongContext(t *testing.T) {
 		{"gpt qualified route shares the tier", "openai/gpt-5.6-sol", gpt, 272_001, 0, 0, true},
 		{"gpt launch window has no tier", "gpt-5.6-sol", time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), 300_000, 0, 0, false},
 		{"gpt opencode route publishes no tier", "opencode/gpt-5.6-sol", gpt, 300_000, 0, 0, false},
+		{"gpt-6 at the line", "gpt-6.2-sol", gpt, 272_000, 0, 0, false},
+		{"gpt-6 one over", "gpt-6.2-sol", gpt, 272_001, 0, 0, true},
+		{"gpt-6 tier from launch", "gpt-6-astra", time.Date(2026, 9, 4, 0, 0, 0, 0, time.UTC), 272_001, 0, 0, true},
+		{"gpt-5.4 one over", "gpt-5.4", gpt, 200_000, 72_001, 0, true},
+		{"gpt-5.4-mini publishes no tier", "gpt-5.4-mini", gpt, 1_000_000, 0, 0, false},
 		{"haiku at the line", "claude-haiku-5-5", gpt, 100_000, 0, 0, false},
 		{"haiku one over", "claude-haiku-5-5", gpt, 100_001, 0, 0, true},
 		{"haiku cache counts toward the prompt", "claude-haiku-5-5", gpt, 1, 90_000, 10_000, true},
@@ -744,6 +749,51 @@ func TestCostLongContextAllGPT56Models(t *testing.T) {
 			continue
 		}
 		want := 100_000/1e6*c.input + 120_000/1e6*c.read + 80_000/1e6*c.write + 10_000/1e6*c.output
+		if math.Abs(got-want) > 1e-9 {
+			t.Errorf("%s long-tier cost = %v, want %v", c.model, got, want)
+		}
+	}
+}
+
+func TestCostLongContextOpenAIFromLaunch(t *testing.T) {
+	// GPT-6.x, GPT-5.5, GPT-5.4, and the two -pro tiers price a prompt over 272K at
+	// 2x input and cache rates and 1.5x output for the whole request, from launch.
+	// Rates per million: input, cached read, 30-minute cache write, output. The
+	// GPT-5.x models bill no cache write and the -pro tiers no cached read.
+	at := time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)
+	cases := []struct {
+		model                      string
+		input, read, write, output float64
+	}{
+		{"gpt-6.2-astra", 16, 0.80, 20, 60},
+		{"gpt-6.2-sol", 4, 0.20, 5, 15},
+		{"gpt-6.1-terra", 2, 0.10, 2.50, 7.50},
+		{"gpt-6.1-sol", 4, 0.20, 5, 15},
+		{"gpt-6-astra", 20, 2, 25, 75},
+		{"gpt-6-sol", 4, 0.40, 5, 15},
+		{"gpt-6-luna", 0.20, 0.02, 0.25, 0.75},
+		{"openai/gpt-6.2-astra", 16, 0.80, 20, 60},
+		{"openai/gpt-6-luna", 0.20, 0.02, 0.25, 0.75},
+		{"gpt-5.5", 10, 1, 0, 45},
+		{"gpt-5.4", 5, 0.50, 0, 22.50},
+		{"gpt-5.5-pro", 60, 0, 0, 270},
+		{"gpt-5.4-pro", 60, 0, 0, 270},
+	}
+	for _, c := range cases {
+		// 300k prompt tokens over the line, split across the classes each model bills.
+		input, read, write := 300_000, 0, 0
+		if c.read > 0 {
+			input, read = 100_000, 200_000
+		}
+		if c.write > 0 {
+			input, write = 50_000, 50_000
+		}
+		got, ok := Cost(c.model, at, input, 10_000, write, read, 0)
+		if !ok {
+			t.Errorf("%s should be priced", c.model)
+			continue
+		}
+		want := float64(input)/1e6*c.input + float64(read)/1e6*c.read + float64(write)/1e6*c.write + 10_000/1e6*c.output
 		if math.Abs(got-want) > 1e-9 {
 			t.Errorf("%s long-tier cost = %v, want %v", c.model, got, want)
 		}

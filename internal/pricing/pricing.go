@@ -89,11 +89,14 @@ var (
 // eight hours of September 9 UTC rather than splitting that aggregate day.
 var glm53FlashSticker = time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
 
-// gpt56Long is OpenAI's GPT-5.6 long-context cutoff: "Short context: <=272K input
-// tokens. Long context: >272K input tokens." https://developers.openai.com/api/docs/pricing
-// OpenAI introduced the tier with the 2026 rate reductions, so only the
-// post-reprice windows carry it; a long launch-era request keeps the launch rate.
-const gpt56Long = 272_000
+// openaiLong is the long-context cutoff every tiered OpenAI model shares: "Short
+// context: <=272K input tokens. Long context: >272K input tokens."
+// https://developers.openai.com/api/docs/pricing
+// GPT-5.4, GPT-5.5, and the GPT-6 family carry the tier from launch (each model
+// page: "prompts with >272K input tokens are priced at 2x input and 1.5x output").
+// GPT-5.6 gained it with its 2026 rate reductions, so only its post-reprice windows
+// carry it; a long launch-era GPT-5.6 request keeps the launch rate.
+const openaiLong = 272_000
 
 // table maps a publicly disclosed canonical model ID to its date-effective rates.
 // Matching is EXACT, not by prefix: a key prices only the model whose ID it is,
@@ -183,31 +186,35 @@ var table = map[string][]DatedRate{
 
 	// GPT-6 Astra standard short-context rates, verified 2026-09-04:
 	// https://developers.openai.com/api/docs/pricing
-	// Its long-context tier is not wired yet, and service tiers are not modeled.
-	// Codex includes reasoning in output; qualified routes price it separately.
-	"gpt-6-astra":        flat(Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1}),
-	"openai/gpt-6-astra": flat(Rate{Input: 10, Output: 50, Reasoning: 50, CacheWrite: 12.50, CacheRead: 1}),
+	// Service tiers are not modeled. Codex includes reasoning in output; qualified
+	// routes price it separately.
+	//
+	// Every GPT-6 model prices a prompt over openaiLong at its long-context tier for
+	// the whole request: 2x input, cache read, and cache write, 1.5x output. Long
+	// rates verified 2026-11-25 on the same pricing page.
+	"gpt-6-astra":        {{Rate: Rate{Input: 10, Output: 50, CacheWrite: 12.50, CacheRead: 1}, Long: over(openaiLong, Rate{Input: 20, Output: 75, CacheWrite: 25, CacheRead: 2})}},
+	"openai/gpt-6-astra": {{Rate: Rate{Input: 10, Output: 50, Reasoning: 50, CacheWrite: 12.50, CacheRead: 1}, Long: over(openaiLong, Rate{Input: 20, Output: 75, Reasoning: 75, CacheWrite: 25, CacheRead: 2})}},
 	// GPT-6 Sol and Luna standard short-context rates, verified 2026-09-22:
 	// https://developers.openai.com/api/docs/pricing
 	// As with Astra, qualified OpenAI usage reports reasoning separately.
-	"gpt-6-sol":         flat(Rate{Input: 2, Output: 10, CacheWrite: 2.50, CacheRead: 0.20}),
-	"gpt-6-luna":        flat(Rate{Input: 0.10, Output: 0.50, CacheWrite: 0.125, CacheRead: 0.01}),
-	"openai/gpt-6-sol":  flat(Rate{Input: 2, Output: 10, Reasoning: 10, CacheWrite: 2.50, CacheRead: 0.20}),
-	"openai/gpt-6-luna": flat(Rate{Input: 0.10, Output: 0.50, Reasoning: 0.50, CacheWrite: 0.125, CacheRead: 0.01}),
+	"gpt-6-sol":         {{Rate: Rate{Input: 2, Output: 10, CacheWrite: 2.50, CacheRead: 0.20}, Long: over(openaiLong, Rate{Input: 4, Output: 15, CacheWrite: 5, CacheRead: 0.40})}},
+	"gpt-6-luna":        {{Rate: Rate{Input: 0.10, Output: 0.50, CacheWrite: 0.125, CacheRead: 0.01}, Long: over(openaiLong, Rate{Input: 0.20, Output: 0.75, CacheWrite: 0.25, CacheRead: 0.02})}},
+	"openai/gpt-6-sol":  {{Rate: Rate{Input: 2, Output: 10, Reasoning: 10, CacheWrite: 2.50, CacheRead: 0.20}, Long: over(openaiLong, Rate{Input: 4, Output: 15, Reasoning: 15, CacheWrite: 5, CacheRead: 0.40})}},
+	"openai/gpt-6-luna": {{Rate: Rate{Input: 0.10, Output: 0.50, Reasoning: 0.50, CacheWrite: 0.125, CacheRead: 0.01}, Long: over(openaiLong, Rate{Input: 0.20, Output: 0.75, Reasoning: 0.75, CacheWrite: 0.25, CacheRead: 0.02})}},
 	// GPT-6.1 Sol matches GPT-6 Sol except cached input, which is half as much.
 	// Standard short-context rates, verified 2026-09-29, same source as above.
-	"gpt-6.1-sol":        flat(Rate{Input: 2, Output: 10, CacheWrite: 2.50, CacheRead: 0.10}),
-	"openai/gpt-6.1-sol": flat(Rate{Input: 2, Output: 10, Reasoning: 10, CacheWrite: 2.50, CacheRead: 0.10}),
+	"gpt-6.1-sol":        {{Rate: Rate{Input: 2, Output: 10, CacheWrite: 2.50, CacheRead: 0.10}, Long: over(openaiLong, Rate{Input: 4, Output: 15, CacheWrite: 5, CacheRead: 0.20})}},
+	"openai/gpt-6.1-sol": {{Rate: Rate{Input: 2, Output: 10, Reasoning: 10, CacheWrite: 2.50, CacheRead: 0.10}, Long: over(openaiLong, Rate{Input: 4, Output: 15, Reasoning: 15, CacheWrite: 5, CacheRead: 0.20})}},
 	// GPT-6.1 Terra (released 2026-10-26) and GPT-6.2 Astra and Sol (released
 	// 2026-11-17). Standard short-context rates, verified 2026-11-20 at the same
 	// source. CacheWrite is the 30-minute write; the usage projection does not
 	// distinguish the 12-hour write OpenAI added on 2026-10-20.
-	"gpt-6.1-terra":        flat(Rate{Input: 1, Output: 5, CacheWrite: 1.25, CacheRead: 0.05}),
-	"gpt-6.2-astra":        flat(Rate{Input: 8, Output: 40, CacheWrite: 10, CacheRead: 0.40}),
-	"gpt-6.2-sol":          flat(Rate{Input: 2, Output: 10, CacheWrite: 2.50, CacheRead: 0.10}),
-	"openai/gpt-6.1-terra": flat(Rate{Input: 1, Output: 5, Reasoning: 5, CacheWrite: 1.25, CacheRead: 0.05}),
-	"openai/gpt-6.2-astra": flat(Rate{Input: 8, Output: 40, Reasoning: 40, CacheWrite: 10, CacheRead: 0.40}),
-	"openai/gpt-6.2-sol":   flat(Rate{Input: 2, Output: 10, Reasoning: 10, CacheWrite: 2.50, CacheRead: 0.10}),
+	"gpt-6.1-terra":        {{Rate: Rate{Input: 1, Output: 5, CacheWrite: 1.25, CacheRead: 0.05}, Long: over(openaiLong, Rate{Input: 2, Output: 7.50, CacheWrite: 2.50, CacheRead: 0.10})}},
+	"gpt-6.2-astra":        {{Rate: Rate{Input: 8, Output: 40, CacheWrite: 10, CacheRead: 0.40}, Long: over(openaiLong, Rate{Input: 16, Output: 60, CacheWrite: 20, CacheRead: 0.80})}},
+	"gpt-6.2-sol":          {{Rate: Rate{Input: 2, Output: 10, CacheWrite: 2.50, CacheRead: 0.10}, Long: over(openaiLong, Rate{Input: 4, Output: 15, CacheWrite: 5, CacheRead: 0.20})}},
+	"openai/gpt-6.1-terra": {{Rate: Rate{Input: 1, Output: 5, Reasoning: 5, CacheWrite: 1.25, CacheRead: 0.05}, Long: over(openaiLong, Rate{Input: 2, Output: 7.50, Reasoning: 7.50, CacheWrite: 2.50, CacheRead: 0.10})}},
+	"openai/gpt-6.2-astra": {{Rate: Rate{Input: 8, Output: 40, Reasoning: 40, CacheWrite: 10, CacheRead: 0.40}, Long: over(openaiLong, Rate{Input: 16, Output: 60, Reasoning: 60, CacheWrite: 20, CacheRead: 0.80})}},
+	"openai/gpt-6.2-sol":   {{Rate: Rate{Input: 2, Output: 10, Reasoning: 10, CacheWrite: 2.50, CacheRead: 0.10}, Long: over(openaiLong, Rate{Input: 4, Output: 15, Reasoning: 15, CacheWrite: 5, CacheRead: 0.20})}},
 
 	// OpenAI GPT-5 family as served through Codex.
 	//
@@ -226,19 +233,19 @@ var table = map[string][]DatedRate{
 	// correctly the moment Codex reports a nonzero count (issue #126).
 	"gpt-5.6": {
 		{Rate: Rate{Input: 5, Output: 30, CacheWrite: 6.25, CacheRead: 0.50}},
-		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, CacheWrite: 5, CacheRead: 0.40}, Long: over(gpt56Long, Rate{Input: 8, Output: 30, CacheWrite: 10, CacheRead: 0.80})},
+		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, CacheWrite: 5, CacheRead: 0.40}, Long: over(openaiLong, Rate{Input: 8, Output: 30, CacheWrite: 10, CacheRead: 0.80})},
 	},
 	"gpt-5.6-sol": {
 		{Rate: Rate{Input: 5, Output: 30, CacheWrite: 6.25, CacheRead: 0.50}},
-		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, CacheWrite: 5, CacheRead: 0.40}, Long: over(gpt56Long, Rate{Input: 8, Output: 30, CacheWrite: 10, CacheRead: 0.80})},
+		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, CacheWrite: 5, CacheRead: 0.40}, Long: over(openaiLong, Rate{Input: 8, Output: 30, CacheWrite: 10, CacheRead: 0.80})},
 	},
 	"gpt-5.6-terra": {
 		{Rate: Rate{Input: 2.50, Output: 15, CacheWrite: 3.125, CacheRead: 0.25}},
-		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 2, Output: 12, CacheWrite: 2.50, CacheRead: 0.20}, Long: over(gpt56Long, Rate{Input: 4, Output: 18, CacheWrite: 5, CacheRead: 0.40})},
+		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 2, Output: 12, CacheWrite: 2.50, CacheRead: 0.20}, Long: over(openaiLong, Rate{Input: 4, Output: 18, CacheWrite: 5, CacheRead: 0.40})},
 	},
 	"gpt-5.6-luna": {
 		{Rate: Rate{Input: 1, Output: 6, CacheWrite: 1.25, CacheRead: 0.10}},
-		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 0.20, Output: 1.20, CacheWrite: 0.25, CacheRead: 0.02}, Long: over(gpt56Long, Rate{Input: 0.40, Output: 1.80, CacheWrite: 0.50, CacheRead: 0.04})},
+		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 0.20, Output: 1.20, CacheWrite: 0.25, CacheRead: 0.02}, Long: over(openaiLong, Rate{Input: 0.40, Output: 1.80, CacheWrite: 0.50, CacheRead: 0.04})},
 	},
 	//
 	// CacheWrite is deliberately left unset (zero) for every OpenAI model before
@@ -255,12 +262,16 @@ var table = map[string][]DatedRate{
 	// with no discounted cached read to price. Their cached-input column on the
 	// pricing page reads "not available", not a number. Leave CacheRead unset; a
 	// cached read never reaches a -pro model.
-	"gpt-5.5":             flat(Rate{Input: 5, Output: 30, CacheRead: 0.50}),
-	"gpt-5.5-pro":         flat(Rate{Input: 30, Output: 180}),
-	"gpt-5.4":             flat(Rate{Input: 2.50, Output: 15, CacheRead: 0.25}),
+	//
+	// GPT-5.5, GPT-5.4, and their -pro tiers price a prompt over openaiLong at 2x
+	// input and cache read and 1.5x output for the whole request, from launch.
+	// Long rates verified 2026-11-25: https://developers.openai.com/api/docs/pricing
+	"gpt-5.5":             {{Rate: Rate{Input: 5, Output: 30, CacheRead: 0.50}, Long: over(openaiLong, Rate{Input: 10, Output: 45, CacheRead: 1})}},
+	"gpt-5.5-pro":         {{Rate: Rate{Input: 30, Output: 180}, Long: over(openaiLong, Rate{Input: 60, Output: 270})}},
+	"gpt-5.4":             {{Rate: Rate{Input: 2.50, Output: 15, CacheRead: 0.25}, Long: over(openaiLong, Rate{Input: 5, Output: 22.50, CacheRead: 0.50})}},
 	"gpt-5.4-mini":        flat(Rate{Input: 0.75, Output: 4.50, CacheRead: 0.075}),
 	"gpt-5.4-nano":        flat(Rate{Input: 0.20, Output: 1.25, CacheRead: 0.02}),
-	"gpt-5.4-pro":         flat(Rate{Input: 30, Output: 180}),
+	"gpt-5.4-pro":         {{Rate: Rate{Input: 30, Output: 180}, Long: over(openaiLong, Rate{Input: 60, Output: 270})}},
 	"gpt-5.3-codex":       flat(Rate{Input: 1.75, Output: 14, CacheRead: 0.175}),
 	"gpt-5.3-codex-spark": flat(Rate{Input: 1.75, Output: 14, CacheRead: 0.175}),
 	// GPT-5.2 (Dec 2025) and GPT-5.1 (Nov 2025), the generations between GPT-5
@@ -294,19 +305,19 @@ var table = map[string][]DatedRate{
 	// no tier, so they price every request at their base rate.
 	"openai/gpt-5.6": {
 		{Rate: Rate{Input: 5, Output: 30, Reasoning: 30, CacheWrite: 6.25, CacheRead: 0.50}},
-		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, Reasoning: 20, CacheWrite: 5, CacheRead: 0.40}, Long: over(gpt56Long, Rate{Input: 8, Output: 30, Reasoning: 30, CacheWrite: 10, CacheRead: 0.80})},
+		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, Reasoning: 20, CacheWrite: 5, CacheRead: 0.40}, Long: over(openaiLong, Rate{Input: 8, Output: 30, Reasoning: 30, CacheWrite: 10, CacheRead: 0.80})},
 	},
 	"openai/gpt-5.6-sol": {
 		{Rate: Rate{Input: 5, Output: 30, Reasoning: 30, CacheWrite: 6.25, CacheRead: 0.50}},
-		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, Reasoning: 20, CacheWrite: 5, CacheRead: 0.40}, Long: over(gpt56Long, Rate{Input: 8, Output: 30, Reasoning: 30, CacheWrite: 10, CacheRead: 0.80})},
+		{From: gpt56SolReprice, Rate: Rate{Input: 4, Output: 20, Reasoning: 20, CacheWrite: 5, CacheRead: 0.40}, Long: over(openaiLong, Rate{Input: 8, Output: 30, Reasoning: 30, CacheWrite: 10, CacheRead: 0.80})},
 	},
 	"openai/gpt-5.6-terra": {
 		{Rate: Rate{Input: 2.50, Output: 15, Reasoning: 15, CacheWrite: 3.125, CacheRead: 0.25}},
-		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 2, Output: 12, Reasoning: 12, CacheWrite: 2.50, CacheRead: 0.20}, Long: over(gpt56Long, Rate{Input: 4, Output: 18, Reasoning: 18, CacheWrite: 5, CacheRead: 0.40})},
+		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 2, Output: 12, Reasoning: 12, CacheWrite: 2.50, CacheRead: 0.20}, Long: over(openaiLong, Rate{Input: 4, Output: 18, Reasoning: 18, CacheWrite: 5, CacheRead: 0.40})},
 	},
 	"openai/gpt-5.6-luna": {
 		{Rate: Rate{Input: 1, Output: 6, Reasoning: 6, CacheWrite: 1.25, CacheRead: 0.10}},
-		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 0.20, Output: 1.20, Reasoning: 1.20, CacheWrite: 0.25, CacheRead: 0.02}, Long: over(gpt56Long, Rate{Input: 0.40, Output: 1.80, Reasoning: 1.80, CacheWrite: 0.50, CacheRead: 0.04})},
+		{From: gpt56LunaTerraReprice, Rate: Rate{Input: 0.20, Output: 1.20, Reasoning: 1.20, CacheWrite: 0.25, CacheRead: 0.02}, Long: over(openaiLong, Rate{Input: 0.40, Output: 1.80, Reasoning: 1.80, CacheWrite: 0.50, CacheRead: 0.04})},
 	},
 	"opencode/gpt-5.6-sol":            flat(Rate{Input: 2, Output: 10, Reasoning: 10, CacheWrite: 2.50, CacheRead: 0.20}),
 	"opencode/gpt-5.6-terra":          flat(Rate{Input: 2.50, Output: 15, Reasoning: 15, CacheWrite: 3.125, CacheRead: 0.25}),
