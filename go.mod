@@ -10,7 +10,7 @@ require (
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/klauspost/compress v1.20.5
 	github.com/modelcontextprotocol/go-sdk v1.8.0
-	github.com/tidwall/gjson v1.20.5
+	github.com/tidwall/gjson v1.20.6
 	github.com/tidwall/match v1.2.0
 	golang.org/x/crypto v0.59.0
 	golang.org/x/image v0.48.0
