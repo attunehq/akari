@@ -185,12 +185,12 @@ The class split is pinned by `TestUnattachedProviderUsageCountsFleetWideOnly` an
 ## Price tiers
 
 Some models charge a higher rate for a whole request once its prompt reaches a
-size: GPT-5.6 over 272K prompt tokens, Claude Haiku 5.5 over 100K. The cutoff
-and its boundary wording are per model, carried on the rate window in
-`internal/pricing` (`DatedRate.Long`). Which tier a request paid is a fact about
-that one request, and summed tokens cannot recover it: two short requests can
-total past a cutoff without either being long. So the tier is stored, not
-derived at read time:
+size: OpenAI's GPT-5.4, 5.5, 5.6, and GPT-6 models over 272K prompt tokens,
+Claude Haiku 5.5 over 100K. The cutoff and its boundary wording are per model,
+carried on the rate window in `internal/pricing` (`DatedRate.Long`). Which tier a
+request paid is a fact about that one request, and summed tokens cannot recover
+it: two short requests can total past a cutoff without either being long. So the
+tier is stored, not derived at read time:
 
 - The rebuild classifies each usage event with `pricing.IsLongContext` (in
   `parse.go`, beside the cost it prices) and writes `usage_events.long_context`.

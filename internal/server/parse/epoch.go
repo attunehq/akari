@@ -445,4 +445,12 @@ package parse
 // and pi sessions on it were priced at zero. Rebuild existing sessions to replace
 // unknown costs and recompute cache savings. Existing golden fixtures use neither
 // model and are unchanged.
-const Epoch = 39
+//
+// Epoch 39 -> 40: price OpenAI's published long-context tier for GPT-6, 6.1, and
+// 6.2 (Astra, Sol, Terra, Luna), GPT-5.5, GPT-5.4, and their -pro tiers, bare and
+// openai/-qualified. A prompt over 272,000 tokens prices the whole request at 2x
+// input and cache rates and 1.5x output, from each model's launch. Long requests
+// on these models were priced at the short rate. Rebuild existing sessions to
+// reprice them and stamp their tier. Golden fixtures carry no long request on
+// these models and are unchanged.
+const Epoch = 40
