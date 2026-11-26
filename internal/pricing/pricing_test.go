@@ -379,6 +379,40 @@ func TestDirectProviderFallback(t *testing.T) {
 	if _, ok := RateAt("unlisted-router/claude-opus-4-8", anytime); ok {
 		t.Error("an unlisted router must not inherit the direct Anthropic rate")
 	}
+
+	// OpenAI's own API (OpenCode and pi record it as openai/<model>) prices every
+	// model at its list rate, which the unqualified keys already hold. Reasoning
+	// fills from output, as on every qualified route.
+	for _, c := range []struct {
+		model                 string
+		input, output, cached float64
+	}{
+		{"openai/gpt-5.5", 5, 30, 0.50},
+		{"openai/gpt-5.4-mini", 0.75, 4.50, 0.075},
+		{"openai/gpt-5.2", 1.75, 14, 0.175},
+		{"openai/gpt-5.1-codex", 1.25, 10, 0.125},
+		{"openai/gpt-5-2025-08-07", 1.25, 10, 0.125},
+	} {
+		r, ok := RateAt(c.model, anytime)
+		if !ok || r.Input != c.input || r.Output != c.output || r.CacheRead != c.cached || r.Reasoning != c.output {
+			t.Errorf("RateAt(%q) = %+v (ok=%v), want %v/%v cached %v reasoning %v", c.model, r, ok, c.input, c.output, c.cached, c.output)
+		}
+	}
+	// The fallback carries the long-context tier: a 300K-token prompt on
+	// openai/gpt-5.5 pays 2x input and 1.5x output, reasoning at the long output rate.
+	if got, ok := Cost("openai/gpt-5.5", anytime, 300_000, 1_000, 0, 0, 1_000); !ok || math.Abs(got-(3+0.045+0.045)) > 1e-9 {
+		t.Errorf("long openai/gpt-5.5 cost = %v (ok=%v), want 3.09", got, ok)
+	}
+	if !ModelNamePublic("openai/gpt-5.5") {
+		t.Error("openai/gpt-5.5 is a released model and should be public")
+	}
+	// Unlisted models stay unknown on the direct route too, and routers that resell
+	// OpenAI models never inherit its list price.
+	for _, model := range []string{"openai/gpt-5.7", "openai/gpt-6.1-luna", "opencode/gpt-5.5", "openrouter/openai/gpt-5.5"} {
+		if r, ok := RateAt(model, anytime); ok {
+			t.Errorf("%q priced as %+v; expected unknown", model, r)
+		}
+	}
 }
 
 func TestGPT56DatedWindows(t *testing.T) {
@@ -451,7 +485,6 @@ func TestUnlistedModelsAreUnknown(t *testing.T) {
 		"gpt-5.6-mini", "gpt-5.6-nano", // GPT-5.6's real tiers are sol/terra/luna, not mini/nano
 		"gpt-5.1-mini", "gpt-5.2-codex-mini", "gpt-5.2-codex-max", // tiers 5.1 and 5.2 never shipped
 		"gpt-5.1-chat-latest", "gpt-5.2-chat-latest", // ChatGPT aliases, not Codex models
-		"openai/gpt-5.2", "openai/gpt-5.1-codex", // no direct-route twins, like gpt-5.4 and gpt-5.5
 		"grok-build", "grok-build-0.2", "openrouter/x-ai/grok-build-0.1",
 	} {
 		if r, ok := RateAt(model, anytime); ok {

@@ -438,8 +438,16 @@ var publicUnpricedModels = map[string]struct{}{}
 // directProviderFallbacks are transcript providers whose input, output, and
 // cache rates are already represented by Akari's legacy unqualified keys.
 // Router and gateway providers never inherit these direct rates.
+//
+// "openai" is OpenAI's own API, the route OpenCode and pi record as
+// openai/<model>. Every unqualified OpenAI key is OpenAI's published list
+// price, so openai/gpt-5.5 prices like gpt-5.5, long-context tier included. An
+// explicit openai/ key still wins over the fallback, which is how the GPT-5.6
+// and GPT-6 routes keep their own entries. If OpenAI ever prices a model
+// differently in Codex than on the API, give the openai/ route its own key.
 var directProviderFallbacks = map[string]bool{
 	"anthropic":    true,
+	"openai":       true,
 	"openai-codex": true,
 	"xai":          true,
 }

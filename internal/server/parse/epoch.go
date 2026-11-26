@@ -453,4 +453,11 @@ package parse
 // on these models were priced at the short rate. Rebuild existing sessions to
 // reprice them and stamp their tier. Golden fixtures carry no long request on
 // these models and are unchanged.
-const Epoch = 40
+//
+// Epoch 40 -> 41: price OpenAI's own API route (openai/<model>, as OpenCode and pi
+// record it) for every OpenAI model, not only GPT-5.6 and GPT-6. openai/ now falls
+// back to the unqualified list price, so openai/gpt-5.5, openai/gpt-5.4, and the
+// older GPT-5 models stop pricing at zero. Rebuild existing sessions to replace
+// unknown costs and recompute cache savings. Golden fixtures use none of these
+// routes and are unchanged.
+const Epoch = 41
