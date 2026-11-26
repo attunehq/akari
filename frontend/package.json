@@ -17,7 +17,7 @@
     "react-router-dom": "^7.18.5",
     "recharts": "^3.11.0",
     "remark-gfm": "^4.0.1",
-    "swagger-ui-react": "^5.35.0"
+    "swagger-ui-react": "^5.36.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.8",
