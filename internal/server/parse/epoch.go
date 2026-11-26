@@ -460,4 +460,10 @@ package parse
 // older GPT-5 models stop pricing at zero. Rebuild existing sessions to replace
 // unknown costs and recompute cache savings. Golden fixtures use none of these
 // routes and are unchanged.
-const Epoch = 41
+//
+// Epoch 41 -> 42: price xAI's Grok 4.3 and Grok 4.20 models and Z.AI's GLM-5.1,
+// GLM-5, and paid GLM-4.x text models at their published rates. Sessions on them
+// were priced at zero. Rebuild existing sessions to replace unknown costs and
+// recompute cache savings. Golden fixtures use none of these models and are
+// unchanged.
+const Epoch = 42
