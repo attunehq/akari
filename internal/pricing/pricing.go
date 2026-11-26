@@ -346,7 +346,20 @@ var table = map[string][]DatedRate{
 		{Rate: Rate{Input: 0.075, Output: 0.25, CacheRead: 0.015}},
 		{From: glm53FlashSticker, Rate: Rate{Input: 0.15, Output: 0.50, CacheRead: 0.03}},
 	},
-	"zai/glm-5.3-flashx":      flat(Rate{Input: 0.37, Output: 1.25, CacheRead: 0.075}),
+	"zai/glm-5.3-flashx": flat(Rate{Input: 0.37, Output: 1.25, CacheRead: 0.075}),
+	// Z.AI's older text models, still served on its own route. Cache storage is
+	// free, so only cached reads carry a cache rate. The free Flash models
+	// (GLM-4.7-Flash, GLM-4.5-Flash) stay unlisted rather than priced at zero.
+	// Verified 2026-11-26: https://docs.z.ai/guides/overview/pricing
+	"zai/glm-5.1":             flat(Rate{Input: 1.40, Output: 4.40, CacheRead: 0.26}),
+	"zai/glm-5":               flat(Rate{Input: 1, Output: 3.20, CacheRead: 0.20}),
+	"zai/glm-4.7":             flat(Rate{Input: 0.60, Output: 2.20, CacheRead: 0.11}),
+	"zai/glm-4.7-flashx":      flat(Rate{Input: 0.07, Output: 0.40, CacheRead: 0.01}),
+	"zai/glm-4.6":             flat(Rate{Input: 0.60, Output: 2.20, CacheRead: 0.11}),
+	"zai/glm-4.5":             flat(Rate{Input: 0.60, Output: 2.20, CacheRead: 0.11}),
+	"zai/glm-4.5-x":           flat(Rate{Input: 2.20, Output: 8.90, CacheRead: 0.45}),
+	"zai/glm-4.5-air":         flat(Rate{Input: 0.20, Output: 1.10, CacheRead: 0.03}),
+	"zai/glm-4.5-airx":        flat(Rate{Input: 1.10, Output: 4.50, CacheRead: 0.22}),
 	"openrouter/z-ai/glm-5.2": flat(Rate{Input: 1.19, Output: 3.74, CacheRead: 0.221}),
 	"openrouter/z-ai/glm-5.3": flat(Rate{Input: 1.40, Output: 4.40, CacheRead: 0.26}),
 	"openrouter/z-ai/glm-5.3-flash": {
@@ -415,6 +428,16 @@ var table = map[string][]DatedRate{
 	"opencode/grok-4.6":        flat(Rate{Input: 2, Output: 6, Reasoning: 6, CacheRead: 0.50}),
 	"opencode-go/grok-4.6":     flat(Rate{Input: 2, Output: 6, Reasoning: 6, CacheRead: 0.50}),
 	"openrouter/x-ai/grok-4.6": flat(Rate{Input: 2, Output: 6, CacheRead: 0.50}),
+	// Grok 4.3 and the Grok 4.20 models, an older and cheaper line that xAI
+	// still serves: $1.25/$2.50 with $0.20 cached input below 200k prompt
+	// tokens. The 4.20 IDs carry xAI's fixed release date (0309) as part of
+	// the ID, not a snapshot suffix that normalize strips, so each is keyed as
+	// written. The -latest aliases move with xAI's releases, so they stay
+	// unpriced. Verified 2026-11-26: https://docs.x.ai/developers/pricing
+	"grok-4.3":                     flat(Rate{Input: 1.25, Output: 2.50, CacheRead: 0.20}),
+	"grok-4.20-0309-reasoning":     flat(Rate{Input: 1.25, Output: 2.50, CacheRead: 0.20}),
+	"grok-4.20-0309-non-reasoning": flat(Rate{Input: 1.25, Output: 2.50, CacheRead: 0.20}),
+	"grok-4.20-multi-agent-0309":   flat(Rate{Input: 1.25, Output: 2.50, CacheRead: 0.20}),
 	// Grok Build 0.1, the early-access coding model (end of life 2026-11-19).
 	// Standard rate below 200k prompt tokens, verified 2026-11-22:
 	// https://docs.x.ai/developers/pricing

@@ -261,6 +261,20 @@ func TestNewModelRates(t *testing.T) {
 		{"gpt-5.1-codex-mini", 0.25, 2, 0, 0.025},
 		{"grok-build-0.1", 1, 2, 0, 0.20},
 		{"xai/grok-build-0.1", 1, 2, 0, 0.20},
+		{"grok-4.3", 1.25, 2.50, 0, 0.20},
+		{"xai/grok-4.3", 1.25, 2.50, 0, 0.20},
+		{"grok-4.20-0309-reasoning", 1.25, 2.50, 0, 0.20},
+		{"grok-4.20-0309-non-reasoning", 1.25, 2.50, 0, 0.20},
+		{"grok-4.20-multi-agent-0309", 1.25, 2.50, 0, 0.20},
+		{"zai/glm-5.1", 1.40, 4.40, 0, 0.26},
+		{"zai/glm-5", 1, 3.20, 0, 0.20},
+		{"zai/glm-4.7", 0.60, 2.20, 0, 0.11},
+		{"zai/glm-4.7-flashx", 0.07, 0.40, 0, 0.01},
+		{"zai/glm-4.6", 0.60, 2.20, 0, 0.11},
+		{"zai/glm-4.5", 0.60, 2.20, 0, 0.11},
+		{"zai/glm-4.5-x", 2.20, 8.90, 0, 0.45},
+		{"zai/glm-4.5-air", 0.20, 1.10, 0, 0.03},
+		{"zai/glm-4.5-airx", 1.10, 4.50, 0, 0.22},
 	} {
 		t.Run(tt.model, func(t *testing.T) {
 			r, ok := RateAt(tt.model, anytime)
@@ -291,6 +305,8 @@ func TestNewModelRates(t *testing.T) {
 		{"gpt-5.1-codex", 0.021625},
 		{"gpt-5.1-codex-mini", 0.004325},
 		{"grok-build-0.1", 0.0056},
+		{"grok-4.3", 0.00685},
+		{"zai/glm-5", 0.008},
 	} {
 		got, known := Cost(tt.model, anytime, 1000, 2000, 3000, 3000, 0)
 		if !known || math.Abs(got-tt.want) > 1e-9 {
@@ -486,6 +502,9 @@ func TestUnlistedModelsAreUnknown(t *testing.T) {
 		"gpt-5.1-mini", "gpt-5.2-codex-mini", "gpt-5.2-codex-max", // tiers 5.1 and 5.2 never shipped
 		"gpt-5.1-chat-latest", "gpt-5.2-chat-latest", // ChatGPT aliases, not Codex models
 		"grok-build", "grok-build-0.2", "openrouter/x-ai/grok-build-0.1",
+		"grok-4.7-latest", "grok-4.20", "grok-4.20-reasoning", // moving aliases and dateless 4.20 names
+		"zai/glm-4.7-flash", "zai/glm-4.5-flash", "zai/glm-5.4", // free tiers, and a model with no published price
+		"openrouter/z-ai/glm-5.1", "opencode/glm-5", // routers do not inherit Z.AI's direct rate
 	} {
 		if r, ok := RateAt(model, anytime); ok {
 			t.Errorf("unlisted model %q priced as %+v; expected unknown", model, r)
