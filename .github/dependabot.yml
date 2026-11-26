@@ -43,6 +43,13 @@ updates:
     groups:
       site-minor-patch:
         update-types: ["minor", "patch"]
+    ignore:
+      # While the site is on a TypeScript beta, Dependabot also offers the
+      # daily nightlies, because "7.1.0-dev.*" sorts above "7.1.0-beta".
+      # Skip them and wait for the next beta, RC, or stable release. The
+      # range ends at "7.1.0-e" so it covers every "-dev" build but no "-rc".
+      - dependency-name: "typescript"
+        versions: [">=7.1.0-dev <7.1.0-e"]
 
   - package-ecosystem: "docker"
     directory: "/"
