@@ -48,7 +48,7 @@ curl -fsSL https://raw.githubusercontent.com/jssblck/akari/main/scripts/install-
 Server OCI image, Linux amd64 and arm64:
 
 ```sh
-docker pull ghcr.io/jssblck/akari-server:latest
+docker pull ghcr.io/attunehq/akari-server:latest
 ```
 
 Add `-s -- --systemd` to the server command to also install a managed systemd
