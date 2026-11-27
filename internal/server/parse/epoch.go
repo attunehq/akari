@@ -466,4 +466,10 @@ package parse
 // were priced at zero. Rebuild existing sessions to replace unknown costs and
 // recompute cache savings. Golden fixtures use none of these models and are
 // unchanged.
-const Epoch = 42
+//
+// Epoch 42 -> 43: price OpenAI's gpt-5-pro, GPT-4.1, GPT-4.1 mini, GPT-4o, GPT-4o
+// mini, o3, and o3-pro at their published rates, bare, dated, and
+// openai/-qualified. Sessions on them were priced at zero. Rebuild existing
+// sessions to replace unknown costs and recompute cache savings. Golden fixtures
+// use none of these models and are unchanged.
+const Epoch = 43
