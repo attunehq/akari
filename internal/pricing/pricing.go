@@ -297,6 +297,18 @@ var table = map[string][]DatedRate{
 	"gpt-5-codex": flat(Rate{Input: 1.25, Output: 10, CacheRead: 0.125}),
 	"gpt-5-mini":  flat(Rate{Input: 0.25, Output: 2, CacheRead: 0.025}),
 	"gpt-5-nano":  flat(Rate{Input: 0.05, Output: 0.40, CacheRead: 0.005}),
+	// gpt-5-pro, GPT-4.1, GPT-4o, and o3 are still listed models that Codex
+	// (-m), OpenCode, and pi can select. Their dated snapshots
+	// (gpt-4.1-2025-04-14, gpt-4o-2024-08-06, and so on) normalize to these keys.
+	// Like the other -pro tiers, gpt-5-pro and o3-pro offer no cached input.
+	// Verified 2026-11-27: https://developers.openai.com/api/docs/pricing
+	"gpt-5-pro":    flat(Rate{Input: 15, Output: 120}),
+	"gpt-4.1":      flat(Rate{Input: 2, Output: 8, CacheRead: 0.50}),
+	"gpt-4.1-mini": flat(Rate{Input: 0.40, Output: 1.60, CacheRead: 0.10}),
+	"gpt-4o":       flat(Rate{Input: 2.50, Output: 10, CacheRead: 1.25}),
+	"gpt-4o-mini":  flat(Rate{Input: 0.15, Output: 0.60, CacheRead: 0.075}),
+	"o3":           flat(Rate{Input: 2, Output: 8, CacheRead: 0.50}),
+	"o3-pro":       flat(Rate{Input: 20, Output: 80}),
 
 	// The direct OpenAI, OpenCode Zen, and OpenRouter GPT-5.6 routes do not share
 	// Codex's rates. The openai/ routes are OpenAI's own list price, so they carry

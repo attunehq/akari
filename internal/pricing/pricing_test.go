@@ -179,6 +179,17 @@ func TestRateAtGPT(t *testing.T) {
 		{"gpt-5-codex", 1.25, 10},
 		{"gpt-5-mini", 0.25, 2},
 		{"gpt-5-nano", 0.05, 0.40},
+		// Older models still on the pricing page, bare, dated, and openai/-qualified.
+		{"gpt-5-pro", 15, 120},
+		{"gpt-4.1", 2, 8},
+		{"gpt-4.1-2025-04-14", 2, 8},
+		{"gpt-4.1-mini", 0.40, 1.60},
+		{"gpt-4o", 2.50, 10},
+		{"gpt-4o-2024-08-06", 2.50, 10},
+		{"gpt-4o-mini", 0.15, 0.60},
+		{"o3", 2, 8},
+		{"openai/o3", 2, 8},
+		{"o3-pro", 20, 80},
 	}
 	for _, c := range cases {
 		r, ok := RateAt(c.model, anytime)
@@ -259,6 +270,13 @@ func TestNewModelRates(t *testing.T) {
 		{"gpt-5.1-codex-max", 1.25, 10, 0, 0.125},
 		{"openai-codex/gpt-5.1-codex-max", 1.25, 10, 0, 0.125},
 		{"gpt-5.1-codex-mini", 0.25, 2, 0, 0.025},
+		{"gpt-5-pro", 15, 120, 0, 0},
+		{"gpt-4.1", 2, 8, 0, 0.50},
+		{"gpt-4.1-mini", 0.40, 1.60, 0, 0.10},
+		{"gpt-4o", 2.50, 10, 0, 1.25},
+		{"gpt-4o-mini", 0.15, 0.60, 0, 0.075},
+		{"o3", 2, 8, 0, 0.50},
+		{"o3-pro", 20, 80, 0, 0},
 		{"grok-build-0.1", 1, 2, 0, 0.20},
 		{"xai/grok-build-0.1", 1, 2, 0, 0.20},
 		{"grok-4.3", 1.25, 2.50, 0, 0.20},
