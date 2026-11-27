@@ -368,10 +368,10 @@ through the same container orchestrator that runs the current image. Release
 images support Linux amd64 and arm64:
 
 ```sh
-docker pull ghcr.io/jssblck/akari-server:latest
-docker run --rm ghcr.io/jssblck/akari-server:latest --version
+docker pull ghcr.io/attunehq/akari-server:latest
+docker run --rm ghcr.io/attunehq/akari-server:latest --version
 docker image inspect --format '{{index .RepoDigests 0}}' \
-  ghcr.io/jssblck/akari-server:latest
+  ghcr.io/attunehq/akari-server:latest
 ```
 
 Update the deployment to that image. Production deployments can replace

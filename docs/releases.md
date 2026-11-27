@@ -73,7 +73,7 @@ archives are named `<bin>_<version>_<os>_<arch>` (the version without the leadin
 - `SHA256SUMS`: a sha256 plus filename line for every archive, for manual
   verification (`sha256sum -c SHA256SUMS`).
 
-The same tag publishes `ghcr.io/jssblck/akari-server:vX.Y.Z` as a public OCI
+The same tag publishes `ghcr.io/attunehq/akari-server:vX.Y.Z` as a public OCI
 image index for Linux amd64 and arm64. Stable releases also move the `latest`
 tag; prereleases publish only their versioned tag. The image runs as a non-root
 user and contains the statically linked `akari-server` binary, `LICENSE`, and
@@ -141,7 +141,7 @@ already on or ahead of the latest release is left alone, and a development build
 The server does not update itself. Upgrade it through the deployment mechanism
 that owns the process:
 
-- Deploy `ghcr.io/jssblck/akari-server:<tag>` from the selected release.
+- Deploy `ghcr.io/attunehq/akari-server:<tag>` from the selected release.
 - Upgrade the versioned package when a package manager owns the installation.
 - For a binary managed by systemd or another service supervisor, replace the
   binary with the checksum-verified archive from a specific GitHub Release, then
@@ -157,10 +157,10 @@ Tagged releases publish the server to GitHub Container Registry. Pull the
 current stable image and verify the embedded binary before deployment:
 
 ```sh
-docker pull ghcr.io/jssblck/akari-server:latest
-docker run --rm ghcr.io/jssblck/akari-server:latest --version
+docker pull ghcr.io/attunehq/akari-server:latest
+docker run --rm ghcr.io/attunehq/akari-server:latest --version
 docker image inspect --format '{{index .RepoDigests 0}}' \
-  ghcr.io/jssblck/akari-server:latest
+  ghcr.io/attunehq/akari-server:latest
 ```
 
 Container tags are mutable. Pin the reported digest in production when the
